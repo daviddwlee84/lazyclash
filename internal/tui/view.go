@@ -86,6 +86,8 @@ func (m *Model) header(width int) string {
 		status = "connecting"
 	} else if m.client != nil {
 		status = "connected"
+	} else if m.currentAuth() {
+		status = "SSH authentication required"
 	}
 	if m.options.ReadOnly {
 		status += " read-only"
@@ -373,6 +375,14 @@ func (m *Model) contextHint() string {
 
 func (m *Model) footer() string {
 	switch m.overlay {
+	case "ssh-auth":
+		if m.authPending() {
+			if m.auth.phase == "preparing" {
+				return "Preparing OpenSSH · Esc cancel"
+			}
+			return "OpenSSH owns the terminal until authentication finishes"
+		}
+		return "Enter authenticate with OpenSSH · Esc cancel"
 	case "search":
 		return "Type to filter · ↑↓ select · Enter accept · Esc clear"
 	case "palette":
@@ -394,6 +404,9 @@ func (m *Model) footer() string {
 		return "↑↓/jk scroll · Esc / ? close"
 	case "saving":
 		return "Saving settings…"
+	}
+	if m.currentAuth() {
+		return "A authenticate · t targets · : actions · q quit"
 	}
 	if m.width < 60 {
 		return "↑↓ · : menu · ? help · q quit"

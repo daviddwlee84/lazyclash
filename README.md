@@ -18,7 +18,7 @@ The `/cmd/lazyclash` suffix identifies the executable package. Go installs it in
 `go env GOBIN` when configured, otherwise in the first `go env GOPATH` entry's
 `bin` directory (usually `~/go/bin`). Add that directory to your shell's PATH.
 Repeating the install command upgrades to the latest published version. To pin
-a release, use `@v0.1.4`; `@main` explicitly opts into the development
+a release, use `@v0.1.5`; `@main` explicitly opts into the development
 branch. `@latest` selects a published version, not necessarily the newest commit.
 See [CHANGELOG.md](CHANGELOG.md) for changes between versions.
 
@@ -269,7 +269,7 @@ path = "/etc/mihomo/work.yaml"
 
 Optional target fields: `ca_file` for a local PEM CA bundle and `source_config` for a runtime YAML on the target host. `source_config` only supplies credentials if its controller still matches the target. `secret_env` and `secret_file` are mutually exclusive and take precedence over that source. Existing `[[targets]]` array-table files preserve comments and unrelated fields when edited; unsupported compact TOML layouts require manual editing. Concurrent edits are detected before replacing the file. Saved settings have mode 0600.
 
-SSH targets use system `ssh`, including configured aliases, keys, agent, ProxyJump and known_hosts. Background commands cannot prompt; an explicit foreground authentication action can establish a private, short-lived OpenSSH control connection. Each tunnel listens only on loopback, and cleanup closes only resources created by lazyclash. HTTPS still verifies the original controller hostname. Remote Unix-socket forwarding is not implemented; local Unix sockets are supported.
+SSH targets use system `ssh`, including configured aliases, keys, agent, ProxyJump and known_hosts. Password-only login is supported through native OpenSSH. The TUI offers Authenticate/Cancel when needed; A opens the authentication action. Configured ControlMaster/ControlPersist sessions are reused across commands, while private fallback sessions belong to the current process. Background/JSON commands never prompt. Each tunnel listens only on loopback; cleanup cancels its own forwards and leaves configured masters running. See [SSH session behavior](docs/targets-and-config.md#password-only-ssh-and-session-reuse). HTTPS still verifies the original controller hostname. Remote Unix-socket forwarding is not implemented; local Unix sockets are supported.
 
 ## Connectivity and egress diagnostics
 

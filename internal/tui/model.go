@@ -119,6 +119,9 @@ func (s *targetState) snap(key string) *snapshot {
 }
 
 type Model struct {
+	auth              *authState
+	authSerial        uint64
+	authOffered       map[string]bool
 	work              *workState
 	workSerial        uint64
 	options           Options
@@ -184,10 +187,6 @@ type streamMsg struct {
 	generation uint64
 	resource   string
 	data       core.Object
-	err        error
-}
-type authMsg struct {
-	generation uint64
 	err        error
 }
 type savedMsg struct {
@@ -309,6 +308,8 @@ func cleanup(c *core.Client, closer io.Closer) tea.Cmd {
 	}
 }
 func (m *Model) connect(target config.Target) tea.Cmd {
+	m.authSerial++
+	m.auth = nil
 	if m.work != nil {
 		if m.work.cancel != nil {
 			m.work.cancel()
@@ -428,8 +429,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.opening = false
 		if msg.err != nil {
 			m.status = "Connection failed: " + safeError(msg.err)
+			m.requireAuthentication(msg.err)
 			return m, cleanup(msg.client, msg.closer)
 		}
+		m.auth = nil
 		m.client, m.closer = msg.client, msg.closer
 		m.status = "Connected"
 		if m.state().lastOperation != "" {
@@ -565,14 +568,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, waitEvent(m.ctx, m.events)
 	case authMsg:
-		if msg.generation != m.generation {
-			return m, nil
-		}
-		if msg.err != nil {
-			m.status = "SSH authentication: " + safeError(msg.err)
-			return m, nil
-		}
-		return m, m.connect(m.target)
+		return m, m.receiveAuthentication(msg)
+	case authPreparedMsg:
+		return m, m.receiveAuthenticationPrepared(msg)
 	case savedMsg:
 		if msg.err != nil {
 			m.status = "Save failed: " + safeError(msg.err)

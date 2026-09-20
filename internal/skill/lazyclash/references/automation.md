@@ -30,7 +30,9 @@ and `130` for cancellation.
 - `read-only`: the requested core action is disabled by `--read-only`.
 - `unknown-write-result`: refresh the same target before deciding what to do;
   never retry a mutation merely because its request timed out.
-- `ssh-auth-required`: prepare SSH authentication outside the machine call.
+- `ssh-auth-required`: authenticate interactively using a configured persistent
+  OpenSSH master before retrying a machine read. A private fallback session
+  ends with its CLI process; a prior test alone does not guarantee reuse.
 - `config-conflict`: reload local settings before reapplying the intended edit.
 - `usage`: correct the command using its `--help`.
 - `canceled` / `timeout`: collection or the caller's context ended; an uncertain

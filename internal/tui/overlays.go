@@ -51,6 +51,10 @@ func (m *Model) overlayLayout(width, height int) ([]string, []hitRegion) {
 	var hits []hitRegion
 	var buttons []button
 	switch m.overlay {
+	case "ssh-auth":
+		lines = m.detailLines(m.authenticationText(), width, max(0, height-1), 0)
+		canCancel := !m.authPending() || m.auth.phase == "preparing"
+		buttons = []button{{"ssh-authenticate", "Enter Authenticate", m.currentAuth() && m.canAuthenticate()}, {"ssh-auth-cancel", "Cancel", canCancel}}
 	case "search":
 		return nil, nil
 	case "targets":
@@ -206,6 +210,10 @@ func (m *Model) overlayButton(id string) tea.Cmd {
 		return m.workButton(id)
 	}
 	switch id {
+	case "ssh-authenticate":
+		return m.authenticateCurrent()
+	case "ssh-auth-cancel":
+		return m.cancelAuthentication()
 	case "quick-save":
 		return m.quickSaveForm()
 	case "cancel":

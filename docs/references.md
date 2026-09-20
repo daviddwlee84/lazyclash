@@ -49,9 +49,16 @@ files were not used for destructive fixture tests.
 | Agent-readable embedded guidance | [Go embed](https://pkg.go.dev/embed), [dev-cli skill](https://github.com/daviddwlee84/dev-cli/blob/689836cdea61d46ee86cdfa4a0df42ac324e6561/internal/skill/skill.go), [Herdr docs](https://herdr.dev/docs/) | dev-cli 689836c; Herdr inspiration | Design: offline skill matching the installed binary, help as syntax authority |
 | Installation-aware update design | [dev-cli upgrade](https://github.com/daviddwlee84/dev-cli/blob/689836cdea61d46ee86cdfa4a0df42ac324e6561/internal/cli/upgrade.go), [source builder](https://github.com/daviddwlee84/dev-cli/blob/689836cdea61d46ee86cdfa4a0df42ac324e6561/internal/selfupdate/source.go) | dev-cli 689836c | Reference implementation; lazyclash owns its verification/replacement tests |
 | Config/data/state locations | [XDG specification](https://specifications.freedesktop.org/basedir-spec/latest/) | Living specification | macOS os.UserConfigDir differs; lazyclash uses its explicit XDG policy |
-| SSH forwarding and host checks | [OpenSSH ssh manual](https://man.openbsd.org/ssh), [ssh_config](https://man.openbsd.org/ssh_config) | Host OpenSSH | Controller tunnel and proxy tunnel differ; SSH alters observed source tuples |
+| SSH forwarding and host checks | [OpenSSH ssh manual](https://man.openbsd.org/ssh), [ssh_config](https://man.openbsd.org/ssh_config) | Host OpenSSH | Controller and data forwards differ; configured masters follow user ControlPersist policy. Cleanup uses matching forward/cancel, never exit on a configured master; SSH alters source tuples |
 
 ## Host diagnostics
+
+Docker namespace boundaries use [port publishing](https://docs.docker.com/engine/network/port-publishing/)
+and [bind mounts](https://docs.docker.com/engine/storage/bind-mounts/)
+(living Docker documentation, reviewed 2026-09-20). Controller URLs use the
+published host port; a host source_config path and a container reload path
+have different owners/namespaces. Container-aware persistent rule repair
+remains unimplemented.
 
 | Claim / use | Source | Version / context | Limit / decision |
 |---|---|---|---|

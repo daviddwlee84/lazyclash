@@ -29,7 +29,11 @@ func ExecutePython(ctx context.Context, host, script string, input []byte, limit
 		if err := validateHost(host); err != nil {
 			return nil, err
 		}
-		cmd = commandContext(ctx, "ssh", append(sshArgs(host), "-T", "--", host, "python3 -c "+shellQuote(script))...)
+		args, err := sshArgsContext(ctx, host)
+		if err != nil {
+			return nil, err
+		}
+		cmd = commandContext(ctx, "ssh", append(args, "-T", "--", host, "python3 -c "+shellQuote(script))...)
 	}
 	var output, diagnostic limitedBuffer
 	output.limit, diagnostic.limit = limit, 8192

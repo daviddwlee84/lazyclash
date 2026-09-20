@@ -42,7 +42,7 @@ func (m *Model) actions() []action {
 		{"target-add", "Add target", nil, true}, {"target-edit", "Edit current target", nil, m.target.ID != ""}, {"target-remove", "Remove current target", nil, m.target.ID != ""},
 		{"target-default", "Make current target default", nil, m.target.ID != ""}, {"target-up", "Move current target earlier", nil, m.target.ID != ""}, {"target-down", "Move current target later", nil, m.target.ID != ""},
 		{"discover", "Discover local controllers", nil, m.options.Discover != nil}, {"discover-ssh", "Discover SSH host", nil, m.options.DiscoverHost != nil},
-		{"authenticate", "Authenticate SSH and reconnect", nil, m.target.SSHHost != "" && m.options.Authenticate != nil},
+		{"authenticate", "Authenticate SSH and reconnect", []string{"A"}, m.canAuthenticate()},
 		{"mode", "Cycle mode (rule / global / direct)", []string{"m"}, write && str(cfg, "mode") != ""},
 		{"tun", "Toggle TUN", []string{"u"}, write && knownBool(object(cfg["tun"]), "enable")},
 		{"lan", "Toggle Allow LAN", []string{"a"}, write && knownBool(cfg, "allow-lan")},
@@ -236,6 +236,8 @@ func (m *Model) paletteActions() []action {
 func (m *Model) overlayKey(msg tea.KeyPressMsg) tea.Cmd {
 	key := msg.String()
 	switch m.overlay {
+	case "ssh-auth":
+		return m.authenticationKey(msg)
 	case "work":
 		return m.workKey(msg)
 	case "search":
@@ -468,13 +470,7 @@ func (m *Model) runAction(id string) tea.Cmd {
 	case "discover-ssh":
 		return m.startForm("ssh", "Discover SSH host", "", []field{{label: "SSH host alias", value: ""}})
 	case "authenticate":
-		cmd, err := m.options.Authenticate(m.ctx, m.target.SSHHost)
-		if err != nil {
-			m.status = "SSH authentication: " + safeError(err)
-			return nil
-		}
-		generation := m.generation
-		return tea.ExecProcess(cmd, func(err error) tea.Msg { return authMsg{generation, err} })
+		return m.showAuthentication()
 	case "mode":
 		current := str(m.configData(), "mode")
 		next := "rule"

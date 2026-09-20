@@ -115,7 +115,11 @@ func (m *Model) toolbar(width int) (string, []hitRegion) {
 	case configs:
 		wanted = []string{"config-apply", "config-add", "config-edit", "config-remove"}
 	}
+	if m.currentAuth() {
+		wanted = []string{"authenticate", "targets", "reconnect"}
+	}
 	short := map[string]string{"overview-inspect": "Inspect", "refresh": "Refresh", "targets": "Targets", "select": "Choose", "delay": "Delay", "delay-group": "Group delay", "close-connection": "Close", "close-all": "Close all", "log-follow": "Follow", "log-level": "Level", "log-clear": "Clear", "provider-update": "Update", "provider-health": "Healthcheck", "config-apply": "Apply", "config-add": "Register", "config-edit": "Edit", "config-remove": "Remove", "probe-ip": "IP.SB", "probe-latency": "Websites", "mode": "Mode", "tun": "TUN", "history-window": "Window", "graph-style": "Style"}
+	short["authenticate"], short["reconnect"] = "Authenticate", "Reconnect"
 	actions := m.actions()
 	var parts []string
 	var hits []hitRegion
@@ -162,7 +166,7 @@ func (m *Model) hitRegions() []hitRegion {
 		hits = append(hits, hitRegion{rect: rect{0, 0, width, 1}, kind: "action", id: "targets"})
 	}
 	footer := m.footer()
-	for label, id := range map[string]string{"t targets": "targets", ": actions": "palette", ": menu": "palette", "M mouse": "mouse", "? help": "help", "q quit": "quit"} {
+	for label, id := range map[string]string{"A authenticate": "authenticate", "t targets": "targets", ": actions": "palette", ": menu": "palette", "M mouse": "mouse", "? help": "help", "q quit": "quit"} {
 		if pos := strings.Index(footer, label); pos >= 0 {
 			x := ansi.StringWidth(footer[:pos])
 			w := ansi.StringWidth(label)
@@ -224,7 +228,7 @@ func (m *Model) mouseContext() string {
 			paletteID = actions[min(m.paletteIndex, len(actions)-1)].id
 		}
 	}
-	return fmt.Sprint(m.workSerial, "|", m.workMouseContext()) + fmt.Sprintf("%d|%d|%s|%d|%s|%s|%s|%s|%d|%s|%t|%s|%d|%s|%s", m.generation, m.page, m.overlay, v.focus, v.positions[0].selected, v.positions[1].selected, picked, form, m.testSerial, m.pending, m.options.ReadOnly, m.overviewSelection, m.paletteIndex, paletteID, m.input.Value())
+	return fmt.Sprint(m.authSerial, "|", m.authPending(), "|", m.workSerial, "|", m.workMouseContext()) + fmt.Sprintf("%d|%d|%s|%d|%s|%s|%s|%s|%d|%s|%t|%s|%d|%s|%s", m.generation, m.page, m.overlay, v.focus, v.positions[0].selected, v.positions[1].selected, picked, form, m.testSerial, m.pending, m.options.ReadOnly, m.overviewSelection, m.paletteIndex, paletteID, m.input.Value())
 }
 func (m *Model) mouseClick(msg tea.MouseClickMsg) tea.Cmd {
 	m.pressed = nil

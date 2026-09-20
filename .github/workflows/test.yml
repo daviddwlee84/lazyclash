@@ -48,3 +48,4 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/pty-venv"
           "$RUNNER_TEMP/pty-venv/bin/pip" install pyte==0.8.2
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_smoke.py
+          "$RUNNER_TEMP/pty-venv/bin/python" scripts/auth_pty_smoke.py

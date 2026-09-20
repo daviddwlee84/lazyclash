@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -199,6 +200,14 @@ func TestVergeProfilesRejectsMergeScriptAndIncompleteFiles(t *testing.T) {
 }
 
 func TestSSHArgumentSafetyAndForegroundAuthentication(t *testing.T) {
+	oldCommand := commandContext
+	commandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		if name == "ssh" {
+			args = append([]string{"-F", "/dev/null"}, args...)
+		}
+		return exec.CommandContext(ctx, name, args...)
+	}
+	defer func() { commandContext = oldCommand; clearMultiplexPolicies() }()
 	for _, host := range []string{"-oProxyCommand=evil", "host;evil", "host name", "host\nother"} {
 		if _, err := AuthenticateCommand(context.Background(), host); err == nil {
 			t.Errorf("invalid SSH host accepted: %q", host)
@@ -240,6 +249,8 @@ func TestRemoteUnixFailsExplicitly(t *testing.T) {
 }
 
 func TestTunnelManagedChildAndAuthFailure(t *testing.T) {
+	clearMultiplexPolicies()
+	defer clearMultiplexPolicies()
 	old := commandContext
 	defer func() { commandContext = old }()
 	mode := "listen"
@@ -286,6 +297,12 @@ func TestSSHHelperProcess(t *testing.T) {
 	mode := os.Getenv("LAZYCLASH_SSH_HELPER")
 	if mode == "" {
 		return
+	}
+	for _, arg := range os.Args {
+		if arg == "-G" {
+			fmt.Print("controlmaster false\ncontrolpersist no\n")
+			os.Exit(0)
+		}
 	}
 	if mode == "auth" {
 		_, _ = os.Stderr.WriteString("Permission denied (publickey,password).\n")

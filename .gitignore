@@ -41,3 +41,5 @@
 /bin/
 /lazyclash
 /coverage.out
+
+/scripts/__pycache__/

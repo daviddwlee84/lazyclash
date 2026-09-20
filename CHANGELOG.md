@@ -1,10 +1,23 @@
 # Changelog
 
 User-facing changes are recorded here for every published version. Install a
-fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.4`,
+fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.5`,
 or use `@latest` to upgrade. Check the installed binary with `lazyclash --version`.
 
 ## Unreleased
+
+## 0.1.5 — 2026-09-20
+
+- Password-only SSH login is now discoverable in the TUI: connection failures
+  requiring SSH authentication offer Authenticate/Cancel and an A retry action.
+  OpenSSH owns password/host-key entry; failed login or dialog cancellation preserves the
+  dashboard without automatic prompt loops or interruption of other forms.
+- Reuse user-configured ControlMaster/ControlPersist sessions across CLI/TUI
+  invocations. Explicit authentication honors usable persistent SSH policy;
+  private fallback sessions still close with their owning process. Cleanup
+  cancels only lazyclash's forwards and never exits a configured SSH master.
+- Updated operating guidance for SSH password/session lifetime and Docker
+  controller ports versus host/container configuration paths.
 
 ## 0.1.4 — 2026-09-20
 
@@ -97,3 +110,5 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 [0.1.3]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.3
 
 [0.1.4]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.4
+
+[0.1.5]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.5

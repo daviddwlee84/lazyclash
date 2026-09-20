@@ -36,16 +36,39 @@ var authentications = struct {
 	hosts map[string]authentication
 }{hosts: map[string]authentication{}}
 
-// AuthenticateCommand creates an app-owned multiplexed connection. Execute it
-// using the real terminal (tea.ExecProcess in the TUI), then retry once. Call
-// CloseAuthentications on application exit. The master also expires after 60s
-// idle if the application cannot run its cleanup.
+// AuthenticateCommand uses persistent user multiplexing policy when available;
+// otherwise it creates a private, invocation-scoped 60s master. Execute on the
+// real terminal, then retry once. Configured sockets are never app-owned.
 func AuthenticateCommand(ctx context.Context, host string) (*exec.Cmd, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := validateHost(host); err != nil {
 		return nil, err
 	}
+	policy, err := resolveMultiplexPolicy(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	useConfigured, master := policy.persistent(), policy.master
+	if policy.path != "" {
+		alive, err := configuredMasterAlive(ctx, host, policy.path)
+		if err != nil {
+			return nil, err
+		}
+		if alive {
+			useConfigured, master = true, "no"
+		}
+	}
 	authentications.Lock()
 	a, ok := authentications.hosts[host]
+	if !ok && useConfigured {
+		authentications.Unlock()
+		return commandContext(ctx, "ssh", "-o", "BatchMode=no", "-o", "ConnectTimeout=15", "-o", "ClearAllForwardings=yes", "-o", "ControlMaster="+master, "-o", "ControlPersist="+policy.persist, "-o", "ControlPath="+controlSocketArgument(policy.path), "-T", "--", host, "true"), nil
+	}
 	if !ok {
 		dir, err := os.MkdirTemp("", "lazyclash-ssh-")
 		if err != nil {
@@ -56,7 +79,7 @@ func AuthenticateCommand(ctx context.Context, host string) (*exec.Cmd, error) {
 		authentications.hosts[host] = a
 	}
 	authentications.Unlock()
-	return commandContext(ctx, "ssh", "-o", "BatchMode=no", "-o", "ConnectTimeout=15", "-o", "ControlMaster=auto", "-o", "ControlPersist=60", "-o", "ControlPath="+a.path, "-T", "--", host, "true"), nil
+	return commandContext(ctx, "ssh", "-o", "BatchMode=no", "-o", "ConnectTimeout=15", "-o", "ClearAllForwardings=yes", "-o", "ControlMaster=auto", "-o", "ControlPersist=60", "-o", "ControlPath="+controlSocketArgument(a.path), "-T", "--", host, "true"), nil
 }
 
 func CloseAuthentications() error {
@@ -64,9 +87,10 @@ func CloseAuthentications() error {
 	owned := authentications.hosts
 	authentications.hosts = map[string]authentication{}
 	authentications.Unlock()
+	clearMultiplexPolicies()
 	for host, a := range owned {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		_ = commandContext(ctx, "ssh", "-o", "BatchMode=yes", "-S", a.path, "-O", "exit", "--", host).Run()
+		_ = commandContext(ctx, "ssh", append(masterControlArgs(a.path, "exit"), "--", host)...).Run()
 		cancel()
 		_ = os.RemoveAll(a.dir)
 	}
@@ -80,17 +104,35 @@ func validateHost(host string) error {
 	return config.ValidateTarget(config.Target{Controller: "http://127.0.0.1:9090", SSHHost: host})
 }
 
-func sshArgs(host string) []string {
+func batchSSHArgs(controlPath string) []string {
 	args := []string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=yes", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2", "-o", "ControlMaster=no"}
+	if controlPath == "" {
+		controlPath = "none"
+	}
+	return append(args, "-o", "ControlPath="+controlSocketArgument(controlPath))
+}
+
+func sshArgs(host string) []string {
+	var policy multiplexPolicy
+	multiplexPolicies.Lock()
+	if entry := multiplexPolicies.entries[host]; entry != nil && entry.ready == nil {
+		policy = entry.policy
+	}
+	multiplexPolicies.Unlock()
 	authentications.Lock()
 	a, ok := authentications.hosts[host]
 	authentications.Unlock()
 	if ok {
-		args = append(args, "-o", "ControlPath="+a.path)
-	} else {
-		args = append(args, "-o", "ControlPath=none")
+		return append(batchSSHArgs(a.path), "-o", "ClearAllForwardings=yes")
 	}
-	return args
+	return append(batchSSHArgs(policy.path), "-o", "ClearAllForwardings=yes")
+}
+
+func sshArgsContext(ctx context.Context, host string) ([]string, error) {
+	if _, err := resolveMultiplexPolicy(ctx, host); err != nil {
+		return nil, err
+	}
+	return sshArgs(host), nil
 }
 
 // Remote command strings contain only fixed script text or single-quoted paths.
@@ -102,7 +144,11 @@ func remoteCommand(ctx context.Context, host, script string, limit int) ([]byte,
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	args := append(sshArgs(host), "-T", "--", host, script)
+	base, err := sshArgsContext(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	args := append(base, "-T", "--", host, script)
 	cmd := commandContext(ctx, "ssh", args...)
 	var out limitedBuffer
 	out.limit = limit
@@ -110,7 +156,7 @@ func remoteCommand(ctx context.Context, host, script string, limit int) ([]byte,
 	diagnostic.limit = 8192
 	cmd.Stdout = &out
 	cmd.Stderr = &diagnostic
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("SSH request: %w", ctx.Err())
@@ -153,7 +199,37 @@ func (b *limitedBuffer) String() string { return string(b.Bytes()) }
 
 func needsAuthentication(stderr string) bool {
 	s := strings.ToLower(stderr)
-	return strings.Contains(s, "permission denied") || strings.Contains(s, "host key verification failed") || strings.Contains(s, "no supported authentication methods") || strings.Contains(s, "read_passphrase") || strings.Contains(s, "authenticity of host")
+	if strings.Contains(s, "host key verification failed") || strings.Contains(s, "no supported authentication methods") || strings.Contains(s, "read_passphrase") || strings.Contains(s, "authenticity of host") {
+		return true
+	}
+	for _, line := range strings.Split(s, "\n") {
+		_, tail, ok := strings.Cut(line, "permission denied")
+		if !ok {
+			continue
+		}
+		tail = strings.TrimSpace(tail)
+		if strings.HasPrefix(tail, ", please try again") {
+			return true
+		}
+		if strings.HasPrefix(tail, "(") {
+			methods, _, closed := strings.Cut(tail[1:], ")")
+			if !closed {
+				continue
+			}
+			for _, method := range strings.Split(methods, ",") {
+				switch strings.TrimSpace(method) {
+				case "publickey", "password", "keyboard-interactive", "hostbased", "gssapi-with-mic", "gssapi-keyex":
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func missingControlMaster(stderr string) bool {
+	s := strings.ToLower(stderr)
+	return strings.Contains(s, "control socket") && (strings.Contains(s, "no such file") || strings.Contains(s, "connection refused") || strings.Contains(s, "connection reset"))
 }
 
 type tunnel struct {
@@ -190,6 +266,10 @@ func openTunnel(ctx context.Context, host string, u *url.URL) (*tunnel, error) {
 	if err := validateHost(host); err != nil {
 		return nil, err
 	}
+	policy, err := resolveMultiplexPolicy(ctx, host)
+	if err != nil {
+		return nil, err
+	}
 	port := u.Port()
 	if port == "" {
 		if u.Scheme == "https" {
@@ -217,7 +297,16 @@ func openTunnel(ctx context.Context, host string, u *url.URL) (*tunnel, error) {
 	if hasAuth {
 		return openMasterForward(ctx, host, address, forward, auth)
 	}
-	args := append(sshArgs(host), "-o", "ExitOnForwardFailure=yes", "-N", "-T", "-L", forward, "--", host)
+	alive, err := configuredMasterAlive(ctx, host, policy.path)
+	if err != nil {
+		return nil, err
+	}
+	if alive {
+		return openMasterForward(ctx, host, address, forward, authentication{path: policy.path})
+	}
+	// A dedicated child must not opportunistically attach its -L forwarding to
+	// a configured master. Such forwarding would survive killing this child.
+	args := append(batchSSHArgs("none"), "-o", "ExitOnForwardFailure=yes", "-N", "-T", "-L", forward, "--", host)
 	tunnelCtx, cancel := context.WithCancel(ctx)
 	cmd := commandContext(tunnelCtx, "ssh", args...)
 	diagnostic := &limitedBuffer{limit: 8192}
@@ -263,32 +352,36 @@ func openTunnel(ctx context.Context, host string, u *url.URL) (*tunnel, error) {
 	}
 }
 
-// App-owned authenticated masters use explicit forward/cancel control messages;
-// killing a multiplex client alone would otherwise leave its forward behind.
+// Both private and configured masters use exact forward/cancel messages. Only
+// the forwarding belongs to this tunnel; the configured master never does.
 func openMasterForward(ctx context.Context, host, address, forward string, auth authentication) (*tunnel, error) {
 	setupCtx, cancelSetup := context.WithTimeout(ctx, 10*time.Second)
 	defer cancelSetup()
-	args := []string{"-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-S", auth.path, "-O", "forward", "-L", forward, "--", host}
+	args := append(masterControlArgs(auth.path, "forward"), "-o", "ExitOnForwardFailure=yes", "-L", forward, "--", host)
+	cancelForward := func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cleanupCancel()
+		_ = commandContext(cleanupCtx, "ssh", append(masterControlArgs(auth.path, "cancel"), "-L", forward, "--", host)...).Run()
+	}
 	var diagnostic limitedBuffer
 	diagnostic.limit = 8192
 	cmd := commandContext(setupCtx, "ssh", args...)
 	cmd.Stderr = &diagnostic
 	if err := cmd.Run(); err != nil {
+		// A lost control reply may hide a successful forwarding request. Cancel
+		// only our exact ephemeral forwarding, never the shared master.
+		cancelForward()
 		if setupCtx.Err() != nil {
 			return nil, setupCtx.Err()
 		}
-		if needsAuthentication(diagnostic.String()) || strings.Contains(strings.ToLower(diagnostic.String()), "control socket") {
+		if needsAuthentication(diagnostic.String()) || missingControlMaster(diagnostic.String()) {
 			return nil, &AuthRequiredError{Host: host}
 		}
 		return nil, errors.New("SSH tunnel forwarding failed")
 	}
 	tunnelCtx, cancel := context.WithCancel(ctx)
 	t := &tunnel{address: address, cancel: cancel}
-	t.closeForward = func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cleanupCancel()
-		_ = commandContext(cleanupCtx, "ssh", "-o", "BatchMode=yes", "-S", auth.path, "-O", "cancel", "-L", forward, "--", host).Run()
-	}
+	t.closeForward = cancelForward
 	go func() { <-tunnelCtx.Done(); _ = t.Close() }()
 	return t, nil
 }

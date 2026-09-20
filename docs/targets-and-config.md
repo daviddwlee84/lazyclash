@@ -33,6 +33,72 @@ The editor uses VISUAL, EDITOR, then vi, and remains accessible for malformed
 settings. Reads do not rewrite settings; saves preserve comments/unknown fields
 and detect conflicting edits.
 
+## Password-only SSH and session reuse
+
+SSH passwords work without SSH keys. Interactive CLI commands can hand the
+terminal to OpenSSH when login is required. In the TUI, a connection that needs
+SSH authentication shows **Authenticate / Cancel**; Enter starts native SSH,
+and A reopens the action later. Authentication is allowed in read-only mode.
+Failed login or Cancel in the dialog leaves the dashboard usable without
+automatic prompt retries. Ctrl+C remains an application interrupt, including
+at a native SSH prompt, and restores the terminal on exit.
+Other open forms and work results retain their input ownership.
+
+The password belongs to OpenSSH. Do not put it in lazyclash's secret_file or
+secret_env: those are controller API credentials. Proxy password references
+likewise belong to the data proxy, not SSH login.
+
+lazyclash honors an existing configured ControlMaster connection. When the
+user's SSH configuration enables a persistent master, foreground authentication
+uses that policy so subsequent CLI invocations and the TUI can reuse it. For
+example, an existing SSH host block may opt into:
+
+```sshconfig
+Host home-server
+    ControlMaster auto
+    ControlPath ~/.ssh/cm-%C
+    ControlPersist 10m
+```
+
+OpenSSH manages that session's idle timeout; lazyclash does not edit your SSH
+configuration or store a password. It cancels only the individual forwards it
+added and never terminates a configured master. Without usable persistent
+multiplexing, a private fallback session belongs to the current lazyclash
+process and closes when that process exits. A successful test command therefore
+does not imply a lasting login in that fallback case.
+
+JSON and noninteractive calls never prompt. With configured persistent sharing,
+a prior interactive `targets test server` or `ssh home-server true` can establish
+the session before a later JSON read. An expired session can require interactive
+authentication again. Password, keyboard-interactive/MFA and host-key questions
+remain OpenSSH's responsibility; host-key checks are retained.
+
+## Docker-hosted controllers
+
+Register each controller separately using its published **SSH host port**.
+For example, after verifying an API at host 9091 and a mixed listener at 7890:
+
+```sh
+lazyclash targets add docker-mihomo --ssh home-server \
+  --controller http://127.0.0.1:9091 --probe-proxy http://127.0.0.1:7890
+```
+
+Discover does not currently inspect Docker port or mount mappings. Verify the
+actual API and listener type; a published redir/tproxy port is not an HTTP or
+SOCKS proxy. Ordinary API monitoring/control does not require Docker socket
+access or installation of lazyclash inside the container.
+
+If credentials are needed, source_config must be a file readable on the SSH
+host (the host side of a bind mount), and its controller must match the saved
+endpoint. Port remapping may prevent that match; use an explicit local secret
+reference in that case. A registered configs path used by configs apply instead
+belongs to the core's **container filesystem**.
+
+Persistent rule repair does not yet translate host/container paths or run its
+validator inside Docker; leave that rule-source binding unset. Host DNS/routes
+and a bridge-network container's DNS/routes are also different observation
+contexts. See the [Docker references](references.md#host-diagnostics).
+
 ## Management and request traffic
 
 HTTP(S) controllers expose Mihomo's external control API. Unix socket targets

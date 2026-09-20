@@ -52,9 +52,18 @@ the registration wizard.
   host. lazyclash creates a loopback tunnel through system OpenSSH and retains
   aliases, keys, agent, ProxyJump and known_hosts behavior. Do not expose the
   remote controller just to make it reachable.
+- Password-only SSH is supported through native OpenSSH terminal handoff. The
+  TUI offers Authenticate/Cancel on a typed SSH login failure; A retries
+  explicitly. The application never collects/stores an SSH password.
+- Existing user-configured ControlMaster sessions are reused. A configured
+  persistent master can survive CLI exit according to ControlPersist; cleanup
+  cancels only app-created forwards, never that master. Otherwise the private
+  fallback authentication session lasts for the current invocation only.
+  Completing targets test does not persist login across processes in that case.
 - Machine output (`--json`) never hands the terminal to SSH authentication.
   On an authentication-required error, arrange authentication interactively
-  outside that machine invocation, then retry the read. Do not disable host-key
+  outside that machine invocation with configured persistent multiplexing,
+  then retry the read. SSH passwords are not controller secret references. Do not disable host-key
   checks or invent credentials.
 
 Settings default to `$XDG_CONFIG_HOME/lazyclash/config.toml`, or

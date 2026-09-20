@@ -7,6 +7,7 @@ Read for dashboard startup, background operations, slow I/O, or external tools.
 - [State and effects](#state-and-effects)
 - [Startup and responsiveness](#startup-and-responsiveness)
 - [Terminal ownership](#terminal-ownership)
+- [SSH authentication handoffs](#ssh-authentication-handoffs)
 - [Lessons from dev-cli](#lessons-from-dev-cli)
 
 ## State and effects
@@ -97,6 +98,45 @@ In raw mode, explicitly handle Ctrl+C and any supported suspend/resume behavior.
 Subprocesses use structured executable/argument calls and a context rather than
 unescaped shell concatenation. Logs go to a separate sink or through messages
 to a UI log view; a background `fmt.Println` can corrupt the screen.
+
+## SSH authentication handoffs
+
+Background discovery and refresh using `BatchMode=yes` cannot prompt for a
+password or host-key trust. Return a typed authentication-required result and
+expose an explicit action for that host instead of retrying indefinitely. JSON
+and non-TTY calls return the requirement without launching a prompt.
+
+For interactive authentication, release the TUI terminal to native SSH, then
+reacquire it on success, failure or cancellation. Let SSH handle passwords,
+keyboard-interactive challenges and host trust; do not collect or store SSH
+passwords in app fields. Retry the intended operation after successful
+authentication, bounded to that handoff. Failed or cancelled prompts remain
+visible without reopening automatically. Tie completion to the target/request
+generation so a late success cannot reconnect a newly selected target.
+
+Distinguish credentials from connection lifetime. A TUI can reuse a connection
+within its process, while separate CLI invocations do not share an in-memory
+authentication map. Inspect effective OpenSSH settings with a bounded `ssh -G`
+call when choosing a multiplexing strategy. Honor an explicitly configured
+`ControlMaster`/`ControlPath`/`ControlPersist` policy rather than always replacing
+it with a private socket or a shorter timeout. A private app-owned master can
+provide scoped fallback reuse when no shared policy applies; document its
+lifetime and cleanup. Reusing a persistent authenticated connection does not
+mean the application cached the password.
+
+Track ownership of the master separately from each forwarding. A master using
+the user's sharing policy remains shared even if this app started it. On a
+borrowed/shared master, cancel only the app's own forwards with their exact
+forwarding specification; never send `-O exit` or `-O stop` during app cleanup.
+Only an app-owned fallback master is eligible for app-wide shutdown.
+
+Verify the handoff with a fake SSH child in a real PTY: native prompt input,
+cancel/failure return, stale target changes and a successful single retry.
+Verify configured-master reuse and forwarding cleanup separately; report a
+real-host check only when it was actually performed. The relevant upstream
+contracts are [BatchMode and multiplexing settings](https://man.openbsd.org/ssh_config)
+and [SSH control commands](https://man.openbsd.org/ssh); the UI and ownership
+policies above are design guidance, not an SSH password-management API.
 
 ## Lessons from dev-cli
 
