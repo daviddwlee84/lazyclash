@@ -578,6 +578,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "Save failed: " + safeError(msg.err)
 			if m.form != nil {
 				m.overlay = "form"
+				if m.form.index < len(m.form.fields) {
+					return m, m.input.Focus()
+				}
 			} else {
 				m.overlay = ""
 			}

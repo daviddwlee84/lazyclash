@@ -96,3 +96,8 @@ request, not a universal node/IP for all rule-mode traffic. Website measurements
 are fresh HEAD time-to-headers (Google, Cloudflare, GitHub), exclude SSH setup,
 and preserve HTTP failures with observed timing. A failed site means nonzero
 exit while partial per-site results remain on stdout; inspect both streams.
+
+In the TUI, Ctrl+S saves a target draft directly from the current field after
+normal validation. Ctrl+T tests connectivity independently; valid offline
+registrations can still be saved. The Review button remains available. Invalid
+input or a failed save retains the draft and editing focus.

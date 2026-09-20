@@ -36,6 +36,17 @@ def request(url, path):
         return json.load(response)
 
 
+def saved_target_name(settings, env, target_id="first"):
+    # Read through the public settings command instead of depending on the
+    # TOML writer's choice of single/double quotes or whitespace.
+    result = subprocess.run(
+        [str(ROOT / "bin/lazyclash"), "--config", str(settings), "settings", "show", "--json"],
+        env=env, capture_output=True, text=True, check=True, timeout=3,
+    )
+    targets = json.loads(result.stdout)["settings"]["targets"]
+    return next(target.get("name", "") for target in targets if target["id"] == target_id)
+
+
 class Terminal:
     def __init__(self, settings, env):
         self.master, self.slave = pty.openpty()
@@ -233,6 +244,46 @@ controller = "{urls[1]}"
             terminal.click_label("[Cancel]")
             assert settings.read_bytes() == before_settings, "draft test rewrote config"
 
+            # Ctrl+S submits the current target field directly, including after
+            # a draft connectivity test. Do not send Ctrl+Q: that would hide an
+            # accidental terminal flow-control freeze instead of testing it.
+            assert not (termios.tcgetattr(terminal.slave)[0] & termios.IXON), "TUI left XON/XOFF enabled"
+            terminal.send("t")
+            terminal.click_label("[e Edit]")
+            terminal.click_label("Display name (optional)")
+            terminal.send("\x15Fixture One Ctrl-S")
+            terminal.send(b"\x14")
+            terminal.wait(lambda: "Connectivity" in terminal.text() and "connected" in terminal.text().lower(), "mid-field draft test")
+            terminal.send(b"\x13")
+            terminal.wait(lambda: saved_target_name(settings, env) == "Fixture One Ctrl-S"
+                          and "Fixture One Ctrl-S [connected]" in terminal.text()
+                          and "Edit target" not in terminal.text(), "raw Ctrl+S saves current display-name field")
+
+            # Failed validation retains the form, focused input and saved file.
+            # Correct it in place and submit again, without traversing 13 fields.
+            terminal.send("t")
+            terminal.click_label("[e Edit]")
+            terminal.click_label("Controller URL")
+            terminal.send("\x15http://")
+            before_invalid_save = settings.read_bytes()
+            terminal.send(b"\x13")
+            terminal.wait(lambda: "missing a hostname" in terminal.text() and "Edit target" in terminal.text(), "Ctrl+S validation failure remains editable")
+            assert settings.read_bytes() == before_invalid_save, "invalid Ctrl+S changed saved settings"
+            terminal.send("\x15" + urls[0])
+            terminal.send(b"\x13")
+            terminal.wait(lambda: "Edit target" not in terminal.text()
+                          and "Fixture One Ctrl-S [connected]" in terminal.text(), "corrected field saves without flow-control freeze")
+
+            # Keep later fixture-label assertions unchanged.
+            terminal.send("t")
+            terminal.click_label("[e Edit]")
+            terminal.click_label("Display name (optional)")
+            terminal.send("\x15Fixture One")
+            terminal.send(b"\x13")
+            terminal.wait(lambda: saved_target_name(settings, env) == "Fixture One"
+                          and "Fixture One [connected]" in terminal.text()
+                          and "Edit target" not in terminal.text(), "Ctrl+S restores fixture name")
+
             # Switch targets; old target writes must never be repeated on new core.
             terminal.send("tj\r")
             terminal.wait(lambda: "Fixture Two [connected]" in terminal.text(), "second target handshake")
@@ -288,10 +339,11 @@ controller = "{urls[1]}"
             restored = termios.tcgetattr(terminal.slave)
             for flag in (termios.ECHO, termios.ICANON):
                 assert (restored[3] & flag) == (terminal.original[3] & flag), "terminal modes not restored"
+            assert (restored[0] & termios.IXON) == (terminal.original[0] & termios.IXON), "terminal flow-control mode not restored"
             terminal.send("echo-restored\n")
             terminal.process.wait(timeout=5)
             assert terminal.process.returncode == 0, terminal.text()
-            print("PTY PASS: overview startup, SGR mouse tabs/row/button/modal, mouse toggle, typing/paste, node/mode writes, confirmations, all pages, streams, resize, target/draft connectivity, target switching, reviewed cross-target copy, passive URL topology, terminal restoration")
+            print("PTY PASS: overview startup, SGR mouse tabs/row/button/modal, mouse toggle, typing/paste, node/mode writes, confirmations, all pages, streams, resize, target/draft connectivity, raw Ctrl+S mid-field save/validation, target switching, reviewed cross-target copy, passive URL topology, terminal/flow-control restoration")
     finally:
         if terminal:
             terminal.close()

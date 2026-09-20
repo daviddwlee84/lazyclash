@@ -21,7 +21,10 @@ rebind the new owner before rule repair. Temporary transport overrides cannot
 reuse a saved rule owner. Credential-only overrides retain their separate role.
 
 The TUI action menu (`:`) provides SSH discovery, target add/edit and connectivity
-tests. Testing a draft neither saves it nor changes the selected core. Discovery
+tests. Press Ctrl+S to validate and save from any target field, without visiting
+every optional field. Ctrl+T tests connectivity independently; reachability is
+not required to save valid settings. Invalid input and failed saves retain the
+current field and draft. Testing a draft neither saves it nor changes the selected core. Discovery
 never silently substitutes a different core for an explicitly selected target.
 JSON/noninteractive commands never open an authentication prompt.
 

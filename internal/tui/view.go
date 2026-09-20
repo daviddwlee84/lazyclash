@@ -378,7 +378,14 @@ func (m *Model) footer() string {
 	case "palette":
 		return "Type to find action · ↑↓ select · Enter run · Esc cancel"
 	case "form":
-		return "Tab / Enter next · Shift+Tab back · Ctrl+T test · Esc cancel"
+		hints := "Tab/Enter next · Shift+Tab back"
+		if m.form.canQuickSave() {
+			hints = "Ctrl+S save · " + hints
+		}
+		if m.form != nil && m.form.kind == "target" {
+			hints += " · Ctrl+T test"
+		}
+		return hints + " · Esc cancel"
 	case "targets":
 		return "↑↓/jk select · Enter connect · T test · n add · e edit · Esc close"
 	case "confirm":

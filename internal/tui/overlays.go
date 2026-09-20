@@ -177,6 +177,13 @@ func (m *Model) formLayout(width, height int) ([]string, []hitRegion, int) {
 		}
 	}
 	buttons := []button{{"save", label, true}, {"cancel", "Cancel", true}}
+	if f.canQuickSave() {
+		if review {
+			buttons[0].label = "Ctrl+S Save"
+		} else {
+			buttons = []button{{"quick-save", "Ctrl+S Save", true}, {"save", label, true}, {"cancel", "Cancel", true}}
+		}
+	}
 	if f.kind == "target" {
 		buttons = append(buttons, button{"draft-test", "Ctrl+T Test", m.options.TestTarget != nil && !m.testPending})
 	}
@@ -199,6 +206,8 @@ func (m *Model) overlayButton(id string) tea.Cmd {
 		return m.workButton(id)
 	}
 	switch id {
+	case "quick-save":
+		return m.quickSaveForm()
 	case "cancel":
 		if m.overlay == "confirm" && m.confirm != nil && m.confirm.back != "" {
 			m.overlay = m.confirm.back

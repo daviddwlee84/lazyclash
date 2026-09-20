@@ -17,6 +17,31 @@ type formState struct {
 	target                config.Target
 }
 
+// Quick save is for local settings forms. Other workflows retain their named
+// preview/diagnose/confirm actions; Ctrl+S never applies a core mutation.
+func (f *formState) canQuickSave() bool {
+	if f == nil {
+		return false
+	}
+	return f.kind == "target" || f.kind == "config" || f.kind == "work-source"
+}
+
+func (m *Model) quickSaveForm() tea.Cmd {
+	f := m.form
+	if m.overlay != "form" || !f.canQuickSave() {
+		return nil
+	}
+	if f.index < len(f.fields) {
+		f.fields[f.index].value = m.input.Value()
+	}
+	cmd := m.submitForm()
+	if m.overlay != "form" {
+		m.input.Blur()
+		m.invalidateTargetTest()
+	}
+	return cmd
+}
+
 func (m *Model) startForm(kind, title, original string, fields []field) tea.Cmd {
 	m.invalidateTargetTest()
 	m.form = &formState{kind: kind, title: title, original: original, fields: fields}
@@ -62,6 +87,8 @@ func (m *Model) formKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	switch msg.String() {
+	case "ctrl+s":
+		return m.quickSaveForm()
 	case "ctrl+t":
 		if f.kind == "target" {
 			return m.testDraft()

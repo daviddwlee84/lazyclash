@@ -18,7 +18,7 @@ The `/cmd/lazyclash` suffix identifies the executable package. Go installs it in
 `go env GOBIN` when configured, otherwise in the first `go env GOPATH` entry's
 `bin` directory (usually `~/go/bin`). Add that directory to your shell's PATH.
 Repeating the install command upgrades to the latest published version. To pin
-a release, use `@v0.1.3`; `@main` explicitly opts into the development
+a release, use `@v0.1.4`; `@main` explicitly opts into the development
 branch. `@latest` selects a published version, not necessarily the newest commit.
 See [CHANGELOG.md](CHANGELOG.md) for changes between versions.
 
@@ -115,7 +115,10 @@ the time window, `v` cycles the graph style, `i` tests IP.SB and `L` tests websi
 
 Mouse input is enabled by default: click tabs, focus panes, select rows and
 scroll with the wheel. Row clicks select; action buttons perform the named
-operation. Forms support field focus and Save/Cancel/Test buttons. Toggle mouse
+operation. Forms support field focus and Save/Cancel/Test buttons. In target, YAML
+registration and rule-source settings forms, Ctrl+S validates and saves directly
+from the current field; Ctrl+T tests target connectivity. Invalid settings stay
+editable, and the optional Review step remains available. Toggle mouse
 capture with `M` or `--mouse=false` to use native terminal text selection.
 
 Use `?` for contextual help and `:` for the action palette. Arrow keys and `hjkl` navigate; Tab/Shift+Tab move focus; `/` filters; Esc returns; `q` quits. Letters typed into a field remain text. Numeric page keys switch views. The target picker and action palette expose target management and SSH discovery. Narrow terminals show the focused pane.

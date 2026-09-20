@@ -1,10 +1,20 @@
 # Changelog
 
 User-facing changes are recorded here for every published version. Install a
-fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.3`,
+fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.4`,
 or use `@latest` to upgrade. Check the installed binary with `lazyclash --version`.
 
 ## Unreleased
+
+## 0.1.4 — 2026-09-20
+
+- Ctrl+S validates and saves target, YAML registration and rule-source settings
+  directly from the current field, without stepping through every optional
+  input. Added a matching mouse button and contextual shortcut hints; Review
+  remains available.
+- Invalid settings and failed saves retain the active field, entered values and
+  editing focus. Quick save still uses normal validation/owner inspection,
+  cancels stale connectivity tests and prevents duplicate pending saves.
 
 ## 0.1.3 — 2026-09-20
 
@@ -85,3 +95,5 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 [0.1.0]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.0
 
 [0.1.3]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.3
+
+[0.1.4]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.4
