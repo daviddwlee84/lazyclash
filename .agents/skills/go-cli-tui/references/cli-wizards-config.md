@@ -92,18 +92,36 @@ changing an upstream choice invalidates or revalidates dependent answers.
 Validate locally on field/step completion, then validate the complete request
 through the domain service. Errors stay near the field and keep user input.
 
+For prefilled forms that only save local registrations or preferences, offer
+an explicit Save shortcut such as Ctrl+S from any field. Visiting every field
+is not a prerequisite; retain an optional Review action. Synchronize the active
+input into the draft, then use the same complete validation and save path.
+Failed validation or persistence keeps the draft and useful field focus.
+Connectivity tests inform the user but need not block saving an otherwise valid
+offline target. Cancel or invalidate pending tests so late results cannot replace
+the saved form. Direct Save still performs required owner inspection and does
+not bypass confirmation or review for core changes, remote applies, or other
+consequential operations.
+
 | Event | Default |
 |---|---|
 | Tab / Shift+Tab | Move between controls; input letters remain text |
 | Up/Down or j/k in a non-text selector | Select options |
 | Back button / Esc | Close nested selector first, then previous step |
 | Esc at first step / Cancel / Ctrl+C | Cancel the wizard; do not submit |
-| Submit step | Review target, resolved values, and effects before applying |
+| Ctrl+S, where direct local Save is offered | Validate and save the current draft without traversing remaining fields |
+| Review / consequential submit | Review target, resolved values, and effects before applying |
 | Finish/cancel from dashboard | Restore originating view/filter/selection |
 
 For a simple one-field prompt, Esc cancels directly. Do not override text
 editing with selector aliases. A form library supplies widgets, not the full
 application's draft, Back, review, or cancellation policy.
+
+Verify Save from early and late fields, validation failures, and stale test
+results. Send the raw Ctrl+S byte (`\x13`) through a real PTY; on POSIX terminals,
+check that IXON flow control is disabled while the TUI owns input and restored
+on exit. A model-level key test alone cannot detect Ctrl+S freezing terminal
+output before the application receives it.
 
 Before apply, revalidate the current target when concurrent changes could make
 the review obsolete. Report partial effects separately from remaining work.
@@ -158,7 +176,8 @@ its selected path. Bind configuration to semantic actions, not row numbers or
 screen coordinates. Validate keymap conflicts per scope and regenerate help
 from effective bindings. Keep a usable Back/help/quit route after remapping.
 
-Before a configuration wizard saves, show the actual file and changes. Preserve
+Keep the destination file and save scope visible; offer a changes review and
+require it when the operation's consequences warrant it. Preserve
 unrelated fields/comments when editing an existing file, or offer an explicit
 manual edit if the writer cannot do so. Detect intervening edits before replacing
 the file and use an appropriate atomic write. Preferences are not a database
