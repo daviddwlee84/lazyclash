@@ -270,6 +270,9 @@ func (o *options) registerCompletions(root *cobra.Command) {
 				return nil, cobra.ShellCompDirectiveNoFileComp
 			}
 		}
+		if cmd.LocalNonPersistentFlags().Lookup("ssh") != nil {
+			_ = cmd.RegisterFlagCompletionFunc("ssh", local("ssh"))
+		}
 		for _, name := range []string{"level", "log-level"} {
 			if cmd.Flags().Lookup(name) != nil {
 				_ = cmd.RegisterFlagCompletionFunc(name, values("debug", "info", "warning", "error", "silent"))
@@ -287,7 +290,7 @@ func (o *options) registerCompletions(root *cobra.Command) {
 		if cmd.Flags().Lookup("config-id") != nil {
 			_ = cmd.RegisterFlagCompletionFunc("config-id", local("configs"))
 		}
-		for _, name := range []string{"dir", "data-dir"} {
+		for _, name := range []string{"dir"} {
 			if cmd.Flags().Lookup(name) != nil {
 				_ = cmd.MarkFlagDirname(name)
 			}

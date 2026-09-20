@@ -156,6 +156,8 @@ func TestCompletionUsesRegistrationsWithoutConnections(t *testing.T) {
 	}{
 		{[]string{"__complete", "--target", ""}, "server"},
 		{[]string{"__complete", "--ssh", ""}, "example"},
+		{[]string{"__complete", "targets", "add", "new", "--ssh", ""}, "example"},
+		{[]string{"__complete", "rules", "source", "set", "--data-dir", ""}, ""},
 		{[]string{"__complete", "mode", ""}, "rule"},
 		{[]string{"__complete", "--page", ""}, "overview"},
 		{[]string{"__complete", "targets", "move", "server", ""}, "first"},
