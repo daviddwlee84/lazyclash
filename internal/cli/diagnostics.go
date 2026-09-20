@@ -106,6 +106,7 @@ func (o *options) targetTestCommand() *cobra.Command {
 
 func (o *options) diagnosticsCommand() *cobra.Command {
 	group := &cobra.Command{Use: "diagnostics", Short: "Manually probe egress through the selected target's explicit data proxy"}
+	group.AddCommand(o.diagnosticURLCommand())
 	group.AddCommand(&cobra.Command{Use: "ip", Short: "Read IP.SB egress IP and location through the configured proxy", Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error {
 		defer connection.CloseAuthentications()
 		if err := o.writable(); err != nil {
@@ -148,6 +149,43 @@ func (o *options) diagnosticsCommand() *cobra.Command {
 		return err
 	}})
 	return group
+}
+
+func (o *options) diagnosticURLCommand() *cobra.Command {
+	var via, referenceDoH string
+	var observeOnly bool
+	cmd := &cobra.Command{Use: "url URL", Short: "Compare host, core and explicit proxy evidence for one HTTP(S) URL", Long: "Compare local and SSH process environments, native and core DNS, bounded core events, HEAD responses, and core DIRECT/chosen-outbound URLTest samples. No mode or selector is changed. URLTest may update health/history. Reports stay in memory unless you explicitly redirect output.", Args: argsExact(1), RunE: func(cmd *cobra.Command, args []string) error {
+		defer connection.CloseAuthentications()
+		if o.readOnly && !observeOnly {
+			return usage("active URL diagnostics are disabled in read-only mode; use --observe-only")
+		}
+		target, err := o.resolveDiagnosticTarget(cmd, "")
+		if err != nil {
+			return err
+		}
+		var result diagnostics.URLResult
+		err = o.authenticatedDiagnostic(cmd, target, func() error {
+			var runErr error
+			result, runErr = diagnostics.RunURL(cmd.Context(), target, args[0], diagnostics.URLOptions{Options: o.diagnosticOptions(), Via: via, ObserveOnly: observeOnly, ReferenceDoH: referenceDoH})
+			return runErr
+		})
+		if result.URL != "" {
+			if o.json {
+				if outputErr := o.output(cmd, result); outputErr != nil {
+					return outputErr
+				}
+			} else {
+				if _, outputErr := fmt.Fprintln(cmd.OutOrStdout(), diagnostics.FormatURL(result)); outputErr != nil {
+					return outputErr
+				}
+			}
+		}
+		return err
+	}}
+	cmd.Flags().StringVar(&via, "via", "", "Compare this existing policy's selected leaf without changing selectors")
+	cmd.Flags().BoolVar(&observeOnly, "observe-only", false, "Inspect existing evidence without DNS, HTTP or outbound URLTest probes")
+	cmd.Flags().StringVar(&referenceDoH, "reference-doh", "", "Opt-in HTTPS DNS-JSON endpoint, contacted only through the explicit data proxy")
+	return cmd
 }
 
 func (o *options) testTargetText(ctx context.Context, target config.Target) (string, error) {

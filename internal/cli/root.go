@@ -128,7 +128,7 @@ func New(deps Dependencies) *cobra.Command {
 			}
 			initial := target.ID
 			opts := tui.Options{
-				Config: cfg, InitialTarget: initial, ReadOnly: o.readOnly,
+				Config: cfg, InitialTarget: initial, ReadOnly: o.readOnly, Workbench: o.runWorkbench,
 				StartPage: o.page, TestTarget: o.testTargetText, ProbeIP: o.probeIPText, ProbeLatency: o.probeLatencyText,
 				Open: func(ctx context.Context, t config.Target) (*core.Client, io.Closer, error) {
 					return o.deps.Open(ctx, t, o.readOnly)
@@ -216,20 +216,8 @@ func New(deps Dependencies) *cobra.Command {
 	f.BoolVar(&o.readOnly, "read-only", false, "disable control actions, latency tests and healthchecks")
 	root.AddCommand(o.targetCommands(), o.configCommands(), o.statusCommand(), o.proxyCommands(), o.connectionCommands(), o.logsCommand(), o.rulesCommand(), o.providerCommands(), o.modeCommand(), o.tunCommand(), o.allowLANCommand(), o.settingsCommand())
 	root.AddCommand(o.skillCommand(), o.diagnosticsCommand(), o.upgradeCommand())
-	root.AddCommand(&cobra.Command{Use: "completion [bash|zsh|fish|powershell]", Short: "Generate shell completion", Args: argsExact(1), ValidArgs: []string{"bash", "zsh", "fish", "powershell"}, RunE: func(cmd *cobra.Command, args []string) error {
-		switch args[0] {
-		case "bash":
-			return root.GenBashCompletion(cmd.OutOrStdout())
-		case "zsh":
-			return root.GenZshCompletion(cmd.OutOrStdout())
-		case "fish":
-			return root.GenFishCompletion(cmd.OutOrStdout(), true)
-		case "powershell":
-			return root.GenPowerShellCompletion(cmd.OutOrStdout())
-		default:
-			return usage("unsupported shell %q", args[0])
-		}
-	}})
+	root.AddCommand(o.completionCommand(root))
+	o.registerCompletions(root)
 	return root
 }
 
@@ -360,6 +348,7 @@ func (o *options) choose(cmd *cobra.Command, cfg config.Config) (config.Target, 
 	}
 	t = o.overrideCredentials(t)
 	t.Transient = t.Transient || o.ssh != ""
+	t.TransportOverride = temporary || o.ssh != ""
 	// Legacy secrets only accompany an explicitly selected temporary endpoint.
 	if temporary && t.SecretFile == "" && t.SecretEnv == "" {
 		if os.Getenv("CLASH_SECRET") != "" {

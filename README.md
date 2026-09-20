@@ -2,7 +2,7 @@
 
 A keyboard-first terminal console for **existing Mihomo cores**, including the core managed by Clash Verge Rev. Works locally, over HTTPS, through SSH, or over a local Unix socket. macOS and Linux are supported.
 
-This first milestone manages runtime state. It does not install Mihomo, take ownership of Clash Verge profiles, edit subscriptions, or change the OS system proxy. Those capabilities are tracked in [TODO.md](TODO.md).
+Manage runtime state, compare targets, diagnose URL routing, and repair exact domain rules through an explicitly bound persistent source. Clash Verge Rules edits require native profile reactivation. See the [knowledge and operating guide](docs/README.md), [reference index](docs/references.md), and [future milestones](TODO.md).
 
 ## Install and start
 
@@ -18,7 +18,7 @@ The `/cmd/lazyclash` suffix identifies the executable package. Go installs it in
 `go env GOBIN` when configured, otherwise in the first `go env GOPATH` entry's
 `bin` directory (usually `~/go/bin`). Add that directory to your shell's PATH.
 Repeating the install command upgrades to the latest published version. To pin
-a release, use `@v0.1.2`; `@main` explicitly opts into the development
+a release, use `@v0.1.3`; `@main` explicitly opts into the development
 branch. `@latest` selects a published version, not necessarily the newest commit.
 See [CHANGELOG.md](CHANGELOG.md) for changes between versions.
 
@@ -62,12 +62,13 @@ go build -o bin/lazyclash ./cmd/lazyclash
 ./bin/lazyclash
 ```
 
-Source installation does not modify your shell startup files or install
-completion scripts. For a zsh session, run `source <(lazyclash completion zsh)`
-after your shell initializes completion; bash can use
-`source <(lazyclash completion bash)`. Make that explicit setup persistent in
-your own shell configuration if wanted. Homebrew and prebuilt release archives
-are a later distribution milestone.
+Source installation does not modify shell startup files. Run
+`lazyclash completion install zsh` to install the user completion script and
+print activation instructions; `completion status zsh` checks the file.
+Existing completion directories can use `--dir ~/.zfunc`. See
+[installation and completion](docs/install-upgrade-completion.md) for fpath,
+compinit, Bash generation and update behavior. Homebrew and prebuilt release
+archives remain a later distribution milestone.
 
 With no saved targets, the dashboard discovers local controllers. Discovery reads known runtime configurations and process/config locations, then probes common loopback controller ports. Multiple candidates are presented for selection; an explicitly selected target never falls back to another core.
 
@@ -205,6 +206,24 @@ both are supplied, the first bound ends collection successfully; zero means
 unbounded, preserving ordinary continuous log following. A count alone cannot
 bound a quiet stream, so agents should supply a duration. Connection failures,
 early disconnection, broken output and caller cancellation remain failures.
+
+## Compare, diagnose and repair
+
+```sh
+lazyclash targets diff desktop server
+lazyclash targets copy-settings desktop server --field mode --group PROXY
+lazyclash --target server diagnostics url https://example.com --via PROXY
+lazyclash --target server --read-only diagnostics url https://example.com --observe-only
+lazyclash --target server rules source show
+lazyclash --target server rules add-domain example.com --via PROXY
+```
+
+Copy and rule changes preview by default; applying requires `--yes --expect`
+with the reviewed digest. The TUI action menu provides target comparison,
+checkbox selection, URL topology/evidence inspection, rule-source binding,
+preview/apply and receipt verification. Consult [targets](docs/targets-and-config.md),
+[diagnostics](docs/diagnostics-and-routing.md), and
+[rule ownership](docs/rules-and-ownership.md) before persistent repairs.
 
 ## Targets and settings
 

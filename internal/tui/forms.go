@@ -100,6 +100,26 @@ func (m *Model) submitForm() tea.Cmd {
 	f := m.form
 	value := func(i int) string { return strings.TrimSpace(f.fields[i].value) }
 	switch f.kind {
+	case "work-url":
+		if value(2) != "true" && value(2) != "false" {
+			f.err = "Observe only must be true or false"
+			return nil
+		}
+		return m.launchWork(WorkRequest{Kind: "url", Source: m.target.ID, URL: value(0), Via: value(1), ObserveOnly: value(2) == "true"})
+	case "work-rule":
+		return m.launchWork(WorkRequest{Kind: "rule-preview", Source: m.target.ID, URL: value(0), Via: value(1)})
+	case "work-receipt":
+		req := WorkRequest{Source: m.target.ID, Receipt: value(0), Kind: "rule-" + value(1)}
+		if value(1) == "restore" {
+			return m.ask("Restore rule source", "Restore receipt "+value(0)+" on "+m.target.ID+"; current-file changes will be checked.", func() tea.Cmd { return m.launchWork(req) })
+		}
+		if value(1) != "verify" {
+			f.err = "Action must be verify or restore"
+			return nil
+		}
+		return m.launchWork(req)
+	case "work-source":
+		return m.submitRuleSourceForm(value)
 	case "ssh":
 		host := value(0)
 		if host == "" {
@@ -192,7 +212,11 @@ func (m *Model) draftTarget() config.Target {
 	t.ID, t.Name, t.Controller, t.SSHHost = value(0), value(1), value(2), value(3)
 	t.SecretEnv, t.SecretFile, t.CAFile, t.SourceConfig = value(4), value(5), value(6), value(7)
 	t.ProbeProxy, t.ProbeUsername, t.ProbePasswordEnv, t.ProbePasswordFile, t.ProbeCAFile = value(8), value(9), value(10), value(11), value(12)
+	if f.target.TransportOverride || t.Controller != f.target.Controller || t.SSHHost != f.target.SSHHost {
+		t.RuleSource = nil
+	}
 	t.Transient = false
+	t.TransportOverride = false
 	if t.SecretEnv != f.target.SecretEnv || t.SecretFile != f.target.SecretFile || t.SourceConfig != f.target.SourceConfig {
 		t.Secret = ""
 	}

@@ -202,6 +202,7 @@ func (o *options) rulesCommand() *cobra.Command {
 	}}
 	list.Flags().StringVar(&filter, "filter", "", "case-insensitive rule filter")
 	group.AddCommand(list)
+	group.AddCommand(o.ruleEditCommands()...)
 	return group
 }
 

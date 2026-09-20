@@ -1,10 +1,34 @@
 # Changelog
 
 User-facing changes are recorded here for every published version. Install a
-fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.2`,
+fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.3`,
 or use `@latest` to upgrade. Check the installed binary with `lazyclash --version`.
 
 ## Unreleased
+
+## 0.1.3 — 2026-09-20
+
+- Added cross-target runtime/version comparison and explicit copying of mode,
+  log-level and manual Selector choices. Reviewed digests reject stale state;
+  each step is read back and partial/unknown results are retained.
+- Added URL diagnosis with local/SSH environment, OS/DNS/route evidence,
+  separate HTTP and core outbound tests, logical topology, correlation
+  confidence and tentative exact-domain recommendations. Observe-only works
+  with read-only mode; missing host tools remain explicit capability gaps.
+- Added persistent domain-rule preview/apply, private backups and receipts,
+  guarded restore and runtime verification. Standalone Mihomo validates in an
+  isolated host environment. Clash Verge Rev 2.5.2 uses existing Rules
+  companions and requires native profile reactivation before verification.
+- Added TUI comparison pickers and checkboxes, digest-bound review/apply,
+  inspectable URL topology/evidence, rule-source forms and receipt actions.
+  Mouse selection, keyboard navigation, cancellation and stale results share
+  the same services as CLI operations.
+- Added zsh completion install/status and offline candidates for saved targets,
+  config IDs and enums. Shell activation remains explicit; candidate queries
+  never connect to controllers or resolve secrets.
+- Collected operating knowledge, API/owner boundaries, UX references and pinned
+  source links in docs/. Expanded the bundled offline skill with diagnosis
+  and cross-target/rule workflows.
 
 ## 0.1.2 — 2026-09-20
 
@@ -59,3 +83,5 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 [0.1.2]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.2
 [0.1.1]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.1
 [0.1.0]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.0
+
+[0.1.3]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.3

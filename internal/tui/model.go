@@ -21,6 +21,7 @@ import (
 )
 
 type Options struct {
+	Workbench     func(context.Context, WorkRequest) (WorkResult, error)
 	Config        config.Config
 	InitialTarget string
 	ReadOnly      bool
@@ -118,6 +119,8 @@ func (s *targetState) snap(key string) *snapshot {
 }
 
 type Model struct {
+	work              *workState
+	workSerial        uint64
 	options           Options
 	settings          config.Config
 	target            config.Target
@@ -248,6 +251,10 @@ func cloneSettings(c config.Config) config.Config {
 	c.Targets = append([]config.Target(nil), c.Targets...)
 	for i := range c.Targets {
 		c.Targets[i].Configs = append([]config.CoreConfig(nil), c.Targets[i].Configs...)
+		if c.Targets[i].RuleSource != nil {
+			source := *c.Targets[i].RuleSource
+			c.Targets[i].RuleSource = &source
+		}
 	}
 	return c
 }
@@ -302,6 +309,13 @@ func cleanup(c *core.Client, closer io.Closer) tea.Cmd {
 	}
 }
 func (m *Model) connect(target config.Target) tea.Cmd {
+	if m.work != nil {
+		if m.work.cancel != nil {
+			m.work.cancel()
+		}
+		m.work = nil
+		m.workSerial++
+	}
 	if m.pending != "" {
 		m.state().lastOperation = m.pending + " interrupted; outcome may be unknown. Refresh before retrying."
 	}
@@ -387,6 +401,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.mouseRelease(msg)
 	case tea.MouseWheelMsg:
 		return m, m.mouseWheel(msg)
+	case workMsg:
+		return m, m.receiveWork(msg)
 	case targetTestMsg:
 		return m, m.receiveTargetTest(msg)
 	case probeMsg:
@@ -459,6 +475,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.discovered = true
 		m.status = fmt.Sprintf("Found %d controllers (%d new). Edit/save a target to persist discovery.", len(msg.targets), added)
+		if m.overlay != "" {
+			return m, nil
+		}
 		if m.target.ID == "" && len(m.settings.Targets) == 1 {
 			return m, m.connect(m.settings.Targets[0])
 		}
@@ -637,7 +656,7 @@ func (m *Model) refresh(full bool) tea.Cmd {
 	case proxies, overview:
 		keys = append(keys, "proxies")
 	case rules:
-		if full || m.state().snap("rules").data == nil {
+		if full || m.state().snap("rules").data == nil || m.state().snap("rules").err != nil {
 			keys = append(keys, "rules")
 		}
 	case providers:

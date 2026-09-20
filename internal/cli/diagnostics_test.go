@@ -126,3 +126,34 @@ func TestRootPageMouseOverrides(t *testing.T) {
 		t.Fatalf("invalid page: %v", err)
 	}
 }
+
+func TestTUITemporaryTransportAndCredentialOverridesAreDistinct(t *testing.T) {
+	isolated(t)
+	if _, _, e := run(t, Dependencies{}, "targets", "add", "saved", "--controller", "http://127.0.0.1:9090"); e != nil {
+		t.Fatal(e)
+	}
+	for _, tc := range []struct {
+		args      []string
+		transport bool
+	}{
+		{[]string{"--target", "saved", "--ssh", "other-host"}, true},
+		{[]string{"--controller", "http://127.0.0.1:9999"}, true},
+		{[]string{"--target", "saved", "--secret-env", "TEMP_SECRET"}, false},
+	} {
+		seen := false
+		deps := Dependencies{Terminal: func(io.Reader, io.Writer) bool { return true }, RunTUI: func(_ context.Context, opts tui.Options, _ io.Reader, _ io.Writer) error {
+			for _, target := range opts.Config.Targets {
+				if target.ID == opts.InitialTarget {
+					seen = true
+					if target.TransportOverride != tc.transport {
+						t.Fatalf("%v: %+v", tc.args, target)
+					}
+				}
+			}
+			return nil
+		}}
+		if _, _, e := run(t, deps, tc.args...); e != nil || !seen {
+			t.Fatalf("%v: %v %t", tc.args, e, seen)
+		}
+	}
+}

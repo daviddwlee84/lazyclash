@@ -224,7 +224,7 @@ func (m *Model) mouseContext() string {
 			paletteID = actions[min(m.paletteIndex, len(actions)-1)].id
 		}
 	}
-	return fmt.Sprintf("%d|%d|%s|%d|%s|%s|%s|%s|%d|%s|%t|%s|%d|%s|%s", m.generation, m.page, m.overlay, v.focus, v.positions[0].selected, v.positions[1].selected, picked, form, m.testSerial, m.pending, m.options.ReadOnly, m.overviewSelection, m.paletteIndex, paletteID, m.input.Value())
+	return fmt.Sprint(m.workSerial, "|", m.workMouseContext()) + fmt.Sprintf("%d|%d|%s|%d|%s|%s|%s|%s|%d|%s|%t|%s|%d|%s|%s", m.generation, m.page, m.overlay, v.focus, v.positions[0].selected, v.positions[1].selected, picked, form, m.testSerial, m.pending, m.options.ReadOnly, m.overviewSelection, m.paletteIndex, paletteID, m.input.Value())
 }
 func (m *Model) mouseClick(msg tea.MouseClickMsg) tea.Cmd {
 	m.pressed = nil
@@ -252,6 +252,12 @@ func (m *Model) mouseClick(msg tea.MouseClickMsg) tea.Cmd {
 	case "target-row":
 		m.targetIndex = hit.index
 		m.invalidateTargetTest()
+	case "work-row":
+		if m.work != nil {
+			m.work.index = hit.index
+			m.work.offset = 0
+			m.work.focus = 0
+		}
 	case "palette-row":
 		m.paletteIndex = hit.index
 	case "field":
@@ -308,6 +314,9 @@ func (m *Model) mouseWheel(msg tea.MouseWheelMsg) tea.Cmd {
 		return nil
 	}
 	switch m.overlay {
+	case "work":
+		m.moveWork(delta)
+		return nil
 	case "help":
 		m.helpOffset = max(0, m.helpOffset+delta)
 		return nil

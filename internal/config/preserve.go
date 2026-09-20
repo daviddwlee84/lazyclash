@@ -241,6 +241,10 @@ func preserve(raw []byte, cfg Config) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		b, err = patchRuleSource(b, t.RuleSource)
+		if err != nil {
+			return nil, err
+		}
 		bs, err := arrayBlocks(b, "targets.configs")
 		if err != nil {
 			return nil, err
@@ -265,6 +269,47 @@ func preserve(raw []byte, cfg Config) ([]byte, error) {
 		out = append(out, b)
 	}
 	return replaceBlocks(raw, old, out), nil
+}
+
+func patchRuleSource(raw []byte, source *RuleSource) ([]byte, error) {
+	exprs, err := expressions(raw)
+	if err != nil {
+		return nil, err
+	}
+	start, end := -1, len(raw)
+	for _, e := range exprs {
+		if e.kind == unstable.KeyValue && e.table == "targets" && e.key == "rule_source" {
+			return nil, errors.New("inline rule_source cannot be edited while preserving comments; use [targets.rule_source]")
+		}
+		if e.kind != unstable.Table && e.kind != unstable.ArrayTable {
+			continue
+		}
+		if start >= 0 {
+			end = e.start
+			break
+		}
+		if e.table == "targets.rule_source" {
+			start = e.start
+		}
+	}
+	if source == nil {
+		if start < 0 {
+			return raw, nil
+		}
+		return applyEdits(raw, []edit{{start, end, nil}}), nil
+	}
+	block := []byte("\n[targets.rule_source]\n")
+	if start >= 0 {
+		block = raw[start:end]
+	}
+	block, err = patchFields(block, "targets.rule_source", []field{{"kind", source.Kind}, {"version", source.Version}, {"config_id", source.ConfigID}, {"binary", source.Binary}, {"home", source.Home}, {"data_dir", source.DataDir}, {"profile_uid", source.ProfileUID}})
+	if err != nil {
+		return nil, err
+	}
+	if start < 0 {
+		return append(append(raw, '\n'), block...), nil
+	}
+	return applyEdits(raw, []edit{{start, end, block}}), nil
 }
 
 func patchPreferences(raw []byte, p TUIPreferences) ([]byte, error) {

@@ -18,6 +18,7 @@ type action struct {
 }
 type confirmation struct {
 	title, body string
+	back        string
 	run         func() tea.Cmd
 }
 
@@ -28,6 +29,11 @@ func (m *Model) actions() []action {
 	group, hasGroup := m.group()
 	cfg := m.configData()
 	a := []action{
+		{"work-compare", "Compare targets / copy selected settings", nil, m.options.Workbench != nil && len(m.settings.Targets) > 1},
+		{"work-url", "Diagnose URL and inspect routing topology", nil, m.options.Workbench != nil && m.target.ID != ""},
+		{"work-rule", "Preview / add domain rule", nil, m.options.Workbench != nil && m.target.ID != ""},
+		{"work-source", "Bind persistent rule source", nil, m.options.Workbench != nil && m.target.ID != ""},
+		{"work-receipt", "Verify / restore rule receipt", nil, m.options.Workbench != nil && m.target.ID != ""},
 		{"palette", "Open action menu", []string{":"}, true}, {"help", "Show help", []string{"?"}, true}, {"quit", "Quit", []string{"q"}, true},
 		{"mouse", "Toggle mouse capture", []string{"M"}, true},
 		{"target-test", "Test current target connectivity", nil, m.target.ID != "" && m.options.TestTarget != nil && !m.testPending},
@@ -230,6 +236,8 @@ func (m *Model) paletteActions() []action {
 func (m *Model) overlayKey(msg tea.KeyPressMsg) tea.Cmd {
 	key := msg.String()
 	switch m.overlay {
+	case "work":
+		return m.workKey(msg)
 	case "search":
 		switch key {
 		case "esc":
@@ -275,6 +283,9 @@ func (m *Model) overlayKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "confirm":
 		if key == "esc" || key == "n" {
 			m.overlay = ""
+			if m.confirm != nil {
+				m.overlay = m.confirm.back
+			}
 			m.confirm = nil
 			return nil
 		}
@@ -340,12 +351,26 @@ func (m *Model) mutate(label string, fn func(context.Context, *core.Client) erro
 	return func() tea.Msg { err := fn(ctx, client); return writeMsg{generation, label, applied, err} }
 }
 func (m *Model) ask(title, body string, run func() tea.Cmd) tea.Cmd {
-	m.confirm = &confirmation{title, body, run}
+	back := ""
+	if m.overlay == "work" || m.overlay == "form" {
+		back = m.overlay
+	}
+	m.confirm = &confirmation{title: title, body: body, run: run, back: back}
 	m.overlay = "confirm"
 	return nil
 }
 func (m *Model) runAction(id string) tea.Cmd {
 	switch id {
+	case "work-compare":
+		return m.startCompare()
+	case "work-url":
+		return m.startURLForm()
+	case "work-rule":
+		return m.startRuleForm()
+	case "work-source":
+		return m.startRuleSourceForm()
+	case "work-receipt":
+		return m.startForm("work-receipt", "Verify or restore saved rule receipt", "", []field{{"Receipt ID", ""}, {"Action (verify/restore)", "verify"}})
 	case "palette":
 		m.paletteIndex = 0
 		return m.beginInput("palette", "")

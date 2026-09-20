@@ -1,0 +1,44 @@
+# lazyclash knowledge and operating guide
+
+Start with the [quick start](../README.md). These pages explain the behavior
+behind the commands; the installed binary's `--help` is the syntax authority.
+The [changelog](../CHANGELOG.md) identifies the version that introduced a feature.
+
+| Read when… | Guide |
+|---|---|
+| Connecting a local/remote core, comparing servers or copying runtime choices | [Targets and configuration](targets-and-config.md) |
+| Interpreting dashboard metrics or diagnosing a URL | [Diagnostics and routing](diagnostics-and-routing.md) |
+| Persisting a domain override, reloading or recovering a change | [Rules and ownership](rules-and-ownership.md) |
+| Installing, upgrading, activating completion or maintaining a release | [Installation, upgrades and completion](install-upgrade-completion.md) |
+| Checking an upstream contract, design inspiration or research claim | [References and evidence](references.md) |
+
+## Vocabulary and ownership
+
+| Object | Owner and meaning |
+|---|---|
+| lazyclash settings | User-local TOML containing target registrations and TUI preferences |
+| Target | A controller address, its transport/credential references, and optional data proxy |
+| Runtime settings | The core's current general settings; `GET /configs` is not complete YAML |
+| Complete config | A YAML file on the core host; registration does not upload it or make it the startup source |
+| `source_config` | Credential discovery reference; it is not permission to rewrite that YAML |
+| Rule source | An explicit binding to the persistent file/owner used by rule repair |
+| Verge profile | GUI-owned source plus companion Rules/Merge/Script files and a generation pipeline |
+| Data proxy | HTTP(S)/SOCKS endpoint carrying requests; an API/SSH management tunnel does not supply one |
+| Receipt | A record of a specific persistent change; saving, loading, and observing route use are separate states |
+
+## For agents and contributors
+
+`lazyclash --skill` is an offline operating guide embedded in the executable.
+It ships with that binary and does not require a checkout or `npx skills`.
+The project's `go-cli-tui` skill is a separate contributor guide, maintained in
+the agent-skills repository.
+
+CLI handlers and TUI effects call the same services. Rendering performs no
+network I/O. Request generations discard late results; cancellation does not
+prove that a remote write was undone. Mouse rows select, explicit buttons act,
+and typing retains ownership of printable keys.
+
+Development checks are `go vet ./...`, `go test -race ./...`, and the real PTY
+harness in `scripts/pty_smoke.py`. Tests use disposable state and controllers.
+Keep actual OS execution, cross-builds, fixture checks and real-host observations
+distinct in verification reports.

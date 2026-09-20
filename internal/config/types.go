@@ -11,6 +11,7 @@ type Config struct {
 }
 
 type Target struct {
+	TransportOverride bool         `toml:"-" json:"-"` // temporary endpoint/SSH rebinding; never a persistent rule owner
 	ID                string       `toml:"id" json:"id"`
 	Name              string       `toml:"name,omitempty" json:"name,omitempty"`
 	Controller        string       `toml:"controller" json:"controller"`
@@ -25,9 +26,22 @@ type Target struct {
 	ProbePasswordFile string       `toml:"probe_password_file,omitempty" json:"probe_password_file,omitempty"`
 	ProbeCAFile       string       `toml:"probe_ca_file,omitempty" json:"probe_ca_file,omitempty"`
 	Configs           []CoreConfig `toml:"configs,omitempty" json:"configs,omitempty"`
+	RuleSource        *RuleSource  `toml:"rule_source,omitempty" json:"rule_source,omitempty"`
 	Secret            string       `toml:"-" json:"-"`
 	Transient         bool         `toml:"-" json:"-"`
 	AuthRequired      bool         `toml:"-" json:"auth_required,omitempty"`
+}
+
+// RuleSource explicitly identifies the persistent owner. SourceConfig remains
+// a credential reference and never implicitly grants permission to edit YAML.
+type RuleSource struct {
+	Kind       string `toml:"kind" json:"kind"`
+	Version    string `toml:"version,omitempty" json:"version,omitempty"`
+	ConfigID   string `toml:"config_id,omitempty" json:"config_id,omitempty"`
+	Binary     string `toml:"binary,omitempty" json:"binary,omitempty"`
+	Home       string `toml:"home,omitempty" json:"home,omitempty"`
+	DataDir    string `toml:"data_dir,omitempty" json:"data_dir,omitempty"`
+	ProfileUID string `toml:"profile_uid,omitempty" json:"profile_uid,omitempty"`
 }
 
 // TUIPreferences keeps absent values distinct from explicit choices. Reading

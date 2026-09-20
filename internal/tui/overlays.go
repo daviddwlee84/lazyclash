@@ -40,6 +40,9 @@ func (m *Model) overlayView(width, height int) string {
 	return strings.Join(lines, "\n")
 }
 func (m *Model) overlayLayout(width, height int) ([]string, []hitRegion) {
+	if m.overlay == "work" {
+		return m.workLayout(width, height)
+	}
 	if m.overlay == "form" {
 		lines, hits, _ := m.formLayout(width, height)
 		return lines, hits
@@ -122,7 +125,16 @@ func (m *Model) formLayout(width, height int) ([]string, []hitRegion, int) {
 	lines := []string{m.accent(f.title)}
 	var hits []hitRegion
 	review := f.index >= len(f.fields)
-	caption := "Review · Save retains the draft even when connectivity is offline"
+	caption := "Review the values before continuing"
+	if f.kind == "target" {
+		caption = "Review · Save retains the draft even when connectivity is offline"
+	}
+	if f.kind == "work-url" {
+		caption = "Review · active diagnosis sends bounded HEAD / DNS / URLTests"
+	}
+	if f.kind == "work-rule" {
+		caption = "Review · next step previews the exact persistent domain rule"
+	}
 	if !review {
 		caption = fmt.Sprintf("Field %d/%d · Tab next / Shift+Tab back", f.index+1, len(f.fields))
 	}
@@ -153,6 +165,16 @@ func (m *Model) formLayout(width, height int) ([]string, []hitRegion, int) {
 	label := "Review"
 	if review {
 		label = "Save"
+		switch f.kind {
+		case "ssh":
+			label = "Discover"
+		case "work-url":
+			label = "Diagnose"
+		case "work-rule":
+			label = "Preview"
+		case "work-receipt":
+			label = "Continue"
+		}
 	}
 	buttons := []button{{"save", label, true}, {"cancel", "Cancel", true}}
 	if f.kind == "target" {
@@ -173,8 +195,16 @@ func (m *Model) formLayout(width, height int) ([]string, []hitRegion, int) {
 	return fitLines(strings.Join(lines, "\n"), width, height), hits, inputY
 }
 func (m *Model) overlayButton(id string) tea.Cmd {
+	if strings.HasPrefix(id, "work-") {
+		return m.workButton(id)
+	}
 	switch id {
 	case "cancel":
+		if m.overlay == "confirm" && m.confirm != nil && m.confirm.back != "" {
+			m.overlay = m.confirm.back
+			m.confirm = nil
+			return nil
+		}
 		m.invalidateTargetTest()
 		m.overlay = ""
 		m.form = nil

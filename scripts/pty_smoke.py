@@ -242,6 +242,43 @@ controller = "{urls[1]}"
             terminal.wait(lambda: "Fixture One [connected]" in terminal.text(), "return to first target")
             assert request(urls[0], "/configs")["mode"] == "global"
 
+            # Cross-target copy: picker, unchecked field, reviewed digest, cancel,
+            # and explicit apply. No writes occur on row selection or preview.
+            terminal.send(":Compare targets\r")
+            terminal.wait(lambda: "choose source" in terminal.text(), "comparison source picker")
+            terminal.send("\r")
+            terminal.wait(lambda: "choose destination" in terminal.text(), "comparison destination picker")
+            terminal.click_label("[Enter Choose]")
+            terminal.wait(lambda: "runtime comparison" in terminal.text(), "runtime diff")
+            assert request(urls[1], "/configs")["mode"] == "rule"
+            terminal.send("j ")  # log-level first, mode second; Space checks mode.
+            terminal.click_label("[p Preview]")
+            terminal.wait(lambda: "Review copy" in terminal.text(), "copy preview")
+            assert request(urls[1], "/configs")["mode"] == "rule"
+            terminal.resize(36, 12)
+            terminal.send("a")
+            terminal.wait(lambda: "Apply reviewed change" in terminal.text(), "copy apply confirmation")
+            terminal.send("\x1b")
+            terminal.wait(lambda: "Review copy" in terminal.text(), "cancel returns to review")
+            terminal.resize(120, 32)
+            terminal.click_label("[a Apply]")
+            terminal.click_label("[Confirm]")
+            terminal.wait(lambda: request(urls[1], "/configs")["mode"] == "global", "copy destination readback")
+            terminal.wait(lambda: "Copy" in terminal.text(), "copy receipt")
+            terminal.send("\x1b")
+
+            # Passive URL diagnostics: literal input and inspectable result.
+            terminal.send(":Diagnose URL\r")
+            terminal.wait(lambda: "Diagnose a URL" in terminal.text(), "URL form")
+            terminal.send("https://api.example.test\r\r")
+            terminal.send("\x15true\r\r")
+            terminal.wait(lambda: "URL diagnosis" in terminal.text(), "passive topology", timeout=25)
+            terminal.send("j\t\x1b[6~")
+            terminal.resize(36, 12)
+            assert terminal.process.poll() is None, "diagnosis resize crashed"
+            terminal.resize(120, 32)
+            terminal.send("\x1b")
+
             # pyte 0.8.2 truncates draw chunks at VS16/ZWJ; this is diagnostic
             # output, not a Unicode layout oracle. Go View tests check full
             # grapheme-bearing rows and terminal cell widths independently.
@@ -254,7 +291,7 @@ controller = "{urls[1]}"
             terminal.send("echo-restored\n")
             terminal.process.wait(timeout=5)
             assert terminal.process.returncode == 0, terminal.text()
-            print("PTY PASS: overview startup, SGR mouse tabs/row/button/modal, mouse toggle, typing/paste, node/mode writes, confirmations, all pages, streams, resize, target/draft connectivity, target switching, terminal restoration")
+            print("PTY PASS: overview startup, SGR mouse tabs/row/button/modal, mouse toggle, typing/paste, node/mode writes, confirmations, all pages, streams, resize, target/draft connectivity, target switching, reviewed cross-target copy, passive URL topology, terminal restoration")
     finally:
         if terminal:
             terminal.close()

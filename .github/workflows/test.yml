@@ -16,10 +16,33 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Install Linux verification dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh bubblewrap
+      - name: Enable namespace isolation on the disposable Linux runner
+        if: runner.os == 'Linux'
+        run: |
+          if ! bwrap --unshare-net --ro-bind / / -- /bin/true; then
+            # This is only the ephemeral GitHub-hosted test VM. The updater
+            # and rule service never change a user's namespace/AppArmor policy.
+            if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+              sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            fi
+            if [ -e /proc/sys/kernel/unprivileged_userns_clone ]; then
+              sudo sysctl -w kernel.unprivileged_userns_clone=1
+            fi
+          fi
+          bwrap --unshare-net --ro-bind / / -- /bin/true
       - run: go vet ./...
       - run: go test -race ./...
+        env:
+          LAZYCLASH_REQUIRE_NATIVE_ISOLATION: "1"
       - run: go build -o bin/lazyclash ./cmd/lazyclash
       - run: go build -o bin/fakecore ./tools/fakecore
+      - name: Exercise completion in a real isolated zsh
+        run: python3 scripts/completion_pty_smoke.py
       - name: Exercise a real terminal with isolated controllers
         run: |
           python3 -m venv "$RUNNER_TEMP/pty-venv"

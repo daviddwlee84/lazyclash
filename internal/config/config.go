@@ -125,7 +125,44 @@ func ValidateTarget(t Target) error {
 			return errors.New("registered YAML paths must be absolute paths on the core host")
 		}
 	}
+	if err := ValidateRuleSource(t); err != nil {
+		return err
+	}
 	return nil
+}
+
+func ValidateRuleSource(t Target) error {
+	s := t.RuleSource
+	if s == nil {
+		return nil
+	}
+	for _, value := range []string{s.Kind, s.Version, s.ConfigID, s.Binary, s.Home, s.DataDir, s.ProfileUID} {
+		if len(value) > 4096 || strings.IndexFunc(value, unicode.IsControl) >= 0 {
+			return errors.New("rule source fields must not contain control characters")
+		}
+	}
+	switch s.Kind {
+	case "mihomo":
+		if s.ConfigID == "" || !filepath.IsAbs(s.Binary) || !filepath.IsAbs(s.Home) || s.Home == "/" || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" {
+			return errors.New("mihomo rule source requires a registered config_id, absolute binary and home, and no Verge fields")
+		}
+		for _, c := range t.Configs {
+			if c.ID == s.ConfigID {
+				return nil
+			}
+		}
+		return errors.New("rule source config_id is not registered for this target")
+	case "verge":
+		if s.Version != "2.5.2" {
+			return errors.New("Verge rule repair supports declared owner version 2.5.2; set --owner-version 2.5.2 only for that compatible owner")
+		}
+		if !filepath.IsAbs(s.DataDir) || s.DataDir == "/" || s.ProfileUID == "" || s.ConfigID != "" || s.Binary != "" || s.Home != "" {
+			return errors.New("Verge rule source requires an absolute data_dir and profile_uid, and no standalone fields")
+		}
+		return nil
+	default:
+		return errors.New("rule source kind must be mihomo or verge")
+	}
 }
 
 func ValidateTUI(p TUIPreferences) error {

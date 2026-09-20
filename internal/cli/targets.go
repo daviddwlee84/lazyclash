@@ -118,7 +118,7 @@ func (o *options) targetCommands() *cobra.Command {
 		}
 		return o.result(cmd, "Moved "+args[0])
 	}})
-	group.AddCommand(o.targetWriteCommand(false), o.targetWriteCommand(true), o.targetTestCommand())
+	group.AddCommand(o.targetWriteCommand(false), o.targetWriteCommand(true), o.targetTestCommand(), o.targetDiffCommand(), o.targetCopySettingsCommand())
 	return group
 }
 
@@ -170,6 +170,7 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 				return usage("supply at least one field to edit, such as --name or --controller")
 			}
 			previous := cfg.Targets[index]
+			oldController, oldSSH := previous.Controller, previous.SSHHost
 			for name, dst := range map[string]*string{"name": &previous.Name, "controller": &previous.Controller, "ssh": &previous.SSHHost, "secret-file": &previous.SecretFile, "secret-env": &previous.SecretEnv, "ca-cert": &previous.CAFile, "source-config": &previous.SourceConfig, "probe-proxy": &previous.ProbeProxy, "probe-username": &previous.ProbeUsername, "probe-password-env": &previous.ProbePasswordEnv, "probe-password-file": &previous.ProbePasswordFile, "probe-ca-cert": &previous.ProbeCAFile} {
 				if cmd.Flags().Changed(name) {
 					*dst, _ = cmd.Flags().GetString(name)
@@ -187,6 +188,13 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 			if cmd.Flags().Changed("probe-password-env") {
 				previous.ProbePasswordFile = ""
 			}
+			if !strings.Contains(previous.Controller, "://") {
+				previous.Controller = "http://" + previous.Controller
+			}
+			if previous.TransportOverride || previous.Controller != oldController || previous.SSHHost != oldSSH {
+				previous.RuleSource = nil
+			}
+			previous.TransportOverride = false
 			draft = previous
 			cfg.Targets[index] = draft
 		} else {

@@ -1,6 +1,6 @@
 ---
 name: lazyclash
-description: Inspect and control existing Mihomo or Clash Verge-managed cores through lazyclash. Use for controller discovery, proxy selection, runtime routing settings, API connectivity and explicit proxy egress diagnosis, provider refreshes, and applying registered complete YAML files. Does not install cores or manage native Verge profiles.
+description: Inspect and control existing Mihomo or Clash Verge-managed cores through lazyclash. Use for controller discovery, proxy selection, runtime routing settings, API connectivity and explicit proxy egress diagnosis, provider refreshes, and applying registered complete YAML files. Also supports cross-target comparisons, URL route evidence and exact-domain repair through explicit owner bindings. Does not install cores or automate native Verge activation.
 ---
 
 # lazyclash
@@ -49,3 +49,6 @@ the request is only to inspect.
 - [Automation](references/automation.md), also
   `lazyclash skill print automation`: JSON/NDJSON, bounded log collection,
   noninteractive errors, exit codes, uncertain-write recovery and local CLI upgrades.
+
+- [URL diagnosis](references/diagnosis.md), also `lazyclash skill print diagnosis`: separate observation contexts, confidence, DNS/TUN and tentative recommendations.
+- [Cross-target and rule workflows](references/workflows.md), also `lazyclash skill print workflows`: preview digests, partial writes, persistent owners and completion setup.
