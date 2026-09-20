@@ -48,4 +48,4 @@ the request is only to inspect.
   connections, and apply complete YAML without confusing it with Verge profiles.
 - [Automation](references/automation.md), also
   `lazyclash skill print automation`: JSON/NDJSON, bounded log collection,
-  noninteractive errors, exit codes and uncertain-write recovery.
+  noninteractive errors, exit codes, uncertain-write recovery and local CLI upgrades.

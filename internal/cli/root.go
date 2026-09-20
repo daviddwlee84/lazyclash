@@ -16,6 +16,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/core"
 	"github.com/daviddwlee84/lazyclash/internal/diagnostics"
+	"github.com/daviddwlee84/lazyclash/internal/selfupdate"
 	"github.com/daviddwlee84/lazyclash/internal/tui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -50,6 +51,7 @@ type Dependencies struct {
 	Authenticate func(context.Context, string) (*exec.Cmd, error)
 	RunEditor    func(*exec.Cmd) error
 	Diagnostics  diagnostics.Options
+	Upgrade      func(context.Context, selfupdate.Request, io.Writer) (selfupdate.Result, error)
 }
 
 type options struct {
@@ -77,6 +79,9 @@ func New(deps Dependencies) *cobra.Command {
 	}
 	if deps.RunEditor == nil {
 		deps.RunEditor = func(cmd *exec.Cmd) error { return cmd.Run() }
+	}
+	if deps.Upgrade == nil {
+		deps.Upgrade = selfupdate.Run
 	}
 	if deps.RunTUI == nil {
 		deps.RunTUI = func(ctx context.Context, opts tui.Options, in io.Reader, out io.Writer) error {
@@ -210,7 +215,7 @@ func New(deps Dependencies) *cobra.Command {
 	f.BoolVar(&o.json, "json", false, "JSON data output; logs emit NDJSON")
 	f.BoolVar(&o.readOnly, "read-only", false, "disable control actions, latency tests and healthchecks")
 	root.AddCommand(o.targetCommands(), o.configCommands(), o.statusCommand(), o.proxyCommands(), o.connectionCommands(), o.logsCommand(), o.rulesCommand(), o.providerCommands(), o.modeCommand(), o.tunCommand(), o.allowLANCommand(), o.settingsCommand())
-	root.AddCommand(o.skillCommand(), o.diagnosticsCommand())
+	root.AddCommand(o.skillCommand(), o.diagnosticsCommand(), o.upgradeCommand())
 	root.AddCommand(&cobra.Command{Use: "completion [bash|zsh|fish|powershell]", Short: "Generate shell completion", Args: argsExact(1), ValidArgs: []string{"bash", "zsh", "fish", "powershell"}, RunE: func(cmd *cobra.Command, args []string) error {
 		switch args[0] {
 		case "bash":

@@ -13,6 +13,7 @@ import (
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/selfupdate"
 	"github.com/daviddwlee84/lazyclash/internal/skill"
 	"github.com/daviddwlee84/lazyclash/internal/testcore"
 	"github.com/daviddwlee84/lazyclash/internal/tui"
@@ -199,7 +200,7 @@ func TestSkillWorkflowExamplesAgainstFixture(t *testing.T) {
 	}
 }
 
-func TestSkillBoundedLogExampleAgainstFixture(t *testing.T) {
+func TestSkillAutomationExamplesAgainstFixtures(t *testing.T) {
 	isolated(t)
 	server := testcore.NewServer()
 	defer server.Close()
@@ -207,9 +208,26 @@ func TestSkillBoundedLogExampleAgainstFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, args := range skillExampleCommands(t, "automation", map[string]string{"TARGET": "fixture"}) {
-		out, diagnostics, err := run(t, Dependencies{}, args...)
+		deps := Dependencies{Upgrade: func(_ context.Context, request selfupdate.Request, _ io.Writer) (selfupdate.Result, error) {
+			if request.Force {
+				t.Fatal("guide silently overrides development protection")
+			}
+			result := upgradeFixture()
+			if !request.Check {
+				result.Status = "updated"
+			}
+			return result, nil
+		}}
+		out, diagnostics, err := run(t, deps, args...)
 		if err != nil || diagnostics != "" {
-			t.Fatalf("bounded log example %v: stderr=%q %v", args, diagnostics, err)
+			t.Fatalf("automation example %v: stderr=%q %v", args, diagnostics, err)
+		}
+		if args[0] == "upgrade" {
+			var result selfupdate.Result
+			if json.Unmarshal([]byte(out), &result) != nil || result.Installation.ResolvedPath != "/test/custom/lazyclash" {
+				t.Fatalf("upgrade example produced invalid result: %s", out)
+			}
+			continue
 		}
 		lines := strings.Split(strings.TrimSpace(out), "\n")
 		if len(lines) != 5 {

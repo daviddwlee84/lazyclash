@@ -18,9 +18,42 @@ The `/cmd/lazyclash` suffix identifies the executable package. Go installs it in
 `go env GOBIN` when configured, otherwise in the first `go env GOPATH` entry's
 `bin` directory (usually `~/go/bin`). Add that directory to your shell's PATH.
 Repeating the install command upgrades to the latest published version. To pin
-a release, use `@v0.1.1`; `@main` explicitly opts into the development
+a release, use `@v0.1.2`; `@main` explicitly opts into the development
 branch. `@latest` selects a published version, not necessarily the newest commit.
 See [CHANGELOG.md](CHANGELOG.md) for changes between versions.
+
+From v0.1.2 onward, the binary can check and update itself:
+
+```sh
+lazyclash upgrade --check
+lazyclash upgrade --check --json
+lazyclash upgrade
+```
+
+v0.1.1 has no `upgrade` command: use the `go install ...@latest` command above
+once to obtain v0.1.2 or newer. `upgrade` runs without prompting, including in
+pipelines; `--check` inspects versions, build provenance, the resolved executable
+path and update eligibility without writing settings, locks or caches. It works
+with missing/broken lazyclash settings and does not contact a Mihomo controller.
+`--read-only` governs core operations; use `upgrade --check` for an update preview.
+
+The current source-release channel requires Go for an actual update. lazyclash
+pins the discovered stable release tag, builds a private candidate, verifies its
+identity and version, and atomically replaces the **currently running executable's
+resolved path**. A relocated Go release binary is supported; changing GOBIN or
+PATH does not redirect the replacement. Symlinks are retained. Failures before
+replacement leave the original binary in place; progress goes to stderr and is
+suppressed with `--json`.
+
+Development/VCS/dirty/pseudo-version builds are preserved by default. Use
+`lazyclash upgrade --force` explicitly to replace one with the latest stable
+release, or reinstall that release. This never pulls or edits a Git checkout.
+Package-manager installations (Homebrew, mise, Nix) get their own update guidance;
+unknown builds are not overwritten. `--force` does not bypass ownership or
+identity checks. The updater does not use sudo, bootstrap a missing Go installation,
+or check for updates at startup. An installed Go command retains the configured
+`GOTOOLCHAIN` policy, including toolchain downloads when enabled. The embedded
+`--skill` guide updates along with the binary.
 
 To build a local checkout:
 

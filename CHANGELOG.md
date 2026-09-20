@@ -1,10 +1,25 @@
 # Changelog
 
 User-facing changes are recorded here for every published version. Install a
-fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.1`,
+fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.2`,
 or use `@latest` to upgrade. Check the installed binary with `lazyclash --version`.
 
 ## Unreleased
+
+## 0.1.2 — 2026-09-20
+
+- Added `lazyclash upgrade` and `upgrade --check`, with JSON output for agents.
+  Checks describe the running binary's provenance, resolved destination, latest
+  stable release and update eligibility without loading controller settings.
+- Go release binaries update in place, including moved copies and symlinks,
+  through a fixed-tag build, candidate verification and atomic replacement.
+  Concurrent updates and changed destinations are detected; failures before
+  replacement retain the previous executable.
+- Development builds remain unchanged unless `--force` explicitly requests the
+  latest stable release. Homebrew, mise and Nix installations retain their package
+  manager's ownership; unknown binaries are not overwritten.
+- Updated the embedded agent guide and source-install documentation. Users on
+  v0.1.1 must first run `go install ...@latest` to obtain the new upgrade command.
 
 ## 0.1.1 — 2026-09-20
 
@@ -41,5 +56,6 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
   and release version reporting for versioned `go install`.
 - macOS/Linux CI, fixture controllers, race checks and real PTY verification.
 
+[0.1.2]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.2
 [0.1.1]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.1
 [0.1.0]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.0

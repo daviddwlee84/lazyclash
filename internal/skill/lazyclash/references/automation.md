@@ -63,3 +63,48 @@ writes, swap endpoints after failure, or infer that cancellation undid a request
 `lazyclash --skill` and `skill print [topic]` are offline Markdown surfaces and
 must be called without `--json`; they remain available when saved settings are
 invalid. Their topics are `controllers`, `runtime`, and `automation`.
+
+## Updating the local CLI
+
+When an update is requested, inspect the installed executable first:
+
+```sh
+lazyclash upgrade --check --json
+```
+
+Inspect `installation` (build kind, ownership, evidence and resolved path),
+`current_version`, `latest_version`, `update_available`, `can_upgrade` and
+`reason`. A check writes no settings, locks or update cache. It does make a
+release lookup; help, version and skill output remain offline. A copied Go release
+binary remains identifiable, but build provenance cannot prove its historical
+installer. The resolved running file is the destination, not another PATH/GOBIN
+copy. Controller/SSH selection does not make this a remote or Mihomo upgrade.
+
+When the user has authorized updating this CLI and the check permits it:
+
+```sh
+lazyclash upgrade --json
+```
+
+The command does not prompt. It pins one stable release tag, stages a Go build,
+verifies identity/version, revalidates the destination and atomically replaces
+that file. Failures before replacement retain the original. JSON mode suppresses
+build progress; success emits one result on stdout and failure uses the normal
+stderr error envelope. Cancellation retains the usual exit 130.
+
+Development, VCS, dirty and pseudo-version builds are preserved unless the user
+explicitly wants to replace them with a stable release (`upgrade --force`).
+Force also permits a stable reinstall; it cannot override package ownership or
+unknown binary identity. Follow the reported package-manager guidance for managed
+installations. Do not invent a formula, change update channels, use sudo or install
+a missing Go installation without authorization. The source builder honors the
+installed Go command's `GOTOOLCHAIN` policy (including its enabled automatic
+toolchain downloads). Go/network errors are not permission to
+switch to an unrelated download source.
+
+`--read-only` applies to core controls, not this local executable update. Use
+`upgrade --check` for inspection. The updater neither reads lazyclash settings
+nor modifies the Git checkout, core configuration or separately installed skills.
+A new invocation of the updated binary supplies the new `--skill` automatically;
+do not run `npx skills` as part of an end user's binary upgrade. v0.1.1 predates
+this command and needs one `go install ...@latest` bootstrap first.
