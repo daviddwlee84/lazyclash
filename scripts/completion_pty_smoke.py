@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import pty
 import select
+import shlex
 import shutil
 import signal
 import struct
@@ -61,14 +62,33 @@ controller = "http://127.0.0.1:2"
         raw = cli("completion", "zsh")
         assert raw.startswith("#compdef lazyclash"), raw[:200]
         assert "__complete" in raw, "generated bridge does not query current binary"
-        # The application's printed activation snippet must handle both spaces
-        # and apostrophes. Use it verbatim in the isolated shell startup file.
+        # Keep the application's fpath snippet unchanged, including its quoting
+        # of spaces/apostrophes. CI images can have unrelated insecure system
+        # fpath entries: compinit -i ignores those entries instead of prompting
+        # or disabling its security audit. This affects only the test shell.
         completion_dir = directory / "completion path's space"
         installed = json.loads(cli("completion", "install", "zsh", "--dir", str(completion_dir), "--json"))
         status = json.loads(cli("completion", "status", "zsh", "--dir", str(completion_dir), "--json"))
         assert installed["state"] == status["state"] == "current"
         assert status["activation"].startswith("unknown"), status
-        (directory / ".zshrc").write_text(installed["setup"] + '''
+        setup = installed["setup"]
+        initialization = "autoload -Uz compinit && compinit"
+        assert setup.count(initialization) == 1, setup
+        setup = setup.replace(initialization, initialization + " -i")
+        # Exercise the CI condition locally too, without touching any real
+        # shell directory. This deliberately insecure fixture must be ignored.
+        insecure = directory / "insecure fixture"
+        insecure.mkdir()
+        insecure.chmod(0o777)
+        (insecure / "_lazyclash_unsafe_fixture").write_text("#compdef lazyclash_unsafe_fixture\n_arguments '*:bad:'\n")
+        (directory / ".zshrc").write_text("fpath+=(" + shlex.quote(str(insecure)) + ")\n" + setup + '''
+autoload +X _lazyclash
+if [[ ${_comps[lazyclash]-} != _lazyclash ]] ||
+   [[ ${functions_source[_lazyclash]-} != "${fpath[1]}/_lazyclash" ]] ||
+   [[ -n ${_comps[lazyclash_unsafe_fixture]-} ]]; then
+  print -r -- '__COMPLETION_LOAD_ASSERTION_FAILED__'
+  exit 1
+fi
 unsetopt BEEP
 PROMPT='__LAZYCLASH_COMPLETION_READY__> '
 zstyle ':completion:*' menu no

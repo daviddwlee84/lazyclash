@@ -164,6 +164,23 @@ manual edit if the writer cannot do so. Detect intervening edits before replacin
 the file and use an appropriate atomic write. Preferences are not a database
 for changing selections/logs. No hot reload is required for the first version.
 
+## Multi-target and externally owned state
+
+For cross-target operations, make source and destination explicit and resolve
+credentials independently. Reuse one preview/apply service from CLI and TUI.
+Bind a reviewed plan to the relevant state when concurrent edits can invalidate
+it, reread before apply, and report partial/unknown effects per operation.
+A digest detects stale observations; it does not make multiple remote writes
+an atomic transaction or justify automatic rollback.
+
+When another application owns persistent configuration, distinguish saved
+source, regenerated/applied runtime, and observed behavior. A file-write receipt
+must not imply that a native app reloaded it. Expose the owner's activation step
+and a separate verification action if there is no supported external API.
+
+For completion setup and candidate queries, see
+[shell-completion.md](shell-completion.md).
+
 ## Sources
 
 Reviewed 2026-09-20. Invocation rules, TOML preference, and exit defaults are

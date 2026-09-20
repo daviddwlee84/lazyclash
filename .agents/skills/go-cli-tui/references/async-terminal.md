@@ -116,3 +116,16 @@ SSH trust model, registry, eight tabs, or entire safety architecture. Match the
 size of the implementation to the new application's actual risks and workload.
 Use [Bubble Tea's examples and docs](https://github.com/charmbracelet/bubbletea)
 for the chosen version's effect and terminal-handoff APIs.
+
+## Overlays that outlive background discovery
+
+Keep ownership of each asynchronous result explicit. A late discovery result
+may update available targets, but must not replace a pending operation's review
+or result surface. Process an operation's own completion even if another
+surface is visible; otherwise its pending flag can remain stuck forever.
+After a write or an unknown outcome, mark affected cached views stale and
+refresh them before claiming the displayed state is current. Preserve useful
+old data with a stale marker while the refresh is pending.
+
+This is a lazyclash workbench regression case, reviewed 2026-09-20; apply it
+where an application has overlapping discovery, forms and remote operations.
