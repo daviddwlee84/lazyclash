@@ -363,8 +363,23 @@ func (c *Controller) stream(w http.ResponseWriter, r *http.Request, resource str
 		fail(w, http.StatusInternalServerError, "streaming unsupported")
 		return
 	}
+	logLevels := []string{"debug", "info", "warning", "error", "silent"}
+	minimumLevel := 0
+	if resource == "logs" {
+		level := r.URL.Query().Get("level")
+		if level == "" {
+			level = "info"
+		}
+		minimumLevel = slices.Index(logLevels, level)
+		if minimumLevel < 0 {
+			fail(w, http.StatusBadRequest, "invalid log level")
+			return
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	encoder := json.NewEncoder(w)
@@ -373,16 +388,20 @@ func (c *Controller) stream(w http.ResponseWriter, r *http.Request, resource str
 		switch resource {
 		case "logs":
 			level := []string{"info", "debug", "warning", "error"}[index%4]
-			event = object{"type": level, "payload": "[fixture] TCP api.example.test:443 via " + Taipei}
+			if slices.Index(logLevels, level) >= minimumLevel {
+				event = object{"type": level, "payload": "[fixture] TCP api.example.test:443 via " + Taipei}
+			}
 		case "traffic":
 			event = object{"up": 5120 + index*16, "down": 20480 + index*64}
 		case "memory":
 			event = object{"inuse": 16 << 20, "oslimit": 0}
 		}
-		if err := encoder.Encode(event); err != nil {
-			return
+		if event != nil {
+			if err := encoder.Encode(event); err != nil {
+				return
+			}
+			flusher.Flush()
 		}
-		flusher.Flush()
 		select {
 		case <-r.Context().Done():
 			return

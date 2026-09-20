@@ -3,7 +3,6 @@
 package core
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -480,34 +479,11 @@ func (c *Client) ApplyConfig(ctx context.Context, configPath string) (Object, er
 // Stream consumes newline-delimited objects until cancellation or disconnect.
 // The caller controls reconnection; this method never silently restarts a stream.
 func (c *Client) Stream(ctx context.Context, resource string, query url.Values, consume func(Object)) error {
-	const op = "stream controller events"
-	if !slices.Contains([]string{"logs", "traffic", "memory"}, resource) || consume == nil {
-		return &Error{Kind: KindInvalid, Operation: op}
+	if consume == nil {
+		return &Error{Kind: KindInvalid, Operation: "stream controller events"}
 	}
-	resp, cancel, err := c.request(ctx, http.MethodGet, []string{resource}, query, nil, false, true, op)
-	if err != nil {
-		return err
-	}
-	defer cancel()
-	defer resp.Body.Close()
-	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 16<<10), maxStreamLineBytes)
-	for scanner.Scan() {
-		if len(bytes.TrimSpace(scanner.Bytes())) == 0 {
-			continue
-		}
-		var object Object
-		if err := json.Unmarshal(scanner.Bytes(), &object); err != nil || object == nil {
-			return &Error{Kind: KindInvalid, Operation: op}
-		}
+	return c.StreamWithOptions(ctx, resource, query, StreamOptions{}, func(object Object) (bool, error) {
 		consume(object)
-	}
-	if ctx.Err() != nil {
-		return &Error{Kind: KindCanceled, Operation: op, cause: ctx.Err()}
-	}
-	if scanner.Err() != nil {
-		return &Error{Kind: KindUnreachable, Operation: op}
-	}
-	// EOF is a disconnect, not a successful long-lived subscription.
-	return &Error{Kind: KindUnreachable, Operation: op}
+		return true, nil
+	})
 }

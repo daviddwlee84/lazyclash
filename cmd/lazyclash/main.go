@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,10 +17,5 @@ func main() {
 }
 
 func run(ctx context.Context) int {
-	cmd := cli.NewCommand()
-	if err := cmd.ExecuteContext(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "lazyclash:", err)
-		return cli.ExitCode(err)
-	}
-	return 0
+	return cli.Execute(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
 }

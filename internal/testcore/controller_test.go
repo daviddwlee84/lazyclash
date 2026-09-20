@@ -3,8 +3,12 @@ package testcore_test
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/daviddwlee84/lazyclash/internal/core"
 	"github.com/daviddwlee84/lazyclash/internal/testcore"
@@ -71,5 +75,63 @@ func TestControllerSupportsStatefulClientAndStreams(t *testing.T) {
 	requests[0].Query.Set("mutated", "true")
 	if handler.Requests()[0].Query.Get("mutated") != "" {
 		t.Fatal("request snapshot shares mutable state")
+	}
+}
+
+func TestControllerLogMinimumSeverityAndBoundedCount(t *testing.T) {
+	for _, test := range []struct {
+		level string
+		want  []string
+	}{
+		{"", []string{"info", "warning", "error"}},
+		{"info", []string{"info", "warning", "error"}},
+		{"debug", []string{"info", "debug", "warning"}},
+		{"warning", []string{"warning", "error", "warning"}},
+		{"error", []string{"error", "error"}},
+	} {
+		t.Run("level="+test.level, func(t *testing.T) {
+			t.Parallel()
+			server := testcore.NewServer()
+			defer server.Close()
+			client, err := core.New(core.Options{Endpoint: server.URL})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			var got []string
+			err = client.StreamWithOptions(ctx, "logs", url.Values{"level": {test.level}}, core.StreamOptions{Limit: len(test.want)}, func(event core.Object) (bool, error) {
+				got = append(got, event["type"].(string))
+				return true, nil
+			})
+			if err != nil || !slices.Equal(got, test.want) {
+				t.Fatalf("bounded severity stream: got %v, want %v, error %v", got, test.want, err)
+			}
+		})
+	}
+}
+
+func TestControllerLogSilentAndInvalidLevels(t *testing.T) {
+	server := testcore.NewServer()
+	defer server.Close()
+	client, err := core.New(core.Options{Endpoint: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err = client.StreamWithOptions(ctx, "logs", url.Values{"level": {"silent"}}, core.StreamOptions{Duration: 30 * time.Millisecond}, func(core.Object) (bool, error) {
+		t.Error("silent log stream emitted a record")
+		return true, nil
+	})
+	if err != nil {
+		t.Fatalf("silent duration bound: %v", err)
+	}
+	err = client.Stream(ctx, "logs", url.Values{"level": {"unknown"}}, func(core.Object) {})
+	var apiErr *core.Error
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid log level: %v", err)
 	}
 }

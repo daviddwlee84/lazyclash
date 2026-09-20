@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 
@@ -41,10 +42,11 @@ func ExitCode(err error) int {
 }
 
 type Dependencies struct {
-	Open     func(context.Context, config.Target, bool) (*core.Client, io.Closer, error)
-	Discover func(context.Context, string) ([]config.Target, error)
-	Terminal func(io.Reader, io.Writer) bool
-	RunTUI   func(context.Context, tui.Options, io.Reader, io.Writer) error
+	Open         func(context.Context, config.Target, bool) (*core.Client, io.Closer, error)
+	Discover     func(context.Context, string) ([]config.Target, error)
+	Terminal     func(io.Reader, io.Writer) bool
+	RunTUI       func(context.Context, tui.Options, io.Reader, io.Writer) error
+	Authenticate func(context.Context, string) (*exec.Cmd, error)
 }
 
 type options struct {
@@ -65,6 +67,9 @@ func New(deps Dependencies) *cobra.Command {
 	if deps.Terminal == nil {
 		deps.Terminal = terminals
 	}
+	if deps.Authenticate == nil {
+		deps.Authenticate = connection.AuthenticateCommand
+	}
 	if deps.RunTUI == nil {
 		deps.RunTUI = func(ctx context.Context, opts tui.Options, in io.Reader, out io.Writer) error {
 			model := tui.New(opts)
@@ -79,10 +84,13 @@ func New(deps Dependencies) *cobra.Command {
 	o := &options{deps: deps}
 	root := &cobra.Command{
 		Use: "lazyclash", Short: "A keyboard-first console for existing Mihomo cores",
-		Long:    "Control local or remote Mihomo cores from a terminal. Run without a subcommand to open the dashboard.",
-		Version: Version, SilenceErrors: true, SilenceUsage: true,
-		Args: cobra.NoArgs,
+		Long:    "Control local or remote Mihomo cores from a terminal. Run without a subcommand to open the dashboard. Agents can read the bundled operating guide with --skill.",
+		Version: versionFromBuild(), SilenceErrors: true, SilenceUsage: true,
+		Args: argsExact(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if skillInvocation(cmd) {
+				return printSkill(cmd, "")
+			}
 			defer connection.CloseAuthentications()
 			if o.json {
 				return usage("--json requires a data command, for example: lazyclash status --json")
@@ -155,13 +163,19 @@ func New(deps Dependencies) *cobra.Command {
 					baselineDefault = c.DefaultTarget
 					return nil
 				},
-				Authenticate: connection.AuthenticateCommand,
+				Authenticate: o.deps.Authenticate,
 			}
 			return o.deps.RunTUI(cmd.Context(), opts, cmd.InOrStdin(), cmd.OutOrStdout())
 		},
 	}
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usage("%s", err) })
-	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error { return o.validateSelection(cmd) }
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if skillInvocation(cmd) {
+			return nil
+		}
+		return o.validateSelection(cmd)
+	}
+	root.Flags().Bool("skill", false, "print the bundled agent operating guide without connecting")
 	f := root.PersistentFlags()
 	f.StringVar(&o.path, "config", "", "lazyclash TOML settings path")
 	f.StringVar(&o.target, "target", "", "registered target ID")
@@ -173,6 +187,7 @@ func New(deps Dependencies) *cobra.Command {
 	f.BoolVar(&o.json, "json", false, "JSON data output; logs emit NDJSON")
 	f.BoolVar(&o.readOnly, "read-only", false, "disable control actions, latency tests and healthchecks")
 	root.AddCommand(o.targetCommands(), o.configCommands(), o.statusCommand(), o.proxyCommands(), o.connectionCommands(), o.logsCommand(), o.rulesCommand(), o.providerCommands(), o.modeCommand(), o.tunCommand(), o.allowLANCommand(), o.settingsCommand())
+	root.AddCommand(o.skillCommand())
 	root.AddCommand(&cobra.Command{Use: "completion [bash|zsh|fish|powershell]", Short: "Generate shell completion", Args: argsExact(1), ValidArgs: []string{"bash", "zsh", "fish", "powershell"}, RunE: func(cmd *cobra.Command, args []string) error {
 		switch args[0] {
 		case "bash":
@@ -353,8 +368,8 @@ func (o *options) discoverTargets(ctx context.Context, host string) ([]config.Ta
 
 func (o *options) discoverCommand(cmd *cobra.Command) ([]config.Target, error) {
 	targets, err := o.discoverTargets(cmd.Context(), o.ssh)
-	if err != nil && connection.IsAuthRequired(err) && o.deps.Terminal(cmd.InOrStdin(), cmd.ErrOrStderr()) {
-		auth, e := connection.AuthenticateCommand(cmd.Context(), o.ssh)
+	if err != nil && connection.IsAuthRequired(err) && !o.json && o.deps.Terminal(cmd.InOrStdin(), cmd.ErrOrStderr()) {
+		auth, e := o.deps.Authenticate(cmd.Context(), o.ssh)
 		if e != nil {
 			return nil, e
 		}
@@ -404,8 +419,8 @@ func (o *options) withClient(cmd *cobra.Command, fn func(*core.Client, config.Ta
 		t = candidates[0]
 	}
 	client, closer, err := o.deps.Open(cmd.Context(), t, o.readOnly)
-	if err != nil && connection.IsAuthRequired(err) && o.deps.Terminal(cmd.InOrStdin(), cmd.ErrOrStderr()) {
-		auth, e := connection.AuthenticateCommand(cmd.Context(), t.SSHHost)
+	if err != nil && connection.IsAuthRequired(err) && !o.json && o.deps.Terminal(cmd.InOrStdin(), cmd.ErrOrStderr()) {
+		auth, e := o.deps.Authenticate(cmd.Context(), t.SSHHost)
 		if e != nil {
 			return e
 		}

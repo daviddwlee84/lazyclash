@@ -1,12 +1,12 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 	"sort"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
@@ -142,41 +142,38 @@ func (o *options) connectionCommands() *cobra.Command {
 
 func (o *options) logsCommand() *cobra.Command {
 	var level, filter string
+	var duration time.Duration
+	var limit int
 	cmd := &cobra.Command{Use: "logs", Short: "Follow core logs (NDJSON with --json)", Args: argsExact(0), RunE: func(cmd *cobra.Command, args []string) error {
 		switch level {
 		case "debug", "info", "warning", "error":
 		default:
 			return usage("--level must be debug, info, warning or error")
 		}
+		if duration < 0 || limit < 0 {
+			return usage("--duration and --limit must be zero or positive")
+		}
 		return o.withClient(cmd, func(c *core.Client, t config.Target) error {
-			var writeErr error
-			ctx, cancel := context.WithCancel(cmd.Context())
-			defer cancel()
-			err := c.Stream(ctx, "logs", url.Values{"level": {level}}, func(entry core.Object) {
-				if writeErr != nil {
-					return
-				}
+			filter := strings.ToLower(filter)
+			return c.StreamWithOptions(cmd.Context(), "logs", url.Values{"level": {level}}, core.StreamOptions{Duration: duration, Limit: limit}, func(entry core.Object) (bool, error) {
 				payload := fmt.Sprint(entry["payload"])
-				if !strings.Contains(strings.ToLower(payload), strings.ToLower(filter)) {
-					return
+				if !strings.Contains(strings.ToLower(payload), filter) {
+					return false, nil
 				}
+				var writeErr error
 				if o.json {
 					writeErr = o.output(cmd, entry)
 				} else {
 					_, writeErr = fmt.Fprintf(cmd.OutOrStdout(), "[%s] %s\n", core.Sanitize(fmt.Sprint(entry["type"])), core.Sanitize(payload))
 				}
-				if writeErr != nil {
-					cancel()
-				}
+				return writeErr == nil, writeErr
 			})
-			if writeErr != nil {
-				return writeErr
-			}
-			return err
 		})
 	}}
 	cmd.Flags().StringVar(&level, "level", "info", "minimum severity: debug, info, warning, error")
 	cmd.Flags().StringVar(&filter, "filter", "", "case-insensitive payload filter")
+	cmd.Flags().DurationVar(&duration, "duration", 0, "stop after collecting for this duration (e.g. 30s; 0 is unlimited)")
+	cmd.Flags().IntVar(&limit, "limit", 0, "stop after this many matching records (0 is unlimited)")
 	return cmd
 }
 

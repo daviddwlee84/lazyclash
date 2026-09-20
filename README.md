@@ -4,14 +4,36 @@ A keyboard-first terminal console for **existing Mihomo cores**, including the c
 
 This first milestone manages runtime state. It does not install Mihomo, take ownership of Clash Verge profiles, edit subscriptions, or change the OS system proxy. Those capabilities are tracked in [TODO.md](TODO.md).
 
-## Build and start
+## Install and start
 
 Requires Go 1.25 or newer and OpenSSH for SSH targets.
+
+```sh
+go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@latest
+lazyclash --version
+lazyclash
+```
+
+The `/cmd/lazyclash` suffix identifies the executable package. Go installs it in
+`go env GOBIN` when configured, otherwise in the first `go env GOPATH` entry's
+`bin` directory (usually `~/go/bin`). Add that directory to your shell's PATH.
+Repeating the install command upgrades to the latest published version. To pin
+the first release, use `@v0.1.0`; `@main` explicitly opts into the development
+branch. `@latest` selects a published version, not necessarily the newest commit.
+
+To build a local checkout:
 
 ```sh
 go build -o bin/lazyclash ./cmd/lazyclash
 ./bin/lazyclash
 ```
+
+Source installation does not modify your shell startup files or install
+completion scripts. For a zsh session, run `source <(lazyclash completion zsh)`
+after your shell initializes completion; bash can use
+`source <(lazyclash completion bash)`. Make that explicit setup persistent in
+your own shell configuration if wanted. Homebrew and prebuilt release archives
+are a later distribution milestone.
 
 With no saved targets, the dashboard discovers local controllers. Discovery reads known runtime configurations and process/config locations, then probes common loopback controller ports. Multiple candidates are presented for selection; an explicitly selected target never falls back to another core.
 
@@ -43,7 +65,37 @@ The header always identifies the target and its runtime mode/TUN state. The Prox
 
 Use `?` for contextual help and `:` for the action palette. Arrow keys and `hjkl` navigate; Tab/Shift+Tab move focus; `/` filters; Esc returns; `q` quits. Letters typed into a field remain text. Numeric page keys switch views. The target picker and action palette expose target management and SSH discovery. Narrow terminals show the focused pane.
 
-Refreshing retains the selected object by identity. Failed refreshes retain visibly stale data. Remote text is sanitized before display; logs are bounded in memory and are not written to disk. `NO_COLOR=1` disables color. `--read-only` disables control actions, latency tests and healthchecks.
+Refreshing retains the selected object by identity. Failed refreshes retain visibly stale data. Remote text is sanitized before display; logs are bounded in memory and are not written to disk. `NO_COLOR=1` disables color. `--read-only` disables core control actions, latency tests and healthchecks; local target/config registrations can still be edited.
+
+## Agent operating guide
+
+The binary embeds its own operational skill, so an agent can read guidance for
+the installed version without a checkout, working settings, or a running core:
+
+```sh
+lazyclash --skill
+lazyclash skill print controllers
+lazyclash skill print runtime
+lazyclash skill print automation
+```
+
+`lazyclash skill print` and `--skill` print the same entry document. Topic names
+are fixed; arbitrary filesystem paths are not accepted. These commands emit
+Markdown and cannot be combined with `--json`. `--help` remains the authority
+for command syntax.
+
+For unattended operations, select a target explicitly and use JSON:
+
+```sh
+lazyclash --target desktop --json status
+lazyclash --target desktop --json proxies list
+lazyclash --target desktop --json logs --duration 10s --limit 100
+```
+
+JSON mode never starts a wizard or SSH authentication prompt, even inside a
+PTY. It returns `ssh-auth-required` if a human authentication step is needed.
+The guide explains runtime/Verge ownership, core-host paths, uncertain writes,
+credential references and how to verify an operation through the CLI.
 
 ## Command line
 
@@ -60,7 +112,7 @@ lazyclash allow-lan off
 lazyclash connections list --json
 lazyclash connections close CONNECTION_ID
 lazyclash connections close --all --yes
-lazyclash logs --level debug --filter example --json
+lazyclash logs --level debug --filter example --duration 10s --limit 100 --json
 lazyclash rules list --filter example
 lazyclash providers list proxies
 lazyclash providers update rules NAME
@@ -73,6 +125,28 @@ lazyclash completion zsh
 TUN requires a core with suitable OS privileges. After a toggle, lazyclash checks the core's reported setting; it does not claim to have verified OS routes or application traffic, and does not automatically restart the core. Proxy selections can be persisted by Mihomo's `profile.store-selected`; ordinary runtime changes may be replaced on restart or by another client.
 
 Exit codes: `0` success, `1` runtime failure, `2` usage/settings error, `130` interrupted command. Closing an idle dashboard succeeds.
+
+With `--json`, successful data stays on stdout and a failure is a single JSON
+object on stderr, without a text prefix:
+
+```json
+{"error":{"code":"auth","message":"read version: controller authentication failed (HTTP 401)","operation":"read version","http_status":401}}
+```
+
+`operation` and `http_status` are included when applicable. Stable codes include
+the controller's `auth`, `tls`, `unreachable`, `unsupported`, `invalid`,
+`rejected`, `unknown-write-result`, `read-only` and `canceled`, plus `usage`,
+`ssh-auth-required`, `config-conflict`, `timeout` and `runtime`. An
+`unknown-write-result` means the request may already have applied; inspect the
+target before deciding whether another mutation is appropriate.
+
+Logs are NDJSON. `--duration` starts after the stream is established and ends
+successfully even when no entries arrive; connection setup retains its own
+timeouts. `--limit` counts successfully emitted entries after filtering. If
+both are supplied, the first bound ends collection successfully; zero means
+unbounded, preserving ordinary continuous log following. A count alone cannot
+bound a quiet stream, so agents should supply a duration. Connection failures,
+early disconnection, broken output and caller cancellation remain failures.
 
 ## Targets and settings
 
@@ -137,3 +211,5 @@ go run ./cmd/lazyclash --controller http://127.0.0.1:PORT
 ```
 
 The fixture core holds all state in memory and never changes your real proxy settings. Tests cover transport security, write verification, configuration preservation, SSH lifecycle, CLI contracts and TUI state transitions. The PTY smoke script drives two fixture controllers, checks actions/cancellation, Unicode input, resizing, target switching and shell-mode restoration. It needs Python with `pyte` (the `uv` script installs its isolated dependency). CI runs tests and the PTY scenario on macOS and Linux. Native terminal verification is separate from cross-compilation.
+
+Licensed under the [MIT License](LICENSE).

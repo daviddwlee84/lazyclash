@@ -8,5 +8,6 @@ The current release targets existing-core observation and runtime control. Keep 
 - **Optional clash-rules setup**: select categories, map them to existing policy groups, preserve rule ordering and pin artifact revisions; preview generated provider wiring before apply. Use published artifacts from [clash-rules](https://github.com/daviddwlee84/clash-rules), not its environment-specific composition scripts as a generic merger.
 - **Client adapters**: explicit native Clash Verge profile/merge/script support only after its ownership and compatibility contract is defined.
 - **Remote Unix sockets**: OpenSSH stream-local forwarding, including discovery and cleanup tests.
+- **Formal distribution**: publish macOS/Linux amd64/arm64 archives with stable names, checksums and completions; add a Homebrew formula in the maintainer's tap. Keep `go install` as the lightweight source channel and package-manager upgrades owned by that manager.
 
 Useful upstream references: [Mihomo API](https://wiki.metacubex.one/api/), [rules](https://wiki.metacubex.one/config/rules/), [clash-rules wiring](https://github.com/daviddwlee84/clash-rules/blob/main/examples/clash.yaml).
