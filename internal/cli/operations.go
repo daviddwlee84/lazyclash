@@ -65,6 +65,7 @@ func (o *options) proxyCommands() *cobra.Command {
 		})
 	}}
 	list.Flags().StringVar(&filter, "filter", "", "case-insensitive name/type filter")
+	group.AddCommand(o.proxyEditCommands()...)
 	group.AddCommand(list, &cobra.Command{Use: "select GROUP MEMBER", Short: "Select a group member and verify the result", Args: argsExact(2), RunE: func(cmd *cobra.Command, args []string) error {
 		if e := o.writable(); e != nil {
 			return e
@@ -203,6 +204,7 @@ func (o *options) rulesCommand() *cobra.Command {
 	list.Flags().StringVar(&filter, "filter", "", "case-insensitive rule filter")
 	group.AddCommand(list)
 	group.AddCommand(o.ruleEditCommands()...)
+	group.AddCommand(o.rulePresetCommand())
 	return group
 }
 

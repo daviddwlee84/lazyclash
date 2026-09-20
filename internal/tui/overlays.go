@@ -51,6 +51,8 @@ func (m *Model) overlayLayout(width, height int) ([]string, []hitRegion) {
 	var hits []hitRegion
 	var buttons []button
 	switch m.overlay {
+	case "external-tool":
+		lines = []string{"Running " + core.Sanitize(m.status), "The operation owns the terminal; the dashboard resumes when it finishes."}
 	case "ssh-auth":
 		lines = m.detailLines(m.authenticationText(), width, max(0, height-1), 0)
 		canCancel := !m.authPending() || m.auth.phase == "preparing"
@@ -85,7 +87,7 @@ func (m *Model) overlayLayout(width, height int) ([]string, []hitRegion) {
 		}
 		lines = append(lines, fit(core.Sanitize(m.testResult), width))
 		has := len(rows) > 0
-		buttons = []button{{"connect", "Connect", has}, {"test", "T Test", has && m.options.TestTarget != nil && !m.testPending}, {"add", "n Add", true}, {"edit", "e Edit", has}, {"cancel", "Close", true}}
+		buttons = []button{{"connect", "Connect", has}, {"test", "T Test", has && m.options.TestTarget != nil && !m.testPending}, {"add", "n Add", true}, {"edit", "e Edit", has}, {"tool-setup", "s Setup", m.canRunTool() && !m.options.ReadOnly}, {"tool-core", "c Cores", m.canRunTool()}, {"cancel", "Close", true}}
 	case "palette":
 		lines = []string{m.accent("Actions"), m.input.View()}
 		var rows []row
@@ -206,6 +208,9 @@ func (m *Model) formLayout(width, height int) ([]string, []hitRegion, int) {
 	return fitLines(strings.Join(lines, "\n"), width, height), hits, inputY
 }
 func (m *Model) overlayButton(id string) tea.Cmd {
+	if strings.HasPrefix(id, "tool-") {
+		return m.toolAction(id)
+	}
 	if strings.HasPrefix(id, "work-") {
 		return m.workButton(id)
 	}

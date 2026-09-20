@@ -80,9 +80,35 @@ result as a healthy system.
 | [Lazygit](https://github.com/jesseduffield/lazygit) | Stable context, list/detail panes and explicit actions | Interaction inspiration; Lazygit does not use Bubble Tea |
 | [go-cli-tui development skill](https://github.com/daviddwlee84/agent-skills/tree/main/skills/local/go-cli-tui) | Shared services, input ownership, mouse semantics, real PTY verification | Contributor guidance; not required for end users |
 | [clash-proxy-api knowledge](https://github.com/daviddwlee84/agent-skills/tree/main/skills/local/clash-proxy-api) | Controller discovery, host vantage and managed-client ownership | Operational research; this product's explicit source-binding workflow governs writes |
-| [clash-rules](https://github.com/daviddwlee84/clash-rules), [wiring example](https://github.com/daviddwlee84/clash-rules/blob/main/examples/clash.yaml) | Category-to-policy mapping and published ruleset artifacts | Setup integration remains future work; composition scripts are environment-specific |
+| [clash-rules](https://github.com/daviddwlee84/clash-rules), [wiring example](https://github.com/daviddwlee84/clash-rules/blob/main/examples/clash.yaml) | Category-to-policy mapping and published ruleset artifacts | v0.1.6 embeds an immutable snapshot; the example is a fragment and composition scripts remain environment-specific |
 
 The initial ChatGPT/Mihomo TUI investigation under .specstory/references and
 later user screenshots were discovery inputs. API conclusions above were
 checked against primary sources. Conversation histories and private configs
 are not republished as documentation.
+
+## Source editing, setup and VPN coexistence
+
+Reviewed 2026-09-21. These sources establish upstream behavior; supported owner
+versions and automation/rollback choices are lazyclash design decisions.
+
+| Claim / use | Primary source | Version / resulting decision |
+|---|---|---|
+| Runtime node serialization omits raw credentials | [adapter](https://github.com/MetaCubeX/mihomo/blob/v1.19.31/adapter/adapter.go), [outbound base](https://github.com/MetaCubeX/mihomo/blob/v1.19.31/adapter/outbound/base.go) | Mihomo 1.19.31; bind raw source for editing/export |
+| Provider cache, inline payload and file watching differ | [provider parser](https://github.com/MetaCubeX/mihomo/blob/v1.19.31/adapter/provider/parser.go), [fetcher](https://github.com/MetaCubeX/mihomo/blob/v1.19.31/component/resource/fetcher.go) | Never treat an HTTP cache as a durable private-node owner |
+| Verge node deletion alters group references | [sequence](https://github.com/clash-verge-rev/clash-verge-rev/blob/v2.5.2/src-tauri/src/enhance/seq.rs), [pipeline](https://github.com/clash-verge-rev/clash-verge-rev/blob/v2.5.2/src-tauri/src/enhance/mod.rs) | Rev 2.5.2; compensate memberships and disclose persistent group overrides |
+| Share URI encodings are protocol-specific | [SS SIP002](https://shadowsocks.org/doc/sip002.html), [VMess/VLESS proposal](https://github.com/XTLS/Xray-core/discussions/716), [Hysteria2 URI](https://v2.hysteria.network/docs/developers/URI-Scheme/) | Refuse lossy conversions; raw Mihomo YAML/JSON is the preserving format |
+| QR is local encoding, not a hosted sharing service | [go-qrcode](https://github.com/skip2/go-qrcode/tree/da1b6568686e) | Pinned dependency in go.mod; same credential URI as URL export |
+| Official native artifacts expose digests | [Mihomo release metadata](https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/v1.19.31) | Pin version/platform/asset digest; do not treat locally retagged images as official |
+| Client deployment example | [mihomo-docker](https://github.com/daviddwlee84/DockerCompose-V2Ray/tree/9e6f3b957edbbaf2bbcfd9deea8d871873069e56/clients/mihomo-docker) | Reference client only; use separate owned project, loopback publishing and generated secret |
+| Offline rules and geo data provenance | [immutable manifest](https://github.com/daviddwlee84/clash-rules/blob/rules-27ae948beb8e304190344c28bf731fe3d1c7fbeb36e7485eb18975fcbdcb2e34/manifest.json), [third-party notice](https://github.com/daviddwlee84/clash-rules/blob/rules-27ae948beb8e304190344c28bf731fe3d1c7fbeb36e7485eb18975fcbdcb2e34/THIRD_PARTY.md) | Keep distinct data licenses, original notices and locks |
+| Tailnet exclusions do not solve dual full-tunnel routing | [Tailscale other VPNs](https://tailscale.com/docs/reference/faq/other-vpns), [exit nodes](https://tailscale.com/docs/features/exit-nodes) | Split tailnet/subnet preset; competing defaults require owner selection |
+| MagicDNS and core system resolver have different scopes | [Quad100](https://tailscale.com/docs/reference/quad100), [Mihomo POSIX system DNS](https://github.com/MetaCubeX/mihomo/blob/v1.19.31/dns/system_posix.go) | Preserve scoped resolver evidence; regional rules do not establish unpoisoned DNS |
+| TUN exclusions vary by platform | [Mihomo TUN](https://wiki.metacubex.one/config/inbound/tun/), [sing-tun Linux](https://github.com/metacubex/sing-tun/blob/v0.4.24/tun_linux.go) | Incoming-interface filtering is not universal outbound VPN bypass |
+| Docker host networking and capabilities | [host driver](https://docs.docker.com/engine/network/drivers/host/), [runtime privileges](https://docs.docker.com/engine/containers/run/) | Native macOS/Linux or rootful Linux Docker for host TUN; Desktop L4 networking is not macOS TUN |
+| Docker proxy consumers are distinct | [client](https://docs.docker.com/engine/cli/proxy/), [daemon](https://docs.docker.com/engine/daemon/proxy/), [build args](https://docs.docker.com/build/building/variables/) | Generate/test container/build configuration; daemon/Desktop changes remain explicit guidance |
+| Native background SSH and control operations | [ssh](https://man.openbsd.org/ssh), [ssh_config](https://man.openbsd.org/ssh_config) | Private per-shell masters; fresh management verification disables multiplexing |
+
+Fixture evidence is recorded in package tests and PTY harnesses. Passing a
+simulated service/route test or cross-compilation does not establish a real
+administrator service installation or host-TUN result on another platform.

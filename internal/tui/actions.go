@@ -29,6 +29,10 @@ func (m *Model) actions() []action {
 	group, hasGroup := m.group()
 	cfg := m.configData()
 	a := []action{
+		{"tool-setup", "Setup Mihomo client", nil, m.canRunTool() && !m.options.ReadOnly},
+		{"tool-core", "Manage installed cores", nil, m.canRunTool()},
+		{"tool-network", "Diagnose VPN / TUN / DNS conflicts", nil, m.canRunTool()},
+		{"tool-source", "Bind node / group configuration source", nil, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride},
 		{"work-compare", "Compare targets / copy selected settings", nil, m.options.Workbench != nil && len(m.settings.Targets) > 1},
 		{"work-url", "Diagnose URL and inspect routing topology", nil, m.options.Workbench != nil && m.target.ID != ""},
 		{"work-rule", "Preview / add domain rule", nil, m.options.Workbench != nil && m.target.ID != ""},
@@ -51,6 +55,9 @@ func (m *Model) actions() []action {
 	case overview:
 		a = append(a, action{"overview-inspect", "Inspect selected metric / group", []string{"enter"}, m.overviewSelection != ""}, action{"history-window", "Cycle history: 1m / 5m / 15m", []string{"w"}, true}, action{"graph-style", "Cycle chart style", []string{"v"}, true}, action{"probe-ip", "Test IP.SB egress", []string{"i"}, !m.options.ReadOnly && m.options.ProbeIP != nil && m.target.ProbeProxy != "" && m.state().probePending == ""}, action{"probe-latency", "Test website latency", []string{"L"}, !m.options.ReadOnly && m.options.ProbeLatency != nil && m.target.ProbeProxy != "" && m.state().probePending == ""})
 	case proxies:
+		manage := m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride
+		node := hasRow && m.state().view(proxies).focus == 1
+		a = append(a, action{"tool-proxy-add", "Add proxy", []string{"n"}, manage && !m.options.ReadOnly}, action{"tool-proxy-import", "Import proxy links / YAML", nil, manage && !m.options.ReadOnly}, action{"tool-proxy-edit", "Edit selected proxy", []string{"e"}, manage && node && !m.options.ReadOnly}, action{"tool-proxy-export", "Share selected proxy (URL / JSON / QR)", []string{"y"}, manage && node}, action{"tool-proxy-copy", "Copy selected proxy to another target", nil, manage && node && !m.options.ReadOnly}, action{"tool-proxy-duplicate", "Duplicate selected proxy", nil, manage && node && !m.options.ReadOnly}, action{"tool-group-add", "Add proxy group", nil, manage && !m.options.ReadOnly}, action{"tool-group-edit", "Edit current group", nil, manage && hasGroup && !m.options.ReadOnly})
 		a = append(a, action{"select", "Select proxy member", []string{"enter"}, write && hasGroup && selectable(group) && m.state().view(proxies).focus == 1 && hasRow}, action{"delay", "Test selected node delay", []string{"d"}, write && hasRow && m.state().view(proxies).focus == 1}, action{"delay-group", "Test this group's nodes (4 at a time)", []string{"D"}, write && hasGroup})
 	case connections:
 		a = append(a, action{"close-connection", "Close selected connection", []string{"x"}, write && hasRow && selected.id != ""}, action{"close-all", "Close all connections", []string{"X"}, write})
@@ -315,6 +322,12 @@ func (m *Model) overlayKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.invalidateTargetTest()
 		}
 		switch key {
+		case "s":
+			if !m.options.ReadOnly {
+				return m.toolAction("tool-setup")
+			}
+		case "c":
+			return m.toolAction("tool-core")
 		case "T":
 			return m.testPickedTarget()
 
@@ -362,6 +375,9 @@ func (m *Model) ask(title, body string, run func() tea.Cmd) tea.Cmd {
 	return nil
 }
 func (m *Model) runAction(id string) tea.Cmd {
+	if strings.HasPrefix(id, "tool-") {
+		return m.toolAction(id)
+	}
 	switch id {
 	case "work-compare":
 		return m.startCompare()

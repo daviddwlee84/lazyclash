@@ -12,6 +12,8 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/proxyenv"
+	"github.com/daviddwlee84/lazyclash/internal/wizard"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -57,6 +59,7 @@ func describeError(err error) errorDetails {
 	result := errorDetails{Code: "runtime", Message: core.Sanitize(err.Error())}
 	var controllerErr *core.Error
 	var usageErr *UsageError
+	var proxyAmbiguous *proxyenv.AmbiguousError
 	switch {
 	case errors.As(err, &controllerErr):
 		// Preserve unknown-write-result even when its cause is cancellation.
@@ -67,9 +70,11 @@ func describeError(err error) errorDetails {
 		result.Code = "usage"
 	case connection.IsAuthRequired(err):
 		result.Code = "ssh-auth-required"
+	case errors.As(err, &proxyAmbiguous):
+		result.Code = "proxy-target-ambiguous"
 	case errors.Is(err, config.ErrConflict):
 		result.Code = "config-conflict"
-	case errors.Is(err, context.Canceled):
+	case errors.Is(err, context.Canceled), errors.Is(err, wizard.ErrCanceled):
 		result.Code = "canceled"
 	case errors.Is(err, context.DeadlineExceeded):
 		result.Code = "timeout"

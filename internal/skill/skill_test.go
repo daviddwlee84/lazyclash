@@ -55,7 +55,7 @@ func TestEmbeddedSkillStructure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, topic := range []string{"controllers", "runtime", "automation", "diagnosis", "workflows"} {
+	for _, topic := range []string{"controllers", "runtime", "automation", "diagnosis", "workflows", "sources", "environment", "setup"} {
 		document, err := Read(topic)
 		if err != nil || strings.TrimSpace(document) == "" {
 			t.Fatalf("missing topic %s: %v", topic, err)

@@ -27,6 +27,17 @@ type probeTransport struct {
 	tunnel    io.Closer
 }
 
+// OpenProxyClient opens an explicit authenticated data route for an authorized
+// download. The caller bounds request sizes and closes the returned transport.
+// SSH forwarding preserves the original HTTPS proxy hostname for TLS checking.
+func OpenProxyClient(ctx context.Context, target config.Target, timeout time.Duration) (*http.Client, io.Closer, error) {
+	transport, err := newProbe(ctx, target, Options{})
+	if err != nil {
+		return nil, nil, err
+	}
+	return probeClient(transport, timeout), transport, nil
+}
+
 func (p *probeTransport) Close() error {
 	p.transport.CloseIdleConnections()
 	if p.tunnel != nil {

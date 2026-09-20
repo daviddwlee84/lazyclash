@@ -1,0 +1,3 @@
+# Upstream routing data and notices are byte-preserved, verified by manifest
+# SHA-256. Do not normalize their original line endings or whitespace.
+internal/managedcore/assets/rules/** -text -whitespace

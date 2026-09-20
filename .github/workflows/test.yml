@@ -39,6 +39,13 @@ jobs:
       - run: go test -race ./...
         env:
           LAZYCLASH_REQUIRE_NATIVE_ISOLATION: "1"
+      - name: Exercise an actual managed native core and TUN on the disposable Linux VM
+        if: runner.os == 'Linux'
+        timeout-minutes: 8
+        env:
+          LAZYCLASH_NATIVE_INTEGRATION: "1"
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: go test ./internal/managedcore -run '^TestNativeLinuxManagedAcceptance$' -count=1 -v -timeout=7m
       - run: go build -o bin/lazyclash ./cmd/lazyclash
       - run: go build -o bin/fakecore ./tools/fakecore
       - name: Exercise completion in a real isolated zsh
@@ -49,3 +56,4 @@ jobs:
           "$RUNNER_TEMP/pty-venv/bin/pip" install pyte==0.8.2
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_smoke.py
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/auth_pty_smoke.py
+          "$RUNNER_TEMP/pty-venv/bin/python" scripts/tools_pty_smoke.py

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
+	"github.com/daviddwlee84/lazyclash/internal/managedcore"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -211,10 +212,23 @@ func (o *options) registerCompletions(root *cobra.Command) {
 					if t.SSHHost != "" {
 						result = append(result, t.SSHHost)
 					}
+				case "cores":
+					if t.ManagedCoreID != "" {
+						result = append(result, t.ManagedCoreID)
+					}
 				case "configs":
 					if t.ID == selected {
 						for _, c := range t.Configs {
 							result = append(result, c.ID)
+						}
+					}
+				}
+			}
+			if kind == "cores" {
+				if instances, err := managedcore.List(managedcore.Options{}); err == nil {
+					for _, instance := range instances {
+						if !instance.Removed {
+							result = append(result, instance.ID)
 						}
 					}
 				}
@@ -262,6 +276,26 @@ func (o *options) registerCompletions(root *cobra.Command) {
 			}
 		case "configs remove", "configs apply":
 			cmd.ValidArgsFunction = local("configs")
+		case "proxy shell-init":
+			cmd.ValidArgsFunction = values("bash", "zsh")
+		case "proxy tunnel start":
+			cmd.ValidArgsFunction = func(c *cobra.Command, a []string, s string) ([]string, cobra.ShellCompDirective) {
+				if len(a) == 0 {
+					return local("targets")(c, a, s)
+				}
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+		case "cores status", "cores start", "cores stop", "cores restart", "cores configure", "cores remove":
+			cmd.ValidArgsFunction = local("cores")
+		case "proxies copy":
+			cmd.ValidArgsFunction = func(c *cobra.Command, a []string, s string) ([]string, cobra.ShellCompDirective) {
+				if len(a) < 2 && !globalChanged(c, "target") {
+					return local("targets")(c, a, s)
+				}
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+		case "rules preset apply":
+			cmd.ValidArgsFunction = values("cn-split", "simple")
 		case "providers list", "providers update":
 			cmd.ValidArgsFunction = func(_ *cobra.Command, a []string, _ string) ([]string, cobra.ShellCompDirective) {
 				if len(a) == 0 {
@@ -279,7 +313,41 @@ func (o *options) registerCompletions(root *cobra.Command) {
 			}
 		}
 		if cmd.Flags().Lookup("kind") != nil {
-			_ = cmd.RegisterFlagCompletionFunc("kind", values("mihomo", "verge"))
+			if path == "configs source set" {
+				_ = cmd.RegisterFlagCompletionFunc("kind", values("native", "docker", "verge"))
+			} else {
+				_ = cmd.RegisterFlagCompletionFunc("kind", values("mihomo", "verge"))
+			}
+		}
+		if cmd.Flags().Lookup("shell") != nil {
+			switch path {
+			case "proxy env":
+				_ = cmd.RegisterFlagCompletionFunc("shell", values("sh", "bash", "zsh"))
+			case "proxy shell-init":
+				_ = cmd.RegisterFlagCompletionFunc("shell", values("bash", "zsh"))
+			}
+		}
+		if cmd.Flags().Lookup("format") != nil {
+			switch path {
+			case "proxy docker render":
+				_ = cmd.RegisterFlagCompletionFunc("format", values("env-file", "compose", "build-args", "client-json"))
+			case "proxies export":
+				_ = cmd.RegisterFlagCompletionFunc("format", values("yaml", "json", "url"))
+			}
+		}
+		if cmd.Flags().Lookup("scope") != nil && path == "proxy docker render" {
+			_ = cmd.RegisterFlagCompletionFunc("scope", values("runtime", "build", "both"))
+		}
+		for name, items := range map[string][]string{"backend": {"native", "docker"}, "input-kind": {"links", "subscription", "yaml"}, "preset": {"auto", "cn-split", "simple", "preserve"}, "category": {"reject", "direct", "proxy", "ai", "apple", "media-global", "media-hkmt"}, "service-scope": {"user", "system"}} {
+			if cmd.Flags().Lookup(name) != nil {
+				_ = cmd.RegisterFlagCompletionFunc(name, values(items...))
+			}
+		}
+		if cmd.Flags().Lookup("core") != nil {
+			_ = cmd.RegisterFlagCompletionFunc("core", local("cores"))
+		}
+		if cmd.Flags().Lookup("bootstrap-target") != nil {
+			_ = cmd.RegisterFlagCompletionFunc("bootstrap-target", local("targets"))
 		}
 		if cmd.Flags().Lookup("owner-version") != nil {
 			_ = cmd.RegisterFlagCompletionFunc("owner-version", values("2.5.2"))
@@ -295,7 +363,7 @@ func (o *options) registerCompletions(root *cobra.Command) {
 				_ = cmd.MarkFlagDirname(name)
 			}
 		}
-		for _, name := range []string{"secret-file", "ca-cert", "probe-password-file", "probe-ca-cert"} {
+		for _, name := range []string{"secret-file", "ca-cert", "probe-password-file", "probe-ca-cert", "file", "output", "input", "artifact"} {
 			if cmd.Flags().Lookup(name) != nil {
 				_ = cmd.MarkFlagFilename(name)
 			}

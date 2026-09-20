@@ -1,8 +1,8 @@
 # lazyclash
 
-A keyboard-first terminal console for **existing Mihomo cores**, including the core managed by Clash Verge Rev. Works locally, over HTTPS, through SSH, or over a local Unix socket. macOS and Linux are supported.
+A keyboard-first terminal console for **Mihomo clients**, including existing cores managed by Clash Verge Rev and explicitly lazyclash-owned installations. Works locally, over HTTPS, through SSH, or over a local Unix socket. macOS and Linux are supported.
 
-Manage runtime state, compare targets, diagnose URL routing, and repair exact domain rules through an explicitly bound persistent source. Clash Verge Rules edits require native profile reactivation. See the [knowledge and operating guide](docs/README.md), [reference index](docs/references.md), and [future milestones](TODO.md).
+Manage runtime state, edit and share source-backed nodes/groups, use a selected proxy from your shell or Docker, compare targets, and diagnose routing. `setup` installs native or Docker clients with an offline regional starter and optional reviewed TUN/system-proxy configuration. Clash Verge companion edits require native profile reactivation. See the [knowledge and operating guide](docs/README.md), [reference index](docs/references.md), and [future milestones](TODO.md).
 
 ## Install and start
 
@@ -18,7 +18,7 @@ The `/cmd/lazyclash` suffix identifies the executable package. Go installs it in
 `go env GOBIN` when configured, otherwise in the first `go env GOPATH` entry's
 `bin` directory (usually `~/go/bin`). Add that directory to your shell's PATH.
 Repeating the install command upgrades to the latest published version. To pin
-a release, use `@v0.1.5`; `@main` explicitly opts into the development
+a release, use `@v0.1.6`; `@main` explicitly opts into the development
 branch. `@latest` selects a published version, not necessarily the newest commit.
 See [CHANGELOG.md](CHANGELOG.md) for changes between versions.
 
@@ -96,6 +96,23 @@ If controller discovery requires authentication, configure a secret reference or
 
 ## Dashboard
 
+New client and source workflows are available from `:` and the target picker:
+
+```sh
+lazyclash setup                                      # client setup wizard
+lazyclash --target desktop configs source set --interactive
+lazyclash --target desktop proxies export 'My node' --interactive
+lazyclash --target desktop groups edit PROXY --interactive
+eval "$(lazyclash proxy shell-init zsh)"
+proxy-on desktop                                    # shell integration
+lazyclash diagnostics network                       # passive VPN/TUN/DNS evidence
+```
+
+Read [nodes and groups](docs/proxies-and-groups.md), [proxy environments](docs/proxy-environment.md),
+[managed clients](docs/managed-cores.md) and [VPN coexistence](docs/vpn-coexistence.md)
+for source ownership, explicit credential exports, SSH session lifetime,
+Docker consumers, offline bootstrap and rollback behavior.
+
 The header identifies the target and its runtime mode/TUN state. Overview opens
 first with upload/download speed and totals, core RSS, connection count, traffic
 and resource histories, protocol distribution, top outbounds and observed
@@ -121,7 +138,7 @@ from the current field; Ctrl+T tests target connectivity. Invalid settings stay
 editable, and the optional Review step remains available. Toggle mouse
 capture with `M` or `--mouse=false` to use native terminal text selection.
 
-Use `?` for contextual help and `:` for the action palette. Arrow keys and `hjkl` navigate; Tab/Shift+Tab move focus; `/` filters; Esc returns; `q` quits. Letters typed into a field remain text. Numeric page keys switch views. The target picker and action palette expose target management and SSH discovery. Narrow terminals show the focused pane.
+Use `?` for contextual help and `:` for the action palette. Arrow keys and `hjkl` navigate; Tab/Shift+Tab move focus; `/` filters; Esc returns; `q` quits. Letters typed into a field remain text. Numeric page keys switch views. Proxies adds `n` Add, `e` Edit and `y` Share. The target picker adds `s` Setup and `c` Cores alongside target management and SSH discovery. Narrow terminals show the focused pane.
 
 Refreshing retains the selected object by identity. Failed refreshes retain visibly stale data. Remote text is sanitized before display; logs are bounded in memory and are not written to disk. `NO_COLOR=1` disables color. `--read-only` disables core control actions, latency tests and healthchecks; local target/config registrations can still be edited.
 

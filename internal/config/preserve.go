@@ -237,11 +237,16 @@ func preserve(raw []byte, cfg Config) ([]byte, error) {
 			{"secret_env", t.SecretEnv}, {"ca_file", t.CAFile}, {"ssh_host", t.SSHHost}, {"source_config", t.SourceConfig},
 			{"probe_proxy", t.ProbeProxy}, {"probe_username", t.ProbeUsername}, {"probe_password_env", t.ProbePasswordEnv},
 			{"probe_password_file", t.ProbePasswordFile}, {"probe_ca_file", t.ProbeCAFile},
+			{"managed_core_id", t.ManagedCoreID},
 		})
 		if err != nil {
 			return nil, err
 		}
 		b, err = patchRuleSource(b, t.RuleSource)
+		if err != nil {
+			return nil, err
+		}
+		b, err = patchConfigSource(b, t.ConfigSource)
 		if err != nil {
 			return nil, err
 		}
@@ -269,6 +274,47 @@ func preserve(raw []byte, cfg Config) ([]byte, error) {
 		out = append(out, b)
 	}
 	return replaceBlocks(raw, old, out), nil
+}
+
+func patchConfigSource(raw []byte, source *ConfigSource) ([]byte, error) {
+	exprs, err := expressions(raw)
+	if err != nil {
+		return nil, err
+	}
+	start, end := -1, len(raw)
+	for _, e := range exprs {
+		if e.kind == unstable.KeyValue && e.table == "targets" && e.key == "config_source" {
+			return nil, errors.New("inline config_source cannot be edited; use [targets.config_source]")
+		}
+		if e.kind != unstable.Table && e.kind != unstable.ArrayTable {
+			continue
+		}
+		if start >= 0 {
+			end = e.start
+			break
+		}
+		if e.table == "targets.config_source" {
+			start = e.start
+		}
+	}
+	if source == nil {
+		if start < 0 {
+			return raw, nil
+		}
+		return applyEdits(raw, []edit{{start, end, nil}}), nil
+	}
+	b := []byte("\n[targets.config_source]\n")
+	if start >= 0 {
+		b = raw[start:end]
+	}
+	b, err = patchFields(b, "targets.config_source", []field{{"kind", source.Kind}, {"config_id", source.ConfigID}, {"host_path", source.HostPath}, {"core_path", source.CorePath}, {"binary", source.Binary}, {"home", source.Home}, {"container", source.Container}, {"version", source.Version}, {"data_dir", source.DataDir}, {"profile_uid", source.ProfileUID}})
+	if err != nil {
+		return nil, err
+	}
+	if start < 0 {
+		return append(append(raw, '\n'), b...), nil
+	}
+	return applyEdits(raw, []edit{{start, end, b}}), nil
 }
 
 func patchRuleSource(raw []byte, source *RuleSource) ([]byte, error) {

@@ -142,6 +142,12 @@ bindkey '^X^G' lazyclash_capture_buffer
                 ("lazyclash mode ru", "lazyclash mode rule "),
                 ("lazyclash configs apply wo", "lazyclash configs apply work "),
                 ("lazyclash diagnostics u", "lazyclash diagnostics url "),
+                ("lazyclash diagnostics n", "lazyclash diagnostics network "),
+                ("lazyclash proxy env --shell ba", "lazyclash proxy env --shell bash "),
+                ("lazyclash proxy docker render --format co", "lazyclash proxy docker render --format compose "),
+                ("lazyclash configs source set --kind do", "lazyclash configs source set --kind docker "),
+                ("lazyclash proxies export --format js", "lazyclash proxies export --format json "),
+                ("lazyclash setup --backend na", "lazyclash setup --backend native "),
             ):
                 output.clear()
                 os.write(master, typed.encode() + b"\t\x18\x07")
@@ -156,7 +162,7 @@ bindkey '^X^G' lazyclash_capture_buffer
                     except OSError:
                         pass
             assert poll() == 0, output.decode("utf-8", "replace")
-            print("zsh PTY completion passed: generated/install/status, target, mode, saved config and new command")
+            print("zsh PTY completion passed: generated/install/status, targets/configs, source owner, export, proxy/Docker, network and setup enums")
         finally:
             if poll() is None:
                 os.killpg(pid, signal.SIGKILL)

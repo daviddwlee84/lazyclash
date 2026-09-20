@@ -16,8 +16,11 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/core"
 	"github.com/daviddwlee84/lazyclash/internal/diagnostics"
+	"github.com/daviddwlee84/lazyclash/internal/managedcore"
+	"github.com/daviddwlee84/lazyclash/internal/proxyenv"
 	"github.com/daviddwlee84/lazyclash/internal/selfupdate"
 	"github.com/daviddwlee84/lazyclash/internal/tui"
+	"github.com/daviddwlee84/lazyclash/internal/wizard"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -30,8 +33,12 @@ func (e *UsageError) Error() string          { return e.Message }
 func usage(format string, args ...any) error { return &UsageError{fmt.Sprintf(format, args...)} }
 
 func ExitCode(err error) int {
-	if errors.Is(err, context.Canceled) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, wizard.ErrCanceled) {
 		return 130
+	}
+	var child *proxyenv.ExitError
+	if errors.As(err, &child) {
+		return child.Code
 	}
 	var u *UsageError
 	if errors.As(err, &u) {
@@ -44,6 +51,7 @@ func ExitCode(err error) int {
 }
 
 type Dependencies struct {
+	Managed      managedcore.Options
 	Open         func(context.Context, config.Target, bool) (*core.Client, io.Closer, error)
 	Discover     func(context.Context, string) ([]config.Target, error)
 	Terminal     func(io.Reader, io.Writer) bool
@@ -135,6 +143,33 @@ func New(deps Dependencies) *cobra.Command {
 				},
 				Discover:     func(ctx context.Context) ([]config.Target, error) { return o.discoverTargets(ctx, o.ssh) },
 				DiscoverHost: o.discoverTargets,
+				RunCommand: func(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer) error {
+					prefix := []string{}
+					if _, e := os.Stat(settingsPath); e == nil || o.path != "" {
+						prefix = append(prefix, "--config", settingsPath)
+					}
+					if o.readOnly {
+						prefix = append(prefix, "--read-only")
+					}
+					child := New(o.deps)
+					child.SetArgs(append(prefix, args...))
+					child.SetIn(in)
+					child.SetOut(out)
+					child.SetErr(errOut)
+					return child.ExecuteContext(ctx)
+				},
+				ReloadTargets: func() (config.Config, error) {
+					saveMu.Lock()
+					defer saveMu.Unlock()
+					fresh, e := config.Load(settingsPath, false)
+					if e != nil {
+						return fresh, e
+					}
+					persisted = fresh
+					baseline = append([]config.Target(nil), fresh.Targets...)
+					baselineDefault = fresh.DefaultTarget
+					return fresh, nil
+				},
 				SaveTargets: func(c config.Config) error {
 					saveMu.Lock()
 					defer saveMu.Unlock()
@@ -214,8 +249,8 @@ func New(deps Dependencies) *cobra.Command {
 	f.StringVar(&o.caFile, "ca-cert", "", "PEM CA certificate for HTTPS")
 	f.BoolVar(&o.json, "json", false, "JSON data output; logs emit NDJSON")
 	f.BoolVar(&o.readOnly, "read-only", false, "disable control actions, latency tests and healthchecks")
-	root.AddCommand(o.targetCommands(), o.configCommands(), o.statusCommand(), o.proxyCommands(), o.connectionCommands(), o.logsCommand(), o.rulesCommand(), o.providerCommands(), o.modeCommand(), o.tunCommand(), o.allowLANCommand(), o.settingsCommand())
-	root.AddCommand(o.skillCommand(), o.diagnosticsCommand(), o.upgradeCommand())
+	root.AddCommand(o.targetCommands(), o.configCommands(), o.statusCommand(), o.proxyCommands(), o.proxyCommand(), o.connectionCommands(), o.logsCommand(), o.rulesCommand(), o.providerCommands(), o.modeCommand(), o.tunCommand(), o.allowLANCommand(), o.settingsCommand())
+	root.AddCommand(o.skillCommand(), o.diagnosticsCommand(), o.upgradeCommand(), o.groupsCommand(), o.setupCommand(), o.coresCommand())
 	root.AddCommand(o.completionCommand(root))
 	o.registerCompletions(root)
 	return root

@@ -129,6 +129,11 @@ check that IXON flow control is disabled while the TUI owns input and restored
 on exit. A model-level key test alone cannot detect Ctrl+S freezing terminal
 output before the application receives it.
 
+Guard search and mouse submission too. An empty filtered selection must not submit
+an older hidden choice. Clipped/offscreen buttons are not clickable; derive hits
+from visible geometry and invalidate presses after resize/layout changes. Start a
+destructive review on Cancel, and test Enter before changing that selection.
+
 Before apply, revalidate the current target when concurrent changes could make
 the review obsolete. Report partial effects separately from remaining work.
 Cancellation after external execution began stops waiting/work where supported;

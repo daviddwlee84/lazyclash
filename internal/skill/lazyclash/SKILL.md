@@ -1,6 +1,6 @@
 ---
 name: lazyclash
-description: Inspect and control existing Mihomo or Clash Verge-managed cores through lazyclash. Use for controller discovery, proxy selection, runtime routing settings, API connectivity and explicit proxy egress diagnosis, provider refreshes, and applying registered complete YAML files. Also supports cross-target comparisons, URL route evidence and exact-domain repair through explicit owner bindings. Does not install cores or automate native Verge activation.
+description: Operate Mihomo clients through lazyclash CLI/TUI. Use for controller discovery, runtime selection, source-backed node/group editing and sharing, proxy environments, Docker consumer settings, managed native/Docker client setup, VPN/TUN diagnosis, cross-target comparison and owner-bound rule repair. Native Verge profile reactivation remains owned by Verge.
 ---
 
 # lazyclash
@@ -52,3 +52,6 @@ the request is only to inspect.
 
 - [URL diagnosis](references/diagnosis.md), also `lazyclash skill print diagnosis`: separate observation contexts, confidence, DNS/TUN and tentative recommendations.
 - [Cross-target and rule workflows](references/workflows.md), also `lazyclash skill print workflows`: preview digests, partial writes, persistent owners and completion setup.
+- [Nodes and groups](references/sources.md), also `lazyclash skill print sources`: bind the actual owner, preserve raw definitions, review field changes, copy between targets and intentionally export credentials.
+- [Proxy environments](references/environment.md), also `lazyclash skill print environment`: current-shell versus child scope, persistent SSH sessions, Docker namespaces and consumer tests.
+- [Managed setup and network ownership](references/setup.md), also `lazyclash skill print setup`: native/Docker installation, offline starter data, privilege, TUN/VPN conflicts, receipts and host rollback.

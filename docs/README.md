@@ -7,6 +7,10 @@ The [changelog](../CHANGELOG.md) identifies the version that introduced a featur
 | Read when… | Guide |
 |---|---|
 | Connecting a local/remote core, comparing servers or copying runtime choices | [Targets and configuration](targets-and-config.md) |
+| Adding/editing nodes, configuring groups, copying credentials or sharing QR | [節點與群組](proxies-and-groups.md) |
+| Choosing a shell/data proxy, owning SSH forwards or configuring Docker consumers | [代理環境](proxy-environment.md) |
+| Installing an owned native/Docker client or using offline China-routing presets | [Client setup](managed-cores.md) |
+| Inspecting Tailscale/other VPN conflicts, split DNS, service permissions or recovery | [VPN／TUN 共存](vpn-coexistence.md) |
 | Interpreting dashboard metrics or diagnosing a URL | [Diagnostics and routing](diagnostics-and-routing.md) |
 | Persisting a domain override, reloading or recovering a change | [Rules and ownership](rules-and-ownership.md) |
 | Installing, upgrading, activating completion or maintaining a release | [Installation, upgrades and completion](install-upgrade-completion.md) |
@@ -22,6 +26,8 @@ The [changelog](../CHANGELOG.md) identifies the version that introduced a featur
 | Complete config | A YAML file on the core host; registration does not upload it or make it the startup source |
 | `source_config` | Credential discovery reference; it is not permission to rewrite that YAML |
 | Rule source | An explicit binding to the persistent file/owner used by rule repair |
+| Node/group source | A separate explicit binding for raw definitions, editing, copying and sharing |
+| Managed core | An installation with a recorded service/project identity, version, digest and receipts |
 | Verge profile | GUI-owned source plus companion Rules/Merge/Script files and a generation pipeline |
 | Data proxy | HTTP(S)/SOCKS endpoint carrying requests; an API/SSH management tunnel does not supply one |
 | Receipt | A record of a specific persistent change; saving, loading, and observing route use are separate states |
@@ -39,6 +45,7 @@ prove that a remote write was undone. Mouse rows select, explicit buttons act,
 and typing retains ownership of printable keys.
 
 Development checks are `go vet ./...`, `go test -race ./...`, and the real PTY
-harness in `scripts/pty_smoke.py`. Tests use disposable state and controllers.
+harnesses in `scripts/pty_smoke.py`, `scripts/auth_pty_smoke.py` and
+`scripts/tools_pty_smoke.py`. Tests use disposable state and controllers.
 Keep actual OS execution, cross-builds, fixture checks and real-host observations
 distinct in verification reports.

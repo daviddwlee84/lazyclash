@@ -241,6 +241,8 @@ func (m *Model) draftTarget() config.Target {
 	t.ProbeProxy, t.ProbeUsername, t.ProbePasswordEnv, t.ProbePasswordFile, t.ProbeCAFile = value(8), value(9), value(10), value(11), value(12)
 	if f.target.TransportOverride || t.Controller != f.target.Controller || t.SSHHost != f.target.SSHHost {
 		t.RuleSource = nil
+		t.ConfigSource = nil
+		t.ManagedCoreID = ""
 	}
 	t.Transient = false
 	t.TransportOverride = false

@@ -1,0 +1,4 @@
+# media-hkmt | 3 rules | https://github.com/daviddwlee84/clash-rules
+DOMAIN,cache.video.iqiyi.com
+DOMAIN-SUFFIX,bilibili.com
+DOMAIN,upos-hz-mirrorakam.akamaized.net

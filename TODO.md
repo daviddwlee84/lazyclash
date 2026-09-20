@@ -4,9 +4,10 @@ The current release supports existing-core observation, runtime comparison/contr
 
 - **Extended rules workbench**: edit general staged personal overrides with `$VISUAL`/`$EDITOR`; keep baseline, overrides and generated configuration separate; validate with the target core version in isolated storage; show diff, detect conflicting edits and retain previous revisions.
 - **Offline rule evaluation**: preview supported deterministic rules while preserving unknown outcomes; extend the shipped active URL evidence without pretending offline estimates are observations.
-- **Managed cores**: local/SSH installation, pinned official artifacts verified against release digests, update/rollback, launchd/systemd, subscriptions/profiles and OS proxy integration. Keep external and lazyclash-owned cores distinct.
-- **Optional clash-rules setup**: select categories, map them to existing policy groups, preserve rule ordering and pin artifact revisions; preview generated provider wiring before apply. Use published artifacts from [clash-rules](https://github.com/daviddwlee84/clash-rules), not its environment-specific composition scripts as a generic merger.
-- **Extended client adapters**: native activation bridges and broader profile/merge/script editing; the current Verge 2.5.2 adapter edits existing Rules companions and requires manual native reactivation.
+- **Managed core upgrades/migration**: update/rollback core binaries and images; migrate backend/service identity/ports with complete resource and service recovery. v0.1.6 adds installation, profile configuration, lifecycle and guarded network setup.
+- **Routing data updates**: optional separately downloaded verified rule bundles beyond the snapshot embedded in a binary. v0.1.6 ships offline cn-split/simple presets with immutable clash-rules provenance and category mapping.
+- **Dual full-tunnel routing**: explicitly designed exit-node/TUN chaining. The current coexistence path supports split VPN destinations and reports competing default-route owners.
+- **Extended client adapters**: native activation bridges and broader profile/merge/script editing; the current Verge 2.5.2 adapter edits existing Rules/Proxies/Groups companions and requires manual native reactivation.
 - **Remote Unix sockets**: OpenSSH stream-local forwarding, including discovery and cleanup tests.
 - **Formal distribution**: publish macOS/Linux amd64/arm64 archives with stable names, checksums and completions; add a Homebrew formula in the maintainer's tap. Keep `go install` as the lightweight source channel and package-manager upgrades owned by that manager.
 

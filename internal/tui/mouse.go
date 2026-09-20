@@ -105,7 +105,7 @@ func (m *Model) toolbar(width int) (string, []hitRegion) {
 	case overview:
 		wanted = []string{"overview-inspect", "probe-ip", "probe-latency", "mode", "tun", "history-window", "graph-style"}
 	case proxies:
-		wanted = []string{"select", "delay", "delay-group"}
+		wanted = []string{"select", "delay", "tool-proxy-add", "tool-proxy-edit", "tool-proxy-export"}
 	case connections:
 		wanted = []string{"close-connection", "close-all"}
 	case logs:
@@ -120,6 +120,7 @@ func (m *Model) toolbar(width int) (string, []hitRegion) {
 	}
 	short := map[string]string{"overview-inspect": "Inspect", "refresh": "Refresh", "targets": "Targets", "select": "Choose", "delay": "Delay", "delay-group": "Group delay", "close-connection": "Close", "close-all": "Close all", "log-follow": "Follow", "log-level": "Level", "log-clear": "Clear", "provider-update": "Update", "provider-health": "Healthcheck", "config-apply": "Apply", "config-add": "Register", "config-edit": "Edit", "config-remove": "Remove", "probe-ip": "IP.SB", "probe-latency": "Websites", "mode": "Mode", "tun": "TUN", "history-window": "Window", "graph-style": "Style"}
 	short["authenticate"], short["reconnect"] = "Authenticate", "Reconnect"
+	short["tool-proxy-add"], short["tool-proxy-edit"], short["tool-proxy-export"] = "Add", "Edit", "Share"
 	actions := m.actions()
 	var parts []string
 	var hits []hitRegion

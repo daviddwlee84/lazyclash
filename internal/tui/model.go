@@ -21,6 +21,8 @@ import (
 )
 
 type Options struct {
+	RunCommand    func(context.Context, []string, io.Reader, io.Writer, io.Writer) error
+	ReloadTargets func() (config.Config, error)
 	Workbench     func(context.Context, WorkRequest) (WorkResult, error)
 	Config        config.Config
 	InitialTarget string
@@ -119,6 +121,8 @@ func (s *targetState) snap(key string) *snapshot {
 }
 
 type Model struct {
+	toolPending       bool
+	toolSerial        uint64
 	auth              *authState
 	authSerial        uint64
 	authOffered       map[string]bool
@@ -253,6 +257,10 @@ func cloneSettings(c config.Config) config.Config {
 		if c.Targets[i].RuleSource != nil {
 			source := *c.Targets[i].RuleSource
 			c.Targets[i].RuleSource = &source
+		}
+		if c.Targets[i].ConfigSource != nil {
+			source := *c.Targets[i].ConfigSource
+			c.Targets[i].ConfigSource = &source
 		}
 	}
 	return c
@@ -404,6 +412,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.mouseWheel(msg)
 	case workMsg:
 		return m, m.receiveWork(msg)
+	case toolMsg:
+		return m, m.receiveTool(msg)
+	case toolSettingsMsg:
+		return m, m.receiveToolSettings(msg)
 	case targetTestMsg:
 		return m, m.receiveTargetTest(msg)
 	case probeMsg:
@@ -614,6 +626,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.closer = nil
 		m.target = config.Target{}
 		m.generation++
+		m.ctx, m.cancel = context.WithCancel(context.Background())
 		m.status = "No targets. Press : to add or discover."
 		return m, cmd
 	case tickMsg:

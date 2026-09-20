@@ -125,6 +125,8 @@ guided setup, validation, configuration, or shell integration.
   reporting, and published tags; add package managers when the release needs them.
 - Read [shell-completion.md](references/shell-completion.md) for native generators,
   user install/status, fpath activation, offline candidates and real shell tests.
+- Read [shell-context.md](references/shell-context.md) when exporting a parent-shell
+  environment, owning persistent connections, or generating consumer configuration.
 - Read [self-update.md](references/self-update.md) when adding an upgrade command:
   choose source, release assets, or the owning package manager from evidence;
   verify and replace the running copy while preserving local builds by default.

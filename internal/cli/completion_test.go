@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -9,7 +10,66 @@ import (
 	"testing"
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
+	"github.com/daviddwlee84/lazyclash/internal/core"
+	"io"
 )
+
+func TestNewSurfaceCompletionUsesOnlyOfflineMetadata(t *testing.T) {
+	path := isolated(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	cfg := config.Config{Targets: []config.Target{{ID: "saved", Controller: "http://127.0.0.1:1", SecretEnv: "NEVER_READ_COMPLETION_SECRET", ManagedCoreID: "fixture-core"}}}
+	if err := config.Save(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	deps := Dependencies{Discover: func(context.Context, string) ([]config.Target, error) {
+		t.Fatal("completion discovered targets")
+		return nil, nil
+	}, Open: func(context.Context, config.Target, bool) (*core.Client, io.Closer, error) {
+		t.Fatal("completion connected to core")
+		return nil, nil, nil
+	}}
+	for _, test := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"proxy", "shell-init", ""}, "bash"},
+		{[]string{"proxy", "env", "--shell", ""}, "sh"},
+		{[]string{"proxy", "docker", "render", "--format", ""}, "compose"},
+		{[]string{"proxy", "docker", "render", "--scope", ""}, "runtime"},
+		{[]string{"proxy", "tunnel", "start", ""}, "saved"},
+		{[]string{"configs", "source", "set", "--kind", ""}, "docker"},
+		{[]string{"proxies", "copy", ""}, "saved"},
+		{[]string{"proxies", "copy", "saved", ""}, "saved"},
+		{[]string{"proxies", "export", "--format", ""}, "url"},
+		{[]string{"proxies", "edit", ""}, ""},
+		{[]string{"groups", "edit", ""}, ""},
+		{[]string{"diagnostics", "network", ""}, ""},
+		{[]string{"proxy", "docker", "test", "--container", ""}, ""},
+	} {
+		out, _, err := run(t, deps, append([]string{"__complete"}, test.args...)...)
+		if err != nil || !strings.Contains(out, test.want) || !strings.Contains(out, ":4") {
+			t.Fatalf("%v -> %q %v", test.args, out, err)
+		}
+	}
+	for _, args := range [][]string{{"proxies", "import", "--file", ""}, {"proxies", "export", "--output", ""}, {"proxy", "docker", "render", "--output", ""}} {
+		out, _, err := run(t, deps, append([]string{"__complete"}, args...)...)
+		if err != nil || strings.Contains(out, ":4") {
+			t.Fatalf("local filename completion lost: %v => %q %v", args, out, err)
+		}
+	}
+	root := New(deps)
+	if cmd, _, err := root.Find([]string{"setup"}); err == nil && cmd.Name() == "setup" {
+		for _, test := range []struct {
+			args []string
+			want string
+		}{{[]string{"setup", "--backend", ""}, "native"}, {[]string{"setup", "--input-kind", ""}, "subscription"}, {[]string{"setup", "--preset", ""}, "cn-split"}, {[]string{"setup", "--category", ""}, "media-hkmt"}, {[]string{"setup", "--service-scope", ""}, "system"}, {[]string{"cores", "configure", ""}, "fixture-core"}, {[]string{"rules", "preset", "apply", ""}, "simple"}, {[]string{"rules", "preset", "update", "--core", ""}, "fixture-core"}} {
+			out, _, err := run(t, deps, append([]string{"__complete"}, test.args...)...)
+			if err != nil || !strings.Contains(out, test.want) || !strings.Contains(out, ":4") {
+				t.Fatalf("%v => %q %v", test.args, out, err)
+			}
+		}
+	}
+}
 
 func TestCompletionInstallOwnershipAndStatus(t *testing.T) {
 	isolated(t)

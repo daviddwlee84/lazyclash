@@ -193,6 +193,8 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 			}
 			if previous.TransportOverride || previous.Controller != oldController || previous.SSHHost != oldSSH {
 				previous.RuleSource = nil
+				previous.ConfigSource = nil
+				previous.ManagedCoreID = ""
 			}
 			previous.TransportOverride = false
 			draft = previous

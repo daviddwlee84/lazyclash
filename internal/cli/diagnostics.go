@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -64,7 +65,12 @@ func (o *options) authenticatedDiagnostic(cmd *cobra.Command, t config.Target, r
 	if !connection.IsAuthRequired(err) || o.json || !o.deps.Terminal(cmd.InOrStdin(), cmd.ErrOrStderr()) {
 		return err
 	}
-	auth, e := o.deps.Authenticate(cmd.Context(), t.SSHHost)
+	host := t.SSHHost
+	var required *connection.AuthRequiredError
+	if errors.As(err, &required) {
+		host = required.Host
+	}
+	auth, e := o.deps.Authenticate(cmd.Context(), host)
 	if e != nil {
 		return e
 	}
@@ -106,7 +112,7 @@ func (o *options) targetTestCommand() *cobra.Command {
 
 func (o *options) diagnosticsCommand() *cobra.Command {
 	group := &cobra.Command{Use: "diagnostics", Short: "Manually probe egress through the selected target's explicit data proxy"}
-	group.AddCommand(o.diagnosticURLCommand())
+	group.AddCommand(o.diagnosticURLCommand(), o.diagnosticNetworkCommand())
 	group.AddCommand(&cobra.Command{Use: "ip", Short: "Read IP.SB egress IP and location through the configured proxy", Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error {
 		defer connection.CloseAuthentications()
 		if err := o.writable(); err != nil {

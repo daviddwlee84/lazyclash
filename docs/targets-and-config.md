@@ -99,6 +99,12 @@ validator inside Docker; leave that rule-source binding unset. Host DNS/routes
 and a bridge-network container's DNS/routes are also different observation
 contexts. See the [Docker references](references.md#host-diagnostics).
 
+Node/group editing has a separate Docker-aware `configs source` adapter from
+v0.1.6; it verifies the host bind and container reload path rather than expanding
+the older rule-source binding. See [nodes and groups](proxies-and-groups.md).
+`setup` can also create an explicitly owned native/Docker client and register its
+target; see [managed clients](managed-cores.md).
+
 ## Management and request traffic
 
 HTTP(S) controllers expose Mihomo's external control API. Unix socket targets

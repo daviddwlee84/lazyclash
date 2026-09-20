@@ -28,6 +28,7 @@ func (o *options) registered(cmd *cobra.Command) (config.Config, string, int, er
 
 func (o *options) configCommands() *cobra.Command {
 	group := &cobra.Command{Use: "configs", Short: "Register and apply complete core-host YAML files", Long: "Configs are complete YAML files on the core host. Applying one changes runtime settings, not the startup source or a GUI client's profile selection. Relative resources still use the core's existing home directory."}
+	group.AddCommand(o.configWorkCommands()...)
 	group.AddCommand(&cobra.Command{Use: "list", Short: "List YAML files registered for this target", Args: argsExact(0), RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, _, i, e := o.registered(cmd)
 		if e != nil {

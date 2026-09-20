@@ -89,6 +89,15 @@ terminal; after return, reacquire it, refresh relevant state, and restore focus.
 Handle ordinary completion, error, and cancellation through the same return path.
 Keep child errors visible without abandoning a usable dashboard.
 
+A dashboard can hand off to the same Cobra command and wizard used standalone
+after releasing its reader (for example, Bubble Tea's `Exec` adapter). Forward the
+chosen target/config and read-only state explicitly. Prevent a second handoff and
+reject stale returns after target changes. Reload affected registrations and
+reconnect when transport identity changes; setup must remain usable after the last
+target is removed. Keep a child's printed result visible until acknowledgement
+before reacquiring the dashboard. Cancellation before an operation needs no extra
+pause. Verify release → wizard → result → return in a real PTY.
+
 Use cleanup paths for raw mode, alternate screen, cursor visibility, mouse
 capture, bracketed paste, and enabled keyboard protocols. Test normal quit,
 startup failure, handled signals, and supported panic recovery. `os.Exit` skips
@@ -123,6 +132,10 @@ it with a private socket or a shorter timeout. A private app-owned master can
 provide scoped fallback reuse when no shared policy applies; document its
 lifetime and cleanup. Reusing a persistent authenticated connection does not
 mean the application cached the password.
+
+An explicitly requested persistent shell tunnel has a different lifetime from an
+API request. Read [shell-context.md](shell-context.md) before borrowing a master
+whose idle policy may expire while only a forwarding listener remains.
 
 Track ownership of the master separately from each forwarding. A master using
 the user's sharing policy remains shared even if this app started it. On a

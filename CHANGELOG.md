@@ -1,10 +1,30 @@
 # Changelog
 
 User-facing changes are recorded here for every published version. Install a
-fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.5`,
+fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.6`,
 or use `@latest` to upgrade. Check the installed binary with `lazyclash --version`.
 
 ## Unreleased
+
+## 0.1.6 — 2026-09-21
+
+- Added source-backed node/group editing, cross-target copies, private backups,
+  guarded receipts and verification for native, Docker and Verge 2.5.2 owners.
+  Common group fields retain raw advanced options and ordered membership.
+- Import/export SS, VMess, VLESS, Trojan and Hysteria2 links; share complete
+  Mihomo YAML/JSON, clipboard URLs and offline terminal/PNG QR codes. Unsupported
+  URI fields are reported instead of silently discarded.
+- Added standalone bash/zsh proxy-on/off integration, original environment
+  restoration, selected-target command execution and independent persistent
+  SSH forwards. Docker outputs distinguish containers, builds and daemon guidance.
+- Added native/Docker client setup and owned-core lifecycle, version/digest
+  verification, automatic target registration, offline cn-split/simple rule
+  snapshots and explicit bootstrap routes.
+- Added passive VPN/TUN/scoped-DNS diagnostics, platform-aware service and
+  system-proxy configuration, reviewed bypass proposals and host-side network
+  rollback guards. Full-tunnel VPN conflicts require choosing a routing owner.
+- Added shared CLI/TUI wizards, mouse actions, source editing/share shortcuts,
+  offline completion candidates and operating/agent documentation.
 
 ## 0.1.5 — 2026-09-20
 
