@@ -1,0 +1,27 @@
+name: test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: go build -o bin/lazyclash ./cmd/lazyclash
+      - run: go build -o bin/fakecore ./tools/fakecore
+      - name: Exercise a real terminal with isolated controllers
+        run: |
+          python3 -m venv "$RUNNER_TEMP/pty-venv"
+          "$RUNNER_TEMP/pty-venv/bin/pip" install pyte==0.8.2
+          "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_smoke.py

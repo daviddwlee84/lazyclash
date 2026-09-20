@@ -36,3 +36,8 @@
 *.local
 .direnv/
 # <<< dev gitignore <<<
+
+# Local build and verification artifacts
+/bin/
+/lazyclash
+/coverage.out
