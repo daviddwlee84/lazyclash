@@ -117,6 +117,12 @@ guided setup, validation, configuration, or shell integration.
 - Read [async-terminal.md](references/async-terminal.md) for background work,
   startup performance, or terminal handoffs. It includes dev-cli lessons with
   sources and performance evidence guidance.
+- Read [agent-facing-cli.md](references/agent-facing-cli.md) when a tool needs
+  an embedded operational skill or a dependable automation interface. Keep
+  agent and human entry points on the same services; a bundled skill is optional.
+- Read [go-distribution.md](references/go-distribution.md) when preparing a Go
+  CLI for other users: start with the actual main-package install path, version
+  reporting, and published tags; add package managers when the release needs them.
 - Read [verification.md](references/verification.md) before declaring an
   interaction implemented. Select applicable cases, use deterministic state
   tests, and exercise a real PTY; screenshots cannot prove input behavior.

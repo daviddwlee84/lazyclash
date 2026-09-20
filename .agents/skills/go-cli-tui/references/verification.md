@@ -7,6 +7,7 @@ not a claim that a generated application has already passed these checks.
 
 - [Verification sequence](#verification-sequence)
 - [Behavior cases](#behavior-cases)
+- [Unicode emulator limits](#unicode-emulator-limits)
 - [Three development walkthroughs](#three-development-walkthroughs)
 - [Evidence](#evidence)
 
@@ -65,6 +66,24 @@ its terminal interaction works on that OS.
 For a CLI-only change, skip irrelevant full-screen cases. For a navigation or
 wizard change, arrow/Vim equivalence, text ownership, Back/cancel, and real input
 checks are central. A resize snapshot alone cannot validate key handling.
+
+## Unicode emulator limits
+
+During lazyclash's terminal checks, pyte 0.8.2 truncated draw chunks at VS16/ZWJ,
+making later columns appear absent even when the application's `View` retained
+the text. Its replay snapshot therefore was not a reliable Unicode layout
+oracle for that case. Do not remove supported glyphs or change product layout
+solely to satisfy this emulator artifact.
+
+Combine direct `View` checks of complete grapheme-bearing rows and ANSI-aware
+cell widths with actual PTY input, resize, and terminal-restoration checks.
+When visual appearance remains disputed, inspect a Unicode-capable terminal;
+neither cell-width assertions nor a limited emulator prove final glyph rendering.
+Keep the limitation specific to the tool/version and observed input.
+
+Source: lazyclash [PTY harness](https://github.com/daviddwlee84/lazyclash/blob/b0a6564403e9794bc5c3e0634207f96a30b78eb7/scripts/pty_smoke.py)
+and [View regression tests](https://github.com/daviddwlee84/lazyclash/blob/b0a6564403e9794bc5c3e0634207f96a30b78eb7/internal/tui/model_test.go),
+reviewed 2026-09-20.
 
 ## Three development walkthroughs
 
