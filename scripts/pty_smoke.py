@@ -40,6 +40,7 @@ class Terminal:
     def __init__(self, settings, env):
         self.master, self.slave = pty.openpty()
         self.original = termios.tcgetattr(self.slave)
+        self.raw = bytearray()
         self.screen = pyte.Screen(120, 32)
         self.stream = pyte.Stream(self.screen)
         self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
@@ -72,11 +73,25 @@ class Terminal:
                 break
             if b"\x1b[6n" in data:
                 os.write(self.master, b"\x1b[1;1R")
+            self.raw.extend(data)
             self.stream.feed(self.decoder.decode(data))
 
     def send(self, data):
         os.write(self.master, data.encode() if isinstance(data, str) else data)
         self.read()
+
+    def mouse(self, x, y, button=0, release=True):
+        self.send(f"\x1b[<{button};{x + 1};{y + 1}M")
+        if release:
+            self.send(f"\x1b[<{button};{x + 1};{y + 1}m")
+
+    def click_label(self, label):
+        for y, line in enumerate(self.screen.display):
+            x = line.find(label)
+            if x >= 0:
+                self.mouse(x, y)
+                return
+        raise AssertionError(f"missing button {label}\n{self.text()}")
 
     def text(self):
         return "\n".join(line.rstrip() for line in self.screen.display)
@@ -138,8 +153,14 @@ controller = "{urls[1]}"
                 env.pop(key, None)
             env.update(HOME=scratch, XDG_CONFIG_HOME=scratch, TERM="xterm-256color", NO_COLOR="1")
             terminal = Terminal(settings, env)
-            terminal.wait(lambda: "Updated" in terminal.text() and "Groups" in terminal.text(), "initial proxy view")
+            terminal.wait(lambda: "[1 Overview]" in terminal.text() and "Core RSS" in terminal.text(), "initial overview")
+            terminal.wait(lambda: "1002h" in terminal.raw.decode("ascii", "ignore"), "SGR mouse capture enabled")
             wide = terminal.text()
+            terminal.send("M")
+            terminal.wait(lambda: "1002l" in terminal.raw.decode("ascii", "ignore"), "mouse disabled for text selection")
+            terminal.send("M")
+            terminal.click_label("2 Proxies")
+            terminal.wait(lambda: "Updated" in terminal.text() and "Groups" in terminal.text(), "mouse-selected proxy tab")
 
             # Text input and bracketed paste must not execute navigation/actions.
             terminal.send("/jkhql/?")
@@ -154,7 +175,10 @@ controller = "{urls[1]}"
             terminal.send("\x1b")
             terminal.send("\t")
             terminal.send("/東京\r")
-            terminal.send("\r")
+            # A row click only selects; the explicit button applies the node.
+            terminal.mouse(38, 4)
+            assert request(urls[0], "/proxies")["proxies"]["🚀 Proxy"]["now"] != "🇯🇵 東京/01"
+            terminal.click_label("[enter Choose]")
             terminal.wait(lambda: request(urls[0], "/proxies")["proxies"]["🚀 Proxy"]["now"] == "🇯🇵 東京/01", "node selection read-back")
             terminal.send("\x1b")
             terminal.send("m")
@@ -167,7 +191,8 @@ controller = "{urls[1]}"
             terminal.wait(lambda: "Close all" in terminal.text(), "close-all review")
             terminal.send("\x1b")
             assert len(request(urls[0], "/connections")["connections"]) == 2
-            terminal.send("Xy")
+            terminal.send("X")
+            terminal.click_label("[Confirm]")
             terminal.wait(lambda: not request(urls[0], "/connections")["connections"], "confirmed close-all")
 
             terminal.send("7")
@@ -197,6 +222,17 @@ controller = "{urls[1]}"
             assert terminal.process.poll() is None, "narrow resize crashed"
             terminal.resize(120, 32)
 
+            # Target connectivity is read-only and does not save or select.
+            before_settings = settings.read_bytes()
+            terminal.send("t")
+            terminal.click_label("[T Test]")
+            terminal.wait(lambda: "Connectivity" in terminal.text(), "target connectivity test")
+            terminal.click_label("[e Edit]")
+            terminal.click_label("[Ctrl+T Test]")
+            terminal.wait(lambda: "Connectivity" in terminal.text() and "connected" in terminal.text().lower(), "draft connectivity test")
+            terminal.click_label("[Cancel]")
+            assert settings.read_bytes() == before_settings, "draft test rewrote config"
+
             # Switch targets; old target writes must never be repeated on new core.
             terminal.send("tj\r")
             terminal.wait(lambda: "Fixture Two [connected]" in terminal.text(), "second target handshake")
@@ -218,7 +254,7 @@ controller = "{urls[1]}"
             terminal.send("echo-restored\n")
             terminal.process.wait(timeout=5)
             assert terminal.process.returncode == 0, terminal.text()
-            print("PTY PASS: startup, typing/paste, node/mode writes, confirmations, all pages, streams, resize, target switching, terminal restoration")
+            print("PTY PASS: overview startup, SGR mouse tabs/row/button/modal, mouse toggle, typing/paste, node/mode writes, confirmations, all pages, streams, resize, target/draft connectivity, target switching, terminal restoration")
     finally:
         if terminal:
             terminal.close()

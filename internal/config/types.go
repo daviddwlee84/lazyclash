@@ -5,23 +5,58 @@ type Config struct {
 	loadedPath    string
 	original      []byte
 	existed       bool
-	DefaultTarget string   `toml:"default_target,omitempty" json:"default_target,omitempty"`
-	Targets       []Target `toml:"targets" json:"targets"`
+	DefaultTarget string         `toml:"default_target,omitempty" json:"default_target,omitempty"`
+	Targets       []Target       `toml:"targets" json:"targets"`
+	TUI           TUIPreferences `toml:"tui,omitempty" json:"tui,omitempty"`
 }
 
 type Target struct {
-	ID           string       `toml:"id" json:"id"`
-	Name         string       `toml:"name,omitempty" json:"name,omitempty"`
-	Controller   string       `toml:"controller" json:"controller"`
-	SecretFile   string       `toml:"secret_file,omitempty" json:"secret_file,omitempty"`
-	SecretEnv    string       `toml:"secret_env,omitempty" json:"secret_env,omitempty"`
-	CAFile       string       `toml:"ca_file,omitempty" json:"ca_file,omitempty"`
-	SSHHost      string       `toml:"ssh_host,omitempty" json:"ssh_host,omitempty"`
-	SourceConfig string       `toml:"source_config,omitempty" json:"source_config,omitempty"`
-	Configs      []CoreConfig `toml:"configs,omitempty" json:"configs,omitempty"`
-	Secret       string       `toml:"-" json:"-"`
-	Transient    bool         `toml:"-" json:"-"`
-	AuthRequired bool         `toml:"-" json:"auth_required,omitempty"`
+	ID                string       `toml:"id" json:"id"`
+	Name              string       `toml:"name,omitempty" json:"name,omitempty"`
+	Controller        string       `toml:"controller" json:"controller"`
+	SecretFile        string       `toml:"secret_file,omitempty" json:"secret_file,omitempty"`
+	SecretEnv         string       `toml:"secret_env,omitempty" json:"secret_env,omitempty"`
+	CAFile            string       `toml:"ca_file,omitempty" json:"ca_file,omitempty"`
+	SSHHost           string       `toml:"ssh_host,omitempty" json:"ssh_host,omitempty"`
+	SourceConfig      string       `toml:"source_config,omitempty" json:"source_config,omitempty"`
+	ProbeProxy        string       `toml:"probe_proxy,omitempty" json:"probe_proxy,omitempty"`
+	ProbeUsername     string       `toml:"probe_username,omitempty" json:"probe_username,omitempty"`
+	ProbePasswordEnv  string       `toml:"probe_password_env,omitempty" json:"probe_password_env,omitempty"`
+	ProbePasswordFile string       `toml:"probe_password_file,omitempty" json:"probe_password_file,omitempty"`
+	ProbeCAFile       string       `toml:"probe_ca_file,omitempty" json:"probe_ca_file,omitempty"`
+	Configs           []CoreConfig `toml:"configs,omitempty" json:"configs,omitempty"`
+	Secret            string       `toml:"-" json:"-"`
+	Transient         bool         `toml:"-" json:"-"`
+	AuthRequired      bool         `toml:"-" json:"auth_required,omitempty"`
+}
+
+// TUIPreferences keeps absent values distinct from explicit choices. Reading
+// defaults never changes the saved configuration.
+type TUIPreferences struct {
+	StartPage     string `toml:"start_page,omitempty" json:"start_page,omitempty"`
+	Mouse         *bool  `toml:"mouse,omitempty" json:"mouse,omitempty"`
+	GraphStyle    string `toml:"graph_style,omitempty" json:"graph_style,omitempty"`
+	HistoryWindow string `toml:"history_window,omitempty" json:"history_window,omitempty"`
+}
+
+func (p TUIPreferences) WithDefaults() TUIPreferences {
+	if p.StartPage == "" {
+		p.StartPage = "overview"
+	}
+	if p.Mouse == nil {
+		enabled := true
+		p.Mouse = &enabled
+	} else {
+		enabled := *p.Mouse
+		p.Mouse = &enabled
+	}
+	if p.GraphStyle == "" {
+		p.GraphStyle = "braille"
+	}
+	if p.HistoryWindow == "" {
+		p.HistoryWindow = "5m"
+	}
+	return p
 }
 
 type CoreConfig struct {

@@ -15,6 +15,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/diagnostics"
 	"github.com/daviddwlee84/lazyclash/internal/tui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -47,11 +48,15 @@ type Dependencies struct {
 	Terminal     func(io.Reader, io.Writer) bool
 	RunTUI       func(context.Context, tui.Options, io.Reader, io.Writer) error
 	Authenticate func(context.Context, string) (*exec.Cmd, error)
+	RunEditor    func(*exec.Cmd) error
+	Diagnostics  diagnostics.Options
 }
 
 type options struct {
 	path, target, controller, ssh, secretFile, secretEnv, caFile string
 	json, readOnly                                               bool
+	page                                                         string
+	mouse                                                        bool
 	deps                                                         Dependencies
 }
 
@@ -69,6 +74,9 @@ func New(deps Dependencies) *cobra.Command {
 	}
 	if deps.Authenticate == nil {
 		deps.Authenticate = connection.AuthenticateCommand
+	}
+	if deps.RunEditor == nil {
+		deps.RunEditor = func(cmd *exec.Cmd) error { return cmd.Run() }
 	}
 	if deps.RunTUI == nil {
 		deps.RunTUI = func(ctx context.Context, opts tui.Options, in io.Reader, out io.Writer) error {
@@ -116,6 +124,7 @@ func New(deps Dependencies) *cobra.Command {
 			initial := target.ID
 			opts := tui.Options{
 				Config: cfg, InitialTarget: initial, ReadOnly: o.readOnly,
+				StartPage: o.page, TestTarget: o.testTargetText, ProbeIP: o.probeIPText, ProbeLatency: o.probeLatencyText,
 				Open: func(ctx context.Context, t config.Target) (*core.Client, io.Closer, error) {
 					return o.deps.Open(ctx, t, o.readOnly)
 				},
@@ -165,6 +174,9 @@ func New(deps Dependencies) *cobra.Command {
 				},
 				Authenticate: o.deps.Authenticate,
 			}
+			if cmd.Flags().Changed("mouse") {
+				opts.Mouse = &o.mouse
+			}
 			return o.deps.RunTUI(cmd.Context(), opts, cmd.InOrStdin(), cmd.OutOrStdout())
 		},
 	}
@@ -173,8 +185,19 @@ func New(deps Dependencies) *cobra.Command {
 		if skillInvocation(cmd) {
 			return nil
 		}
+		if o.page != "" {
+			valid := false
+			for _, page := range []string{"overview", "proxies", "connections", "logs", "rules", "providers", "configs"} {
+				valid = valid || o.page == page
+			}
+			if !valid {
+				return usage("invalid --page %q; see --help", o.page)
+			}
+		}
 		return o.validateSelection(cmd)
 	}
+	root.Flags().StringVar(&o.page, "page", "", "startup page: overview, proxies, connections, logs, rules, providers, configs")
+	root.Flags().BoolVar(&o.mouse, "mouse", true, "enable TUI mouse interaction (toggle with M)")
 	root.Flags().Bool("skill", false, "print the bundled agent operating guide without connecting")
 	f := root.PersistentFlags()
 	f.StringVar(&o.path, "config", "", "lazyclash TOML settings path")
@@ -187,7 +210,7 @@ func New(deps Dependencies) *cobra.Command {
 	f.BoolVar(&o.json, "json", false, "JSON data output; logs emit NDJSON")
 	f.BoolVar(&o.readOnly, "read-only", false, "disable control actions, latency tests and healthchecks")
 	root.AddCommand(o.targetCommands(), o.configCommands(), o.statusCommand(), o.proxyCommands(), o.connectionCommands(), o.logsCommand(), o.rulesCommand(), o.providerCommands(), o.modeCommand(), o.tunCommand(), o.allowLANCommand(), o.settingsCommand())
-	root.AddCommand(o.skillCommand())
+	root.AddCommand(o.skillCommand(), o.diagnosticsCommand())
 	root.AddCommand(&cobra.Command{Use: "completion [bash|zsh|fish|powershell]", Short: "Generate shell completion", Args: argsExact(1), ValidArgs: []string{"bash", "zsh", "fish", "powershell"}, RunE: func(cmd *cobra.Command, args []string) error {
 		switch args[0] {
 		case "bash":
@@ -245,7 +268,9 @@ func (o *options) validateSelection(cmd *cobra.Command) error {
 	return nil
 }
 
-func (o *options) load(cmd *cobra.Command) (config.Config, string, error) {
+// Path resolution is deliberately independent of parsing: a broken file must
+// remain reachable through settings path/edit.
+func (o *options) settingsPath(cmd *cobra.Command) (string, bool, error) {
 	path := o.path
 	explicit := globalChanged(cmd, "config")
 	if !explicit {
@@ -257,9 +282,17 @@ func (o *options) load(cmd *cobra.Command) (config.Config, string, error) {
 	if path == "" {
 		p, e := config.DefaultPath()
 		if e != nil {
-			return config.Config{}, "", e
+			return "", explicit, e
 		}
 		path = p
+	}
+	return path, explicit, nil
+}
+
+func (o *options) load(cmd *cobra.Command) (config.Config, string, error) {
+	path, explicit, err := o.settingsPath(cmd)
+	if err != nil {
+		return config.Config{}, path, err
 	}
 	cfg, err := config.Load(path, explicit)
 	if err != nil {

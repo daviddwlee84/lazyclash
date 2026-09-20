@@ -18,8 +18,9 @@ The `/cmd/lazyclash` suffix identifies the executable package. Go installs it in
 `go env GOBIN` when configured, otherwise in the first `go env GOPATH` entry's
 `bin` directory (usually `~/go/bin`). Add that directory to your shell's PATH.
 Repeating the install command upgrades to the latest published version. To pin
-the first release, use `@v0.1.0`; `@main` explicitly opts into the development
+a release, use `@v0.1.1`; `@main` explicitly opts into the development
 branch. `@latest` selects a published version, not necessarily the newest commit.
+See [CHANGELOG.md](CHANGELOG.md) for changes between versions.
 
 To build a local checkout:
 
@@ -61,7 +62,27 @@ If controller discovery requires authentication, configure a secret reference or
 
 ## Dashboard
 
-The header always identifies the target and its runtime mode/TUN state. The Proxies page opens first with group, member and detail panes. Other pages provide overview/traffic, connections, live logs, ordered rules, providers and registered YAML configurations.
+The header identifies the target and its runtime mode/TUN state. Overview opens
+first with upload/download speed and totals, core RSS, connection count, traffic
+and resource histories, protocol distribution, top outbounds and observed
+routes. The existing Proxies, Connections, Logs, Rules, Providers and Configs
+pages keep their numeric shortcuts (1–7). Use `--page proxies` to start in the
+previous group/member/detail view.
+
+Overview retains up to 15 minutes of history in memory per target, with 1-, 5-
+and 15-minute windows. Graphs use actual sample times and leave gaps when a
+target is disconnected or inactive. Each source shows its own age; samples over
+five seconds old are stale. Initial zero memory is warmup, and memory means
+**core RSS**, not host RAM. Core counters can reset. Connection distributions
+use the full API snapshot; the browsing list is capped at 2,000 rows. Select a
+distribution row and use Enter/Inspect for matching connections, or select a group
+to open Proxies. Tab cycles these entries; arrows scroll the summary. `w` cycles
+the time window, `v` cycles the graph style, `i` tests IP.SB and `L` tests websites.
+
+Mouse input is enabled by default: click tabs, focus panes, select rows and
+scroll with the wheel. Row clicks select; action buttons perform the named
+operation. Forms support field focus and Save/Cancel/Test buttons. Toggle mouse
+capture with `M` or `--mouse=false` to use native terminal text selection.
 
 Use `?` for contextual help and `:` for the action palette. Arrow keys and `hjkl` navigate; Tab/Shift+Tab move focus; `/` filters; Esc returns; `q` quits. Letters typed into a field remain text. Numeric page keys switch views. The target picker and action palette expose target management and SSH discovery. Narrow terminals show the focused pane.
 
@@ -119,6 +140,10 @@ lazyclash providers update rules NAME
 lazyclash providers healthcheck NAME
 lazyclash configs show --json
 lazyclash settings show
+lazyclash settings edit
+lazyclash targets test server --json
+lazyclash --target server diagnostics ip --json
+lazyclash --target server diagnostics latency --json
 lazyclash completion zsh
 ```
 
@@ -150,12 +175,22 @@ early disconnection, broken output and caller cancellation remain failures.
 
 ## Targets and settings
 
-Preferences use `$XDG_CONFIG_HOME/lazyclash/config.toml`, falling back to `~/.config/lazyclash/config.toml` on both macOS and Linux. Relative XDG paths are ignored. Use `--config` or `LAZYCLASH_CONFIG` for a different existing file. Reads do not create directories.
+Preferences use `$XDG_CONFIG_HOME/lazyclash/config.toml`, falling back to `~/.config/lazyclash/config.toml` on both macOS and Linux. Relative XDG paths are ignored. Use `--config` or `LAZYCLASH_CONFIG` for a different existing file. Reads do not create directories. `settings path` prints the location even if
+the file is malformed. `settings edit` opens `$VISUAL`, then `$EDITOR`, then
+`vi`; executable arguments may be quoted, without shell evaluation. It requires
+a terminal, creates a missing file privately, and validates after the editor
+exits. Invalid edits are retained so they can be repaired.
 
 The order of `[[targets]]` is the display order. `default_target` chooses startup; otherwise the first target is used. Explicit `--target`/`--controller` overrides environment selection (`LAZYCLASH_TARGET`/`LAZYCLASH_CONTROLLER`, with `CLASH_CONTROLLER` as a legacy fallback), which overrides the configured default. A temporary endpoint may use `CLASH_SECRET`; saved targets only use their own credential references. Secrets from one discovered target are never reused for another.
 
 ```toml
 default_target = "desktop"
+
+[tui]
+start_page = "overview" # any of the seven page names
+mouse = true
+graph_style = "braille" # braille, block, ascii
+history_window = "5m"   # 1m, 5m, 15m
 
 [[targets]]
 id = "desktop"
@@ -169,6 +204,7 @@ name = "Home server"
 controller = "http://127.0.0.1:9090"
 ssh_host = "home-server"
 secret_file = "/absolute/local/path/server.secret"
+probe_proxy = "http://127.0.0.1:7890" # data proxy on the SSH host
 
 [[targets.configs]]
 id = "work"
@@ -179,6 +215,44 @@ path = "/etc/mihomo/work.yaml"
 Optional target fields: `ca_file` for a local PEM CA bundle and `source_config` for a runtime YAML on the target host. `source_config` only supplies credentials if its controller still matches the target. `secret_env` and `secret_file` are mutually exclusive and take precedence over that source. Existing `[[targets]]` array-table files preserve comments and unrelated fields when edited; unsupported compact TOML layouts require manual editing. Concurrent edits are detected before replacing the file. Saved settings have mode 0600.
 
 SSH targets use system `ssh`, including configured aliases, keys, agent, ProxyJump and known_hosts. Background commands cannot prompt; an explicit foreground authentication action can establish a private, short-lived OpenSSH control connection. Each tunnel listens only on loopback, and cleanup closes only resources created by lazyclash. HTTPS still verifies the original controller hostname. Remote Unix-socket forwarding is not implemented; local Unix sockets are supported.
+
+## Connectivity and egress diagnostics
+
+`targets test [ID]` checks controller access (including SSH and authentication),
+core version and readable runtime settings. It is safe with `--read-only` and
+does not prove internet access. In the TUI, use `t` for the target picker,
+`n`/`e` to add/edit, and Test to check a saved target or unsaved draft. A draft
+test neither saves nor switches targets, and offline targets can still be saved.
+
+For outbound diagnostics, explicitly register the selected target's **data
+proxy**. The external-controller API port is a separate endpoint:
+
+```sh
+lazyclash targets edit server --probe-proxy http://127.0.0.1:7890
+lazyclash targets test server --json
+lazyclash --target server diagnostics ip --json
+lazyclash --target server diagnostics latency --json
+```
+
+`probe_proxy` accepts HTTP, HTTPS, SOCKS5 and SOCKS5H URLs with an explicit port.
+For SSH targets, that host and port are resolved from the SSH host through a
+separate owned tunnel; for other targets they are reached locally. No probe
+falls back to a direct, environment or system proxy route. A registered data
+proxy can be tested even if the controller API is offline.
+
+Optional `probe_username`, `probe_password_env` or `probe_password_file`, and
+`probe_ca_file` configure data-proxy authentication and HTTPS trust independently
+of controller credentials. Password references resolve locally and are mutually
+exclusive. Use the corresponding `targets add/edit --probe-*` flags (the CA flag
+is `--probe-ca-cert`); passwords do not belong in URLs or command arguments.
+
+IP.SB egress uses an eight-second bound and identifies that request's source IP.
+In rule mode other destinations may take different routes. Website checks send
+fresh HEAD requests to Google, Cloudflare and GitHub, measuring time to response
+headers with a five-second bound per site, excluding SSH tunnel setup. HTTP
+errors retain their observed latency; any failed site gives a nonzero exit with
+all available per-site results on stdout. These active requests are manual and
+are disabled by `--read-only`.
 
 ## Applying existing YAML
 

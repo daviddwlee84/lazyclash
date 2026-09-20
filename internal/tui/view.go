@@ -29,16 +29,15 @@ func (m *Model) View() tea.View {
 	if m.gPrefix {
 		status = "g … (press g for first row)"
 	}
+	if query := m.state().view(m.page).query; query != "" {
+		status = "Filter: " + core.Sanitize(query) + " · Esc clears · " + status
+	}
 	lines = append(lines, fit(core.Sanitize(status), width))
 	if m.overlay == "search" {
 		lines = append(lines, fit("Search: "+m.input.View(), width))
 	} else {
-		v := m.state().view(m.page)
-		filter := ""
-		if v.query != "" {
-			filter = "Filter: " + core.Sanitize(v.query) + "  "
-		}
-		lines = append(lines, fit(filter+m.contextHint(), width))
+		toolbar, _ := m.toolbar(width)
+		lines = append(lines, toolbar)
 	}
 	lines = append(lines, fit(m.footer(), width))
 	if len(lines) > height {
@@ -50,6 +49,9 @@ func (m *Model) View() tea.View {
 	}
 	view := tea.NewView(output)
 	view.AltScreen = true
+	if m.mouseEnabled {
+		view.MouseMode = tea.MouseModeCellMotion
+	}
 	view.WindowTitle = "lazyclash"
 	if cursor := m.input.Cursor(); cursor != nil {
 		y, x := -1, 0
@@ -60,17 +62,11 @@ func (m *Model) View() tea.View {
 		case "palette":
 			y = 3
 		case "form":
-			if m.form != nil && m.form.index < len(m.form.fields) {
-				n := len(m.form.fields)
-				lineCount := n + 4
-				if m.form.err != "" {
-					lineCount += 2
-				}
-				y = n + 5
-				if lineCount > contentHeight {
-					y = 6
-				}
+			_, _, inputY := m.formLayout(width, contentHeight)
+			if inputY >= 0 {
+				y = inputY + 2
 			}
+
 		}
 		if y >= 0 && y < height {
 			cursor.Position.X = min(width-1, max(0, cursor.Position.X+x))
@@ -120,43 +116,30 @@ func boolLabel(obj core.Object, key string) string {
 	}
 	return "off"
 }
-func (m *Model) tabs(width int) string {
-	var parts []string
-	for i, name := range pageNames {
-		label := fmt.Sprintf("%d %s", i+1, name)
-		if page(i) == m.page {
-			label = m.accent("[" + label + "]")
-		}
-		parts = append(parts, label)
-	}
-	full := strings.Join(parts, "  ")
-	if ansi.StringWidth(full) > width {
-		return fit(fmt.Sprintf("[%d %s]  [ / ] change page · 1–7", m.page+1, pageNames[m.page]), width)
-	}
-	return fit(full, width)
-}
+func (m *Model) tabs(width int) string { text, _ := m.tabLayout(width); return text }
 func (m *Model) body(width, height int) string {
 	if m.page == overview {
 		return m.overviewView(width, height)
 	}
-	if m.page == proxies {
-		return m.proxiesView(width, height)
-	}
-	s := m.state()
-	v := s.view(m.page)
+	v := m.state().view(m.page)
 	fresh := m.freshness(m.page)
-	if m.page == connections && object(s.snap("connections").data)["lazyclashTruncated"] == true {
-		fresh += " · first 2000 connections shown"
+	if m.page == connections {
+		if object(m.state().snap("connections").data)["lazyclashTruncated"] == true {
+			fresh += " · first 2000 shown"
+		}
+		if v.exactFilter.Kind != "" {
+			fresh += " · exact " + v.exactFilter.Kind + " filter · Esc clears"
+		}
 	}
 	if m.page == logs {
-		fresh = "Logs: " + defaultString(s.logLevel, "all levels") + " · "
-		if s.follow {
+		fresh = "Logs: " + defaultString(m.state().logLevel, "all levels") + " · "
+		if m.state().follow {
 			fresh += "following"
 		} else {
 			fresh += "paused"
 		}
 		fresh += fmt.Sprintf(" · last %d retained", logLimit)
-		if e := s.streamErrors["logs"]; e != "" {
+		if e := m.state().streamErrors["logs"]; e != "" {
 			fresh += " · stale: " + e
 		}
 	}
@@ -166,78 +149,40 @@ func (m *Model) body(width, height int) string {
 			fresh = "Temporary target: : Edit current target and save before registering YAML"
 		}
 	}
-	if width < 100 {
-		if v.focus == 1 && m.page != logs {
-			return strings.Join(append([]string{fit(m.accent("Details · Shift+Tab returns"), width)}, m.detailLines(m.details(m.page), width, height-1, v.detailOffset)...), "\n")
-		}
-		return strings.Join(append([]string{fit(fresh, width)}, m.listLines(m.rowsFor(m.page, 0), &v.positions[0], width, height-1, true)...), "\n")
-	}
-	left := width * 55 / 100
-	right := max(1, width-left-3)
-	list := append([]string{fit(fresh, left)}, m.listLines(m.rowsFor(m.page, 0), &v.positions[0], left, height-1, v.focus == 0)...)
-	detail := append([]string{fit(m.focusTitle("Details", v.focus == 1), right)}, m.detailLines(m.details(m.page), right, height-1, v.detailOffset)...)
-	if m.page == logs {
-		return strings.Join(append([]string{fit(fresh, width)}, m.listLines(m.rowsFor(logs, 0), &v.positions[0], width, height-1, true)...), "\n")
-	}
-	return joinColumns([][]string{list, detail}, []int{left, right}, height)
-}
-func (m *Model) proxiesView(width, height int) string {
-	v := m.state().view(proxies)
-	fresh := m.freshness(proxies)
-	height = max(1, height-1)
-	if width < 100 {
-		title := "Groups"
-		pane := v.focus
-		var lines []string
-		if pane == 2 {
-			title = "Details"
-			lines = m.detailLines(m.details(proxies), width, height-1, v.detailOffset)
-		} else {
-			if pane == 1 {
-				title = "Members"
-				if g, ok := m.group(); ok {
-					title += " · " + g.Name
-				}
+	var columns [][]string
+	var widths []int
+	panes := m.panes(width, height)
+	for _, p := range panes {
+		title := fresh
+		if m.page == proxies {
+			title = []string{"Groups", "Members (* current)", "Details"}[p.pane]
+			if width < 100 {
+				title += " · Tab changes pane"
 			}
-			lines = m.listLines(m.rowsFor(proxies, pane), &v.positions[pane], width, height-1, true)
+		} else if p.detail {
+			title = "Details"
+			if width < 100 {
+				title += " · Shift+Tab returns"
+			}
 		}
-		return strings.Join(append([]string{fit(fresh, width), fit(m.accent(title)+" · Tab changes pane", width)}, lines...), "\n")
-	}
-	widths := []int{width * 27 / 100, width * 36 / 100, 0}
-	widths[2] = max(1, width-widths[0]-widths[1]-6)
-	groups := append([]string{fit(m.focusTitle("Groups", v.focus == 0), widths[0])}, m.listLines(m.rowsFor(proxies, 0), &v.positions[0], widths[0], height-1, v.focus == 0)...)
-	members := append([]string{fit(m.focusTitle("Members (* current)", v.focus == 1), widths[1])}, m.listLines(m.rowsFor(proxies, 1), &v.positions[1], widths[1], height-1, v.focus == 1)...)
-	detail := append([]string{fit(m.focusTitle("Details", v.focus == 2), widths[2])}, m.detailLines(m.details(proxies), widths[2], height-1, v.detailOffset)...)
-	return fit(fresh, width) + "\n" + joinColumns([][]string{groups, members, detail}, widths, height)
-}
-func (m *Model) overviewView(width, height int) string {
-	s := m.state()
-	version := object(s.snap("version").data)
-	cfg := m.configData()
-	lines := []string{
-		"Controller: " + m.target.Controller,
-		"SSH: " + defaultString(m.target.SSHHost, "local / direct"),
-		"Core version: " + defaultString(str(version, "version"), "unknown"),
-		"Mode: " + defaultString(str(cfg, "mode"), "unknown") + "   TUN (core report): " + boolLabel(object(cfg["tun"]), "enable") + "   Allow LAN: " + boolLabel(cfg, "allow-lan"),
-		"Upload: " + bytesLabel(s.traffic["up"]) + "/s   Download: " + bytesLabel(s.traffic["down"]) + "/s",
-		"Memory: " + bytesLabel(s.memory["inuse"]),
-		"", m.freshness(overview),
-		"", "m mode · u TUN · a Allow LAN · t choose target",
-		"TUN state is the core's response; system routing is not verified.",
-	}
-	for _, key := range []string{"traffic", "memory", "logs"} {
-		if e := s.streamErrors[key]; e != "" {
-			lines = append(lines, key+" stream stale: "+e)
+		var rows []string
+		if p.detail {
+			rows = m.detailLines(m.details(m.page), p.w, p.h-1, v.detailOffset)
+		} else {
+			rows = m.listLines(m.rowsFor(m.page, p.pane), &v.positions[p.pane], p.w, p.h-1, v.focus == p.pane)
 		}
+		columns = append(columns, append([]string{fit(m.focusTitle(title, v.focus == p.pane), p.w)}, rows...))
+		widths = append(widths, p.w)
 	}
-	if s.lastOperation != "" {
-		lines = append(lines, "Last operation: "+s.lastOperation)
+	h := height
+	if m.page == proxies {
+		h = max(0, height-1)
 	}
-	if s.lastApplied != "" {
-		lines = append(lines, "Last applied by lazyclash: "+s.lastApplied)
+	out := joinColumns(columns, widths, h)
+	if m.page == proxies {
+		out = fit(fresh, width) + "\n" + out
 	}
-	text := core.Sanitize(strings.Join(lines, "\n"))
-	return strings.Join(m.detailLines(text, width, height, m.state().view(overview).detailOffset), "\n")
+	return out
 }
 func (m *Model) freshness(p page) string {
 	keys := []string{"config"}
@@ -284,13 +229,7 @@ func (m *Model) listLines(rows []row, pos *position, width, height int, focused 
 		return fitLines("No matching items. / filter · r refresh · : actions", width, height)
 	}
 	selected := resolvePosition(pos, rows)
-	start := max(0, min(pos.offset, len(rows)-height))
-	if selected < start {
-		start = selected
-	}
-	if selected >= start+height {
-		start = selected - height + 1
-	}
+	start := visibleStart(pos, rows, height)
 	lines := make([]string, 0, height)
 	for i := start; i < len(rows) && len(lines) < height; i++ {
 		mark := "  "
@@ -439,9 +378,9 @@ func (m *Model) footer() string {
 	case "palette":
 		return "Type to find action · ↑↓ select · Enter run · Esc cancel"
 	case "form":
-		return "Tab / Enter next · Shift+Tab back · Esc cancel"
+		return "Tab / Enter next · Shift+Tab back · Ctrl+T test · Esc cancel"
 	case "targets":
-		return "↑↓/jk select · Enter connect · n add · e edit · Esc close"
+		return "↑↓/jk select · Enter connect · T test · n add · e edit · Esc close"
 	case "confirm":
 		return "Enter / y confirm · Esc / n cancel"
 	case "help":
@@ -449,9 +388,12 @@ func (m *Model) footer() string {
 	case "saving":
 		return "Saving settings…"
 	}
-	return "↑↓/jk move · Tab/h/l pane · [ ] page · / filter · t targets · : actions · ? help · q quit"
+	if m.width < 60 {
+		return "↑↓ · : menu · ? help · q quit"
+	}
+	return "↑↓/jk move · Tab pane · 1–7 pages · t targets · : actions · M mouse · ? help · q quit"
 }
-func (m *Model) overlayView(width, height int) string {
+func (m *Model) legacyOverlayView(width, height int) string {
 	var text string
 	switch m.overlay {
 	case "palette":
@@ -513,30 +455,6 @@ func (m *Model) overlayView(width, height int) string {
 	return strings.Join(m.detailLines(text, width, height, 0), "\n")
 }
 func (m *Model) formView(width, height int) string {
-	f := m.form
-	if f == nil {
-		return ""
-	}
-	lines := []string{m.accent(f.title)}
-	if f.index == len(f.fields) {
-		lines = append(lines, "Review · Enter saves · Shift+Tab edits")
-	}
-	for i, field := range f.fields {
-		mark := "  "
-		if i == f.index {
-			mark = "> "
-		}
-		value := defaultString(field.value, "(empty)")
-		lines = append(lines, fit(mark+field.label+": "+core.Sanitize(value), width))
-	}
-	if f.index < len(f.fields) {
-		lines = append(lines, "", fit(f.fields[f.index].label, width), m.input.View())
-	}
-	if f.err != "" {
-		lines = append(lines, "", "Invalid: "+f.err)
-	}
-	if len(lines) > height && f.index < len(f.fields) {
-		lines = []string{m.accent(f.title), fmt.Sprintf("Field %d/%d · Tab next / Shift+Tab back", f.index+1, len(f.fields)), f.fields[f.index].label, "", m.input.View(), "", f.err}
-	}
-	return strings.Join(fitLines(strings.Join(lines, "\n"), width, height), "\n")
+	lines, _, _ := m.formLayout(width, height)
+	return strings.Join(lines, "\n")
 }

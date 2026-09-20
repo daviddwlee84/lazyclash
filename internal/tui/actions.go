@@ -7,6 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/dashboard"
+	"time"
 )
 
 type action struct {
@@ -26,6 +28,9 @@ func (m *Model) actions() []action {
 	group, hasGroup := m.group()
 	cfg := m.configData()
 	a := []action{
+		{"palette", "Open action menu", []string{":"}, true}, {"help", "Show help", []string{"?"}, true}, {"quit", "Quit", []string{"q"}, true},
+		{"mouse", "Toggle mouse capture", []string{"M"}, true},
+		{"target-test", "Test current target connectivity", nil, m.target.ID != "" && m.options.TestTarget != nil && !m.testPending},
 		{"refresh", "Refresh", []string{"r"}, connected}, {"targets", "Choose target", []string{"t"}, len(m.settings.Targets) > 0},
 		{"reconnect", "Reconnect current target", nil, m.target.ID != ""},
 		{"target-add", "Add target", nil, true}, {"target-edit", "Edit current target", nil, m.target.ID != ""}, {"target-remove", "Remove current target", nil, m.target.ID != ""},
@@ -37,6 +42,8 @@ func (m *Model) actions() []action {
 		{"lan", "Toggle Allow LAN", []string{"a"}, write && knownBool(cfg, "allow-lan")},
 	}
 	switch m.page {
+	case overview:
+		a = append(a, action{"overview-inspect", "Inspect selected metric / group", []string{"enter"}, m.overviewSelection != ""}, action{"history-window", "Cycle history: 1m / 5m / 15m", []string{"w"}, true}, action{"graph-style", "Cycle chart style", []string{"v"}, true}, action{"probe-ip", "Test IP.SB egress", []string{"i"}, !m.options.ReadOnly && m.options.ProbeIP != nil && m.target.ProbeProxy != "" && m.state().probePending == ""}, action{"probe-latency", "Test website latency", []string{"L"}, !m.options.ReadOnly && m.options.ProbeLatency != nil && m.target.ProbeProxy != "" && m.state().probePending == ""})
 	case proxies:
 		a = append(a, action{"select", "Select proxy member", []string{"enter"}, write && hasGroup && selectable(group) && m.state().view(proxies).focus == 1 && hasRow}, action{"delay", "Test selected node delay", []string{"d"}, write && hasRow && m.state().view(proxies).focus == 1}, action{"delay-group", "Test this group's nodes (4 at a time)", []string{"D"}, write && hasGroup})
 	case connections:
@@ -72,6 +79,7 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 		return m.beginInput("palette", "")
 	case "esc":
 		v.query = ""
+		v.exactFilter = dashboard.Filter{}
 		m.gPrefix = false
 		return nil
 	case "up", "k":
@@ -90,6 +98,11 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 		m.move(0, true)
 		return nil
 	case "end", "G":
+		if m.page == overview {
+			lines, _ := m.overviewLayout(max(1, m.width))
+			m.move(len(lines), true)
+			return nil
+		}
 		m.move(len(m.currentRows())-1, true)
 		return nil
 	case "g":
@@ -113,6 +126,9 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 	case "1", "2", "3", "4", "5", "6", "7":
 		return m.changePage(int(key[0] - '1'))
 	case "enter":
+		if m.page == overview && m.overviewSelection != "" {
+			return m.activateOverview(m.overviewSelection)
+		}
 		if m.page == proxies && v.focus == 0 {
 			v.focus = 1
 			m.reconcile()
@@ -142,13 +158,32 @@ func (m *Model) focus(direction int) {
 	if m.page == proxies {
 		n = 3
 	}
-	if m.page == overview || m.page == logs {
+	if m.page == overview {
+		_, hits := m.overviewLayout(max(1, m.width))
+		if len(hits) > 0 {
+			index := -1
+			for i, h := range hits {
+				if h.id == m.overviewSelection {
+					index = i
+				}
+			}
+			if index < 0 && direction < 0 {
+				index = 0
+			}
+			index = (index + direction + len(hits)) % len(hits)
+			m.overviewSelection = hits[index].id
+			v.detailOffset = max(0, hits[index].y-max(1, m.height-5)/2)
+		}
+		return
+	}
+	if m.page == logs {
 		n = 1
 	}
 	v.focus = (v.focus + direction + n) % n
 	m.reconcile()
 }
 func (m *Model) changePage(index int) tea.Cmd {
+	m.pressed = nil
 	m.page = page(index)
 	m.gPrefix = false
 	m.reconcile()
@@ -175,6 +210,10 @@ func (m *Model) inputUpdate(msg tea.Msg) tea.Cmd {
 		m.paletteIndex = 0
 	}
 	if m.overlay == "form" && m.form != nil && m.form.index < len(m.form.fields) {
+		if before != m.input.Value() {
+			m.form.err = ""
+			m.invalidateTargetTest()
+		}
 		m.form.fields[m.form.index].value = m.input.Value()
 	}
 	return cmd
@@ -259,7 +298,13 @@ func (m *Model) overlayKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	case "targets":
+		if key == "j" || key == "down" || key == "k" || key == "up" || key == "esc" || key == "q" {
+			m.invalidateTargetTest()
+		}
 		switch key {
+		case "T":
+			return m.testPickedTarget()
+
 		case "esc", "q":
 			m.overlay = ""
 		case "j", "down":
@@ -301,6 +346,48 @@ func (m *Model) ask(title, body string, run func() tea.Cmd) tea.Cmd {
 }
 func (m *Model) runAction(id string) tea.Cmd {
 	switch id {
+	case "palette":
+		m.paletteIndex = 0
+		return m.beginInput("palette", "")
+	case "help":
+		m.overlay = "help"
+		m.helpOffset = 0
+		return nil
+	case "quit":
+		return tea.Quit
+	case "overview-inspect":
+		return m.activateOverview(m.overviewSelection)
+	case "mouse":
+		m.mouseEnabled = !m.mouseEnabled
+		m.pressed = nil
+		m.status = fmt.Sprintf("Mouse capture %t · M toggles terminal text selection", m.mouseEnabled)
+		return nil
+	case "target-test":
+		return m.testTarget(m.target, false)
+	case "history-window":
+		switch m.historyWindow {
+		case time.Minute:
+			m.historyWindow = 5 * time.Minute
+		case 5 * time.Minute:
+			m.historyWindow = 15 * time.Minute
+		default:
+			m.historyWindow = time.Minute
+		}
+		return nil
+	case "graph-style":
+		switch m.graphStyle {
+		case "braille":
+			m.graphStyle = "block"
+		case "block":
+			m.graphStyle = "ascii"
+		default:
+			m.graphStyle = "braille"
+		}
+		return nil
+	case "probe-ip":
+		return m.startProbe("ip")
+	case "probe-latency":
+		return m.startProbe("latency")
 	case "refresh":
 		return m.refresh(true)
 	case "targets":

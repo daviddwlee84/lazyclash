@@ -23,7 +23,7 @@ import (
 
 func testModel(t *testing.T) *Model {
 	t.Helper()
-	m := New(Options{Config: config.Config{Targets: []config.Target{{ID: "test", Controller: "http://127.0.0.1:9090"}}}})
+	m := New(Options{StartPage: "proxies", Config: config.Config{Targets: []config.Target{{ID: "test", Controller: "http://127.0.0.1:9090"}}}})
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 	m.events = make(chan streamMsg, 64)
 	m.status = "test"

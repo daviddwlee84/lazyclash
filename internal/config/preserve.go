@@ -3,7 +3,9 @@ package config
 import (
 	"bytes"
 	"errors"
+	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -64,7 +66,12 @@ func expressions(raw []byte) ([]expression, error) {
 			e.table = table
 		} else {
 			v := n.Value()
-			e.valueStart, e.valueEnd, e.value = int(v.Raw.Offset), int(v.Raw.Offset+v.Raw.Length), string(v.Data)
+			rawRange := v.Raw
+			// The pinned parser exposes booleans via Data rather than Raw.
+			if v.Kind == unstable.Bool {
+				rawRange = parser.Range(v.Data)
+			}
+			e.valueStart, e.valueEnd, e.value = int(rawRange.Offset), int(rawRange.Offset+rawRange.Length), string(v.Data)
 		}
 		out = append(out, e)
 	}
@@ -207,6 +214,10 @@ func preserve(raw []byte, cfg Config) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	raw, err = patchPreferences(raw, cfg.TUI)
+	if err != nil {
+		return nil, err
+	}
 	old, err := arrayBlocks(raw, "targets")
 	if err != nil {
 		return nil, err
@@ -224,6 +235,8 @@ func preserve(raw []byte, cfg Config) ([]byte, error) {
 		b, err = patchFields(b, "targets", []field{
 			{"id", t.ID}, {"name", t.Name}, {"controller", t.Controller}, {"secret_file", t.SecretFile},
 			{"secret_env", t.SecretEnv}, {"ca_file", t.CAFile}, {"ssh_host", t.SSHHost}, {"source_config", t.SourceConfig},
+			{"probe_proxy", t.ProbeProxy}, {"probe_username", t.ProbeUsername}, {"probe_password_env", t.ProbePasswordEnv},
+			{"probe_password_file", t.ProbePasswordFile}, {"probe_ca_file", t.ProbeCAFile},
 		})
 		if err != nil {
 			return nil, err
@@ -252,4 +265,68 @@ func preserve(raw []byte, cfg Config) ([]byte, error) {
 		out = append(out, b)
 	}
 	return replaceBlocks(raw, old, out), nil
+}
+
+func patchPreferences(raw []byte, p TUIPreferences) ([]byte, error) {
+	var current Config
+	if err := toml.Unmarshal(raw, &current); err != nil {
+		return nil, err
+	}
+	if reflect.DeepEqual(current.TUI, p) {
+		return raw, nil
+	}
+	exprs, err := expressions(raw)
+	if err != nil {
+		return nil, err
+	}
+	start, end := -1, len(raw)
+	for _, e := range exprs {
+		if e.kind == unstable.KeyValue && e.table == "" && (e.key == "tui" || strings.HasPrefix(e.key, "tui.")) {
+			return nil, errors.New("inline or dotted tui preferences cannot be edited while preserving comments; use a [tui] table or edit manually")
+		}
+		if e.kind == unstable.Table && e.key == "tui" {
+			start = e.start
+			continue
+		}
+		if start >= 0 && (e.kind == unstable.Table || e.kind == unstable.ArrayTable) && e.start > start {
+			end = e.start
+			break
+		}
+	}
+	var b []byte
+	if start < 0 {
+		start, end = len(raw), len(raw)
+		b = []byte("\n[tui]\n")
+	} else {
+		b = raw[start:end]
+	}
+	b, err = patchFields(b, "tui", []field{{"start_page", p.StartPage}, {"graph_style", p.GraphStyle}, {"history_window", p.HistoryWindow}})
+	if err != nil {
+		return nil, err
+	}
+	exprs, err = expressions(b)
+	if err != nil {
+		return nil, err
+	}
+	seen := false
+	for _, e := range exprs {
+		if e.kind != unstable.KeyValue || e.table != "tui" || e.key != "mouse" {
+			continue
+		}
+		seen = true
+		if p.Mouse != nil {
+			b = applyEdits(b, []edit{{e.valueStart, e.valueEnd, []byte(strconv.FormatBool(*p.Mouse))}})
+		} else {
+			// Resetting to the default removes only the owned assignment.
+			b = applyEdits(b, []edit{{e.start, e.valueEnd, nil}})
+		}
+		break
+	}
+	if !seen && p.Mouse != nil {
+		if len(b) > 0 && b[len(b)-1] != '\n' {
+			b = append(b, '\n')
+		}
+		b = append(b, []byte("mouse = "+strconv.FormatBool(*p.Mouse)+"\n")...)
+	}
+	return applyEdits(raw, []edit{{start, end, b}}), nil
 }

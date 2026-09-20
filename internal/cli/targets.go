@@ -118,7 +118,7 @@ func (o *options) targetCommands() *cobra.Command {
 		}
 		return o.result(cmd, "Moved "+args[0])
 	}})
-	group.AddCommand(o.targetWriteCommand(false), o.targetWriteCommand(true))
+	group.AddCommand(o.targetWriteCommand(false), o.targetWriteCommand(true), o.targetTestCommand())
 	return group
 }
 
@@ -137,6 +137,9 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 	}, RunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().Changed("secret-file") && cmd.Flags().Changed("secret-env") {
 			return usage("--secret-file and --secret-env are mutually exclusive")
+		}
+		if cmd.Flags().Changed("probe-password-file") && cmd.Flags().Changed("probe-password-env") {
+			return usage("--probe-password-file and --probe-password-env are mutually exclusive")
 		}
 		cfg, path, err := o.load(cmd)
 		if err != nil {
@@ -167,7 +170,7 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 				return usage("supply at least one field to edit, such as --name or --controller")
 			}
 			previous := cfg.Targets[index]
-			for name, dst := range map[string]*string{"name": &previous.Name, "controller": &previous.Controller, "ssh": &previous.SSHHost, "secret-file": &previous.SecretFile, "secret-env": &previous.SecretEnv, "ca-cert": &previous.CAFile, "source-config": &previous.SourceConfig} {
+			for name, dst := range map[string]*string{"name": &previous.Name, "controller": &previous.Controller, "ssh": &previous.SSHHost, "secret-file": &previous.SecretFile, "secret-env": &previous.SecretEnv, "ca-cert": &previous.CAFile, "source-config": &previous.SourceConfig, "probe-proxy": &previous.ProbeProxy, "probe-username": &previous.ProbeUsername, "probe-password-env": &previous.ProbePasswordEnv, "probe-password-file": &previous.ProbePasswordFile, "probe-ca-cert": &previous.ProbeCAFile} {
 				if cmd.Flags().Changed(name) {
 					*dst, _ = cmd.Flags().GetString(name)
 				}
@@ -177,6 +180,12 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 			}
 			if cmd.Flags().Changed("secret-env") {
 				previous.SecretFile = ""
+			}
+			if cmd.Flags().Changed("probe-password-file") {
+				previous.ProbePasswordEnv = ""
+			}
+			if cmd.Flags().Changed("probe-password-env") {
+				previous.ProbePasswordFile = ""
 			}
 			draft = previous
 			cfg.Targets[index] = draft
@@ -213,11 +222,16 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 	f.StringVar(&draft.SecretEnv, "secret-env", "", "secret environment variable name")
 	f.StringVar(&draft.CAFile, "ca-cert", "", "HTTPS CA file")
 	f.StringVar(&draft.SourceConfig, "source-config", "", "runtime YAML to read matching controller credentials from")
+	f.StringVar(&draft.ProbeProxy, "probe-proxy", "", "explicit HTTP(S)/SOCKS5(H) data proxy URL with port (remote address for SSH targets)")
+	f.StringVar(&draft.ProbeUsername, "probe-username", "", "data proxy authentication username")
+	f.StringVar(&draft.ProbePasswordEnv, "probe-password-env", "", "environment variable containing the data proxy password")
+	f.StringVar(&draft.ProbePasswordFile, "probe-password-file", "", "local file containing the data proxy password")
+	f.StringVar(&draft.ProbeCAFile, "probe-ca-cert", "", "local PEM CA for an HTTPS data proxy")
 	return cmd
 }
 
 func businessChanged(cmd *cobra.Command) bool {
-	for _, key := range []string{"name", "controller", "ssh", "secret-file", "secret-env", "ca-cert", "source-config"} {
+	for _, key := range []string{"name", "controller", "ssh", "secret-file", "secret-env", "ca-cert", "source-config", "probe-proxy", "probe-username", "probe-password-env", "probe-password-file", "probe-ca-cert"} {
 		if cmd.Flags().Changed(key) {
 			return true
 		}

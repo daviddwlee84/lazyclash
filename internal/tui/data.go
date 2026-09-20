@@ -72,6 +72,9 @@ func (m *Model) rowsFor(p page, pane int) []row {
 		obj := object(s.snap("connections").data)
 		for _, item := range array(obj["connections"]) {
 			c := object(item)
+			if !v.exactFilter.Match(c) {
+				continue
+			}
 			id, _ := c["id"].(string)
 			metadata := object(c["metadata"])
 			host := str(metadata, "host")
@@ -218,6 +221,10 @@ func (m *Model) move(n int, absolute bool) {
 			v.detailOffset = max(0, n)
 		} else {
 			v.detailOffset = max(0, v.detailOffset+n)
+		}
+		if m.page == overview {
+			lines, _ := m.overviewLayout(max(1, m.width))
+			v.detailOffset = min(v.detailOffset, max(0, len(lines)-max(1, m.height-5)))
 		}
 		return
 	}

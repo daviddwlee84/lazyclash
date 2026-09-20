@@ -73,10 +73,16 @@ func NewHandler() *Controller {
 			"metadata": object{"network": "tcp", "type": "HTTP", "sourceIP": "127.0.0.1", "sourcePort": "49152", "destinationIP": "203.0.113.10", "destinationPort": "443", "host": host, "dnsMode": "normal", "process": "curl", "processPath": "/usr/bin/curl"},
 		}
 	}
+	tcp := connection("conn-1", "api.example.test", Taipei)
+	tcp["chains"] = []string{Taipei, Automatic, Selector}
+	udp := connection("conn-2", "static.example.test", Tokyo)
+	udp["metadata"].(object)["network"] = "udp"
+	udp["metadata"].(object)["type"] = "Socks5"
+	udp["rule"], udp["rulePayload"] = "Match", ""
 	return &Controller{
 		config:      object{"mode": "rule", "allow-lan": false, "mixed-port": 7890, "port": 7890, "socks-port": 7891, "log-level": "info", "ipv6": false, "tun": object{"enable": false, "device": "utun-fixture", "stack": "mixed"}},
 		proxies:     proxies,
-		connections: map[string]object{"conn-1": connection("conn-1", "api.example.test", Taipei), "conn-2": connection("conn-2", "static.example.test", Tokyo)},
+		connections: map[string]object{"conn-1": tcp, "conn-2": udp},
 		providers: map[string]map[string]object{
 			"proxies": {ProxyProvider: {"name": ProxyProvider, "type": "Proxy", "vehicleType": "HTTP", "updatedAt": stamp, "proxies": []any{proxies[Taipei], proxies[Tokyo]}}},
 			"rules":   {RuleProvider: {"name": RuleProvider, "type": "Rule", "vehicleType": "HTTP", "behavior": "domain", "ruleCount": 2, "updatedAt": stamp}},
@@ -392,9 +398,20 @@ func (c *Controller) stream(w http.ResponseWriter, r *http.Request, resource str
 				event = object{"type": level, "payload": "[fixture] TCP api.example.test:443 via " + Taipei}
 			}
 		case "traffic":
-			event = object{"up": 5120 + index*16, "down": 20480 + index*64}
+			// Repeat a deterministic burst/idle profile so short PTY sessions
+			// exercise slopes and measured zero without real outbound traffic.
+			upload := [...]int{5120, 6144, 9216, 16384, 8192, 2048, 0, 0, 1024, 3072, 12288, 6144}
+			download := [...]int{20480, 32768, 65536, 98304, 49152, 16384, 2048, 0, 4096, 12288, 49152, 24576}
+			event = object{"up": upload[index%len(upload)], "down": download[index%len(download)]}
 		case "memory":
-			event = object{"inuse": 16 << 20, "oslimit": 0}
+			// Mihomo emits a zero initialization frame; subsequent values are
+			// core RSS, deliberately independent of the host's physical RAM.
+			memory := [...]int{16, 17, 19, 18, 17, 16, 18, 20, 19, 17, 18, 16}
+			inuse := 0
+			if index > 0 {
+				inuse = memory[(index-1)%len(memory)] << 20
+			}
+			event = object{"inuse": inuse, "oslimit": 0}
 		}
 		if event != nil {
 			if err := encoder.Encode(event); err != nil {

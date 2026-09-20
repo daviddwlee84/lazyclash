@@ -18,6 +18,7 @@ type formState struct {
 }
 
 func (m *Model) startForm(kind, title, original string, fields []field) tea.Cmd {
+	m.invalidateTargetTest()
 	m.form = &formState{kind: kind, title: title, original: original, fields: fields}
 	return m.beginInput("form", fields[0].value)
 }
@@ -32,7 +33,7 @@ func (m *Model) startTargetEdit(t config.Target) tea.Cmd {
 	if t.ID != "" {
 		title = "Edit target"
 	}
-	cmd := m.startForm("target", title, t.ID, []field{{"ID", t.ID}, {"Display name (optional)", t.Name}, {"Controller URL (http://host:port or unix:///path)", t.Controller}, {"SSH host alias (optional)", t.SSHHost}, {"Secret environment variable (optional)", t.SecretEnv}, {"Secret file: absolute local path (optional)", t.SecretFile}, {"Custom CA: absolute local path (optional)", t.CAFile}, {"Source YAML: absolute core host path (optional)", t.SourceConfig}})
+	cmd := m.startForm("target", title, t.ID, []field{{"ID", t.ID}, {"Display name (optional)", t.Name}, {"Controller URL (http://host:port or unix:///path)", t.Controller}, {"SSH host alias (optional)", t.SSHHost}, {"Secret environment variable (optional)", t.SecretEnv}, {"Secret file: absolute local path (optional)", t.SecretFile}, {"Custom CA: absolute local path (optional)", t.CAFile}, {"Source YAML: absolute core host path (optional)", t.SourceConfig}, {"Data proxy URL (explicit port, optional)", t.ProbeProxy}, {"Data proxy username (optional)", t.ProbeUsername}, {"Data proxy password env (optional)", t.ProbePasswordEnv}, {"Data proxy password file (absolute, optional)", t.ProbePasswordFile}, {"Data proxy CA file (absolute, optional)", t.ProbeCAFile}})
 	m.form.target = t
 	return cmd
 }
@@ -61,7 +62,13 @@ func (m *Model) formKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	switch msg.String() {
+	case "ctrl+t":
+		if f.kind == "target" {
+			return m.testDraft()
+		}
+		return nil
 	case "esc":
+		m.invalidateTargetTest()
 		m.overlay = ""
 		m.form = nil
 		m.input.Blur()
@@ -104,20 +111,7 @@ func (m *Model) submitForm() tea.Cmd {
 		m.status = "Discovering controllers through SSH…"
 		return m.discover(host)
 	case "target":
-		t := f.target
-		t.ID = value(0)
-		t.Name = value(1)
-		t.Controller = value(2)
-		t.SSHHost = value(3)
-		t.SecretEnv = value(4)
-		t.SecretFile = value(5)
-		t.CAFile = value(6)
-		t.SourceConfig = value(7)
-		t.Transient = false
-		// A changed credential source must not retain a secret copied from discovery.
-		if t.SecretEnv != f.target.SecretEnv || t.SecretFile != f.target.SecretFile || t.SourceConfig != f.target.SourceConfig {
-			t.Secret = ""
-		}
+		t := m.draftTarget()
 		c := cloneSettings(m.settings)
 		found := false
 		for i, existing := range c.Targets {
@@ -184,4 +178,23 @@ func (m *Model) save(settings config.Config, selected string) tea.Cmd {
 		}
 		return savedMsg{settings: settings, selected: selected}
 	}
+}
+
+func (m *Model) draftTarget() config.Target {
+	f := m.form
+	t := f.target
+	value := func(i int) string {
+		if i >= len(f.fields) {
+			return ""
+		}
+		return strings.TrimSpace(f.fields[i].value)
+	}
+	t.ID, t.Name, t.Controller, t.SSHHost = value(0), value(1), value(2), value(3)
+	t.SecretEnv, t.SecretFile, t.CAFile, t.SourceConfig = value(4), value(5), value(6), value(7)
+	t.ProbeProxy, t.ProbeUsername, t.ProbePasswordEnv, t.ProbePasswordFile, t.ProbeCAFile = value(8), value(9), value(10), value(11), value(12)
+	t.Transient = false
+	if t.SecretEnv != f.target.SecretEnv || t.SecretFile != f.target.SecretFile || t.SourceConfig != f.target.SourceConfig {
+		t.Secret = ""
+	}
+	return t
 }

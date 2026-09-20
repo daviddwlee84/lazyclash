@@ -1,6 +1,6 @@
 ---
 name: lazyclash
-description: Inspect and control existing Mihomo or Clash Verge-managed cores through lazyclash. Use for controller discovery, proxy selection, runtime routing settings, connection diagnosis, provider refreshes, and applying registered complete YAML files. Does not install cores or manage native Verge profiles.
+description: Inspect and control existing Mihomo or Clash Verge-managed cores through lazyclash. Use for controller discovery, proxy selection, runtime routing settings, API connectivity and explicit proxy egress diagnosis, provider refreshes, and applying registered complete YAML files. Does not install cores or manage native Verge profiles.
 ---
 
 # lazyclash
@@ -18,7 +18,7 @@ settings are broken or no core is reachable. They output Markdown, without
    Select a registered target or an explicit controller, then keep that same
    selection on every command in the operation. Never silently switch targets
    after a failure.
-2. Inspect current state before choosing an action. Use JSON to obtain actual
+2. Test reachability with `targets test ID --json` when needed. Inspect current state before choosing an action. Use JSON to obtain actual
    group and member names, including Unicode and spaces; do not invent them.
 3. Perform the change within the user's authorized scope, then read back the
    relevant state. An uncertain write can have succeeded: refresh first and
@@ -34,7 +34,7 @@ lazyclash --target "$TARGET" proxies select "$GROUP" "$MEMBER" --json
 lazyclash --target "$TARGET" proxies list --json
 ```
 
-`--read-only` blocks core control actions, latency tests and healthchecks. It
+`--read-only` blocks core control actions, active egress/latency tests and healthchecks; `targets test` remains available. It
 still permits local target/config registration changes; use read commands when
 the request is only to inspect.
 

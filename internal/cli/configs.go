@@ -123,7 +123,7 @@ func (o *options) configCommands() *cobra.Command {
 }
 
 func (o *options) settingsCommand() *cobra.Command {
-	group := &cobra.Command{Use: "settings", Short: "Inspect lazyclash preferences"}
+	group := &cobra.Command{Use: "settings", Short: "Inspect or edit lazyclash preferences"}
 	group.AddCommand(&cobra.Command{Use: "show", Short: "Show redacted saved settings", Args: argsExact(0), RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, path, e := o.load(cmd)
 		if e != nil {
@@ -131,12 +131,16 @@ func (o *options) settingsCommand() *cobra.Command {
 		}
 		return o.output(cmd, map[string]any{"path": path, "settings": cfg})
 	}}, &cobra.Command{Use: "path", Short: "Print the settings path", Args: argsExact(0), RunE: func(cmd *cobra.Command, args []string) error {
-		_, path, e := o.load(cmd)
+		path, _, e := o.settingsPath(cmd)
 		if e != nil {
 			return e
+		}
+		if o.json {
+			return o.output(cmd, map[string]string{"path": path})
 		}
 		_, e = fmt.Fprintln(cmd.OutOrStdout(), path)
 		return e
 	}})
+	group.AddCommand(o.settingsEditCommand())
 	return group
 }

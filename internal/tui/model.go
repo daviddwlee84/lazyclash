@@ -17,12 +17,20 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/dashboard"
 )
 
 type Options struct {
 	Config        config.Config
 	InitialTarget string
 	ReadOnly      bool
+	StartPage     string
+	Mouse         *bool
+	GraphStyle    string
+	HistoryWindow time.Duration
+	TestTarget    func(context.Context, config.Target) (string, error)
+	ProbeIP       func(context.Context, config.Target) (string, error)
+	ProbeLatency  func(context.Context, config.Target) (string, error)
 	Open          func(context.Context, config.Target) (*core.Client, io.Closer, error)
 	Discover      func(context.Context) ([]config.Target, error)
 	DiscoverHost  func(context.Context, string) ([]config.Target, error)
@@ -56,6 +64,7 @@ type viewState struct {
 	focus        int
 	positions    [3]position
 	detailOffset int
+	exactFilter  dashboard.Filter
 }
 type snapshot struct {
 	data    any
@@ -70,16 +79,19 @@ type logEntry struct {
 	level, message string
 }
 type targetState struct {
-	views           map[page]*viewState
-	data            map[string]*snapshot
-	logs            []logEntry
-	logSeq          int
-	logLevel        string
-	follow          bool
-	traffic, memory core.Object
-	streamErrors    map[string]string
-	lastApplied     string
-	lastOperation   string
+	views                 map[page]*viewState
+	data                  map[string]*snapshot
+	logs                  []logEntry
+	logSeq                int
+	logLevel              string
+	follow                bool
+	traffic, memory       core.Object
+	streamErrors          map[string]string
+	lastApplied           string
+	lastOperation         string
+	metrics               dashboard.State
+	probeIP, probeLatency string
+	probePending          string
 }
 
 func newTargetState() *targetState {
@@ -106,31 +118,40 @@ func (s *targetState) snap(key string) *snapshot {
 }
 
 type Model struct {
-	options       Options
-	settings      config.Config
-	target        config.Target
-	states        map[string]*targetState
-	page          page
-	width, height int
-	generation    uint64
-	ctx           context.Context
-	cancel        context.CancelFunc
-	client        *core.Client
-	closer        io.Closer
-	events        chan streamMsg
-	opening       bool
-	status        string
-	pending       string
-	overlay       string
-	input         textinput.Model
-	paletteIndex  int
-	targetIndex   int
-	form          *formState
-	confirm       *confirmation
-	helpOffset    int
-	gPrefix       bool
-	discovered    bool
-	closed        bool
+	options           Options
+	settings          config.Config
+	target            config.Target
+	states            map[string]*targetState
+	page              page
+	width, height     int
+	generation        uint64
+	ctx               context.Context
+	cancel            context.CancelFunc
+	client            *core.Client
+	closer            io.Closer
+	events            chan streamMsg
+	opening           bool
+	status            string
+	pending           string
+	overlay           string
+	input             textinput.Model
+	paletteIndex      int
+	targetIndex       int
+	form              *formState
+	confirm           *confirmation
+	helpOffset        int
+	gPrefix           bool
+	discovered        bool
+	closed            bool
+	mouseEnabled      bool
+	graphStyle        string
+	historyWindow     time.Duration
+	pressed           *mousePress
+	testSerial        uint64
+	testResult        string
+	testPending       bool
+	testCancel        context.CancelFunc
+	overviewSelection string
 }
 
 type tickMsg time.Time
@@ -176,7 +197,32 @@ func New(options Options) *Model {
 	in := textinput.New()
 	in.SetVirtualCursor(false)
 	in.CharLimit = 2048
-	m := &Model{options: options, settings: cloneSettings(options.Config), states: map[string]*targetState{}, page: proxies, width: 80, height: 24, input: in, status: "Connecting…"}
+	m := &Model{options: options, settings: cloneSettings(options.Config), states: map[string]*targetState{}, page: overview, width: 80, height: 24, input: in, status: "Connecting…"}
+	prefs := options.Config.TUI.WithDefaults()
+	m.mouseEnabled = prefs.Mouse == nil || *prefs.Mouse
+	if options.Mouse != nil {
+		m.mouseEnabled = *options.Mouse
+	}
+	m.graphStyle = prefs.GraphStyle
+	if options.GraphStyle != "" {
+		m.graphStyle = options.GraphStyle
+	}
+	m.historyWindow, _ = time.ParseDuration(prefs.HistoryWindow)
+	if options.HistoryWindow > 0 {
+		m.historyWindow = options.HistoryWindow
+	}
+	if m.historyWindow != time.Minute && m.historyWindow != 5*time.Minute && m.historyWindow != 15*time.Minute {
+		m.historyWindow = 5 * time.Minute
+	}
+	startPage := prefs.StartPage
+	if options.StartPage != "" {
+		startPage = options.StartPage
+	}
+	for i, name := range pageNames {
+		if strings.EqualFold(name, startPage) {
+			m.page = page(i)
+		}
+	}
 	id := options.InitialTarget
 	if id == "" {
 		id = m.settings.DefaultTarget
@@ -231,6 +277,7 @@ func (m *Model) Close() error {
 		return nil
 	}
 	m.closed = true
+	m.invalidateTargetTest()
 	if m.cancel != nil {
 		m.cancel()
 	}
@@ -261,6 +308,14 @@ func (m *Model) connect(target config.Target) tea.Cmd {
 	if m.cancel != nil {
 		m.cancel()
 	}
+	m.state().metrics.Gap(time.Now())
+	m.state().probePending = ""
+	if m.target.ID == target.ID && !sameProbeRoute(m.target, target) {
+		m.state().probeIP = ""
+		m.state().probeLatency = ""
+	}
+	m.pressed = nil
+	m.invalidateTargetTest()
 	oldClient, oldCloser := m.client, m.closer
 	m.client, m.closer = nil, nil
 	m.target = target
@@ -322,10 +377,22 @@ func (m *Model) discover(host string) tea.Cmd {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		m.pressed = nil
 		m.width, m.height = max(1, msg.Width), max(1, msg.Height)
 		m.input.SetWidth(max(1, m.width-8))
 		return m, nil
+	case tea.MouseClickMsg:
+		return m, m.mouseClick(msg)
+	case tea.MouseReleaseMsg:
+		return m, m.mouseRelease(msg)
+	case tea.MouseWheelMsg:
+		return m, m.mouseWheel(msg)
+	case targetTestMsg:
+		return m, m.receiveTargetTest(msg)
+	case probeMsg:
+		return m, m.receiveProbe(msg)
 	case tea.KeyPressMsg:
+		m.pressed = nil
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
@@ -409,10 +476,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s.loading = false
 		if msg.err != nil {
 			s.err = msg.err
+			if msg.key == "connections" {
+				m.state().metrics.SourceGap(time.Now(), "connections")
+			}
 			return m, nil
 		}
 		if msg.key == "connections" {
 			if data := object(msg.data); data != nil {
+				m.state().metrics.AddConnections(time.Now(), data)
 				items := array(data["connections"])
 				if len(items) > connectionLimit {
 					trimmed := core.Object{}
@@ -449,13 +520,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.state().streamErrors[msg.resource] = safeError(msg.err)
+			m.state().metrics.SourceGap(time.Now(), msg.resource)
 		} else {
 			delete(m.state().streamErrors, msg.resource)
 			switch msg.resource {
 			case "traffic":
 				m.state().traffic = msg.data
+				m.state().metrics.AddTraffic(time.Now(), msg.data)
 			case "memory":
 				m.state().memory = msg.data
+				m.state().metrics.AddMemory(time.Now(), msg.data)
 			case "logs":
 				s := m.state()
 				s.logSeq++
@@ -523,6 +597,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = "No targets. Press : to add or discover."
 		return m, cmd
 	case tickMsg:
+		for _, s := range m.states {
+			s.metrics.Prune(time.Time(msg))
+		}
 		return m, tea.Batch(tick(), m.refresh(false))
 	}
 	if m.overlay == "search" || m.overlay == "palette" || m.overlay == "form" {
@@ -531,7 +608,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 func sameConnection(a, b config.Target) bool {
-	return a.Controller == b.Controller && a.SSHHost == b.SSHHost && a.SecretEnv == b.SecretEnv && a.SecretFile == b.SecretFile && a.Secret == b.Secret && a.CAFile == b.CAFile && a.SourceConfig == b.SourceConfig
+	return a.Controller == b.Controller && a.SSHHost == b.SSHHost && a.SecretEnv == b.SecretEnv && a.SecretFile == b.SecretFile && a.Secret == b.Secret && a.CAFile == b.CAFile && a.SourceConfig == b.SourceConfig && sameProbeRoute(a, b)
 }
 func (m *Model) hasTarget(id string) bool {
 	for _, t := range m.settings.Targets {
@@ -552,15 +629,13 @@ func (m *Model) refresh(full bool) tea.Cmd {
 	if m.client == nil {
 		return nil
 	}
-	keys := []string{"config"}
+	keys := []string{"config", "connections"}
 	if full || m.state().snap("version").data == nil {
 		keys = append(keys, "version")
 	}
 	switch m.page {
-	case proxies:
+	case proxies, overview:
 		keys = append(keys, "proxies")
-	case connections:
-		keys = append(keys, "connections")
 	case rules:
 		if full || m.state().snap("rules").data == nil {
 			keys = append(keys, "rules")
@@ -733,4 +808,8 @@ func boundedLog(message string) string {
 		return string(runes[:maxRunes]) + " … [entry truncated]"
 	}
 	return message
+}
+
+func sameProbeRoute(a, b config.Target) bool {
+	return a.ProbeProxy == b.ProbeProxy && a.ProbeUsername == b.ProbeUsername && a.ProbePasswordEnv == b.ProbePasswordEnv && a.ProbePasswordFile == b.ProbePasswordFile && a.ProbeCAFile == b.ProbeCAFile
 }

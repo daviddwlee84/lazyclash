@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode"
@@ -58,6 +59,9 @@ func Load(path string, explicit bool) (Config, error) {
 }
 
 func Validate(cfg Config) error {
+	if err := ValidateTUI(cfg.TUI); err != nil {
+		return err
+	}
 	ids := map[string]bool{}
 	for _, t := range cfg.Targets {
 		if !idPattern.MatchString(t.ID) {
@@ -79,12 +83,15 @@ func Validate(cfg Config) error {
 
 // ValidateTarget also validates temporary targets, which need not have an ID.
 func ValidateTarget(t Target) error {
-	for _, value := range []string{t.SourceConfig, t.SecretFile, t.CAFile, t.SSHHost} {
+	for _, value := range []string{t.SourceConfig, t.SecretFile, t.CAFile, t.SSHHost, t.ProbePasswordFile, t.ProbeCAFile, t.ProbeUsername} {
 		if strings.IndexFunc(value, unicode.IsControl) >= 0 {
 			return errors.New("target paths and SSH host must not contain control characters")
 		}
 	}
 	if err := ValidateController(t.Controller); err != nil {
+		return err
+	}
+	if err := ValidateProbe(t); err != nil {
 		return err
 	}
 	if t.SecretFile != "" && t.SecretEnv != "" {
@@ -116,6 +123,63 @@ func ValidateTarget(t Target) error {
 		ids[c.ID] = true
 		if !filepath.IsAbs(c.Path) || strings.ContainsAny(c.Path, "\r\n\x00") {
 			return errors.New("registered YAML paths must be absolute paths on the core host")
+		}
+	}
+	return nil
+}
+
+func ValidateTUI(p TUIPreferences) error {
+	switch p.StartPage {
+	case "", "overview", "proxies", "connections", "logs", "rules", "providers", "configs":
+	default:
+		return errors.New("tui.start_page must be overview, proxies, connections, logs, rules, providers or configs")
+	}
+	switch p.GraphStyle {
+	case "", "braille", "block", "ascii":
+	default:
+		return errors.New("tui.graph_style must be braille, block or ascii")
+	}
+	switch p.HistoryWindow {
+	case "", "1m", "5m", "15m":
+	default:
+		return errors.New("tui.history_window must be 1m, 5m or 15m")
+	}
+	return nil
+}
+
+// ValidateProbe deliberately never echoes a proxy URL: rejected URLs may carry
+// credentials. A data-plane route is independent of the controller endpoint.
+func ValidateProbe(t Target) error {
+	if t.ProbeProxy != "" {
+		u, err := url.Parse(t.ProbeProxy)
+		if err != nil || u.User != nil || u.Hostname() == "" || u.Path != "" || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || strings.IndexFunc(t.ProbeProxy, unicode.IsControl) >= 0 {
+			return errors.New("probe_proxy must be an HTTP(S) or SOCKS5(H) URL with an explicit port and no credentials, path, query or fragment")
+		}
+		switch u.Scheme {
+		case "http", "https", "socks5", "socks5h":
+		default:
+			return errors.New("probe_proxy scheme must be http, https, socks5 or socks5h")
+		}
+		port, err := strconv.Atoi(u.Port())
+		if err != nil || port < 1 || port > 65535 {
+			return errors.New("probe_proxy requires an explicit port between 1 and 65535")
+		}
+	}
+	if t.ProbePasswordEnv != "" && t.ProbePasswordFile != "" {
+		return errors.New("probe_password_env and probe_password_file are mutually exclusive")
+	}
+	if t.ProbePasswordEnv != "" && !envPattern.MatchString(t.ProbePasswordEnv) {
+		return errors.New("invalid proxy password environment variable name")
+	}
+	if t.ProbePasswordFile != "" && !filepath.IsAbs(t.ProbePasswordFile) {
+		return errors.New("probe_password_file must be an absolute local path")
+	}
+	if t.ProbeCAFile != "" && !filepath.IsAbs(t.ProbeCAFile) {
+		return errors.New("probe_ca_file must be an absolute local path")
+	}
+	for _, value := range []string{t.ProbeUsername, t.ProbePasswordFile, t.ProbeCAFile} {
+		if strings.IndexFunc(value, unicode.IsControl) >= 0 {
+			return errors.New("probe credentials and paths must not contain control characters")
 		}
 	}
 	return nil

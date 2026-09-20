@@ -53,6 +53,22 @@ A test binary often has no release module version: use a small pure resolver
 for deterministic tests and verify an actual installed release afterward.
 Update checks and self-update behavior are separate product features.
 
+## Changelog and release consistency
+
+Maintain a user-facing `CHANGELOG.md` with an Unreleased section and dated
+version sections. Record visible behavior, compatibility changes and fixes;
+do not replace it with internal commit chronology. When backfilling an existing
+release, inspect what its tag actually contained. Link upgrade instructions to
+the changelog and choose the next version under the project's policy.
+
+Finish tests and required CI on the exact source to release. Then create the
+immutable tag and derive release notes from that version's changelog section.
+The changelog version, Git tag, hosted release and installed `--version` must
+agree. Source `go install` needs the tag and module metadata, not merely a changed
+hard-coded constant or a local build with injected linker flags. Verify fixed-tag
+and `@latest` installs outside the checkout; account for public proxy indexing
+before treating a newly pushed tag's absence as a code failure.
+
 ## Later stage: packaged releases
 
 When users need installation without a Go toolchain, add the requested OS/arch

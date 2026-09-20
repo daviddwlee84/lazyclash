@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/dashboard"
 	"github.com/daviddwlee84/lazyclash/internal/testcore"
 )
 
@@ -75,6 +76,45 @@ func TestControllerSupportsStatefulClientAndStreams(t *testing.T) {
 	requests[0].Query.Set("mutated", "true")
 	if handler.Requests()[0].Query.Get("mutated") != "" {
 		t.Fatal("request snapshot shares mutable state")
+	}
+}
+
+func TestControllerOverviewDistributionsAndTelemetry(t *testing.T) {
+	server := testcore.NewServer()
+	defer server.Close()
+	client, err := core.New(core.Options{Endpoint: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	connections, err := client.Connections(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary := dashboard.SummarizeConnections(connections)
+	if summary.Count != 2 || summary.Protocols[0].Count != 1 || summary.Protocols[1].Count != 1 || len(summary.Routes) != 2 || len(summary.Groups) != 2 {
+		t.Fatalf("overview fixture lost protocol/route variety: %+v", summary)
+	}
+	for _, resource := range []string{"traffic", "memory"} {
+		t.Run(resource, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			var events []core.Object
+			err := client.StreamWithOptions(ctx, resource, nil, core.StreamOptions{Limit: 3}, func(event core.Object) (bool, error) {
+				events = append(events, event)
+				return true, nil
+			})
+			if err != nil || len(events) != 3 {
+				t.Fatalf("fixture stream: %v, %v", events, err)
+			}
+			if resource == "traffic" {
+				if events[0]["up"] == events[1]["up"] || events[0]["down"] == events[1]["down"] {
+					t.Fatalf("traffic should vary: %v", events)
+				}
+			} else if events[0]["inuse"] != float64(0) || events[1]["inuse"] != float64(16<<20) || events[2]["inuse"] == events[1]["inuse"] {
+				t.Fatalf("memory should warm up and vary: %v", events)
+			}
+		})
 	}
 }
 

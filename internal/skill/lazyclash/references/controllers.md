@@ -61,3 +61,38 @@ Settings default to `$XDG_CONFIG_HOME/lazyclash/config.toml`, or
 `~/.config/lazyclash/config.toml`. `--config` selects a different settings file;
 it is not a Mihomo YAML. Use `settings show --json` for saved preferences and
 `status --json` for the running core.
+
+## Connectivity and data-plane diagnostics
+
+Use `lazyclash targets test ID --json` to test SSH/API access, version and readable
+runtime settings without changing the core. It works with `--read-only`. It is
+not an internet test. Do not run `mihomo status` as a substitute: Mihomo can
+interpret that invocation as starting another core, producing port/TUN conflicts.
+
+`settings path` resolves the file even if malformed. `settings edit` is a human
+TTY-only editor entry ($VISUAL > $EDITOR > vi), followed by validation; failed
+validation retains the edits. Agents should use scriptable target edits.
+
+Manual `diagnostics ip --json` and `diagnostics latency --json` require the
+selected target's explicit `probe_proxy`; they never infer the data route from
+the controller port and never fall back to direct/environment/system proxies.
+A data-proxy registration can work when its management API is offline.
+
+```sh
+lazyclash targets edit server --probe-proxy http://127.0.0.1:7890 --json
+lazyclash --target server diagnostics ip --json
+lazyclash --target server diagnostics latency --json
+```
+
+Use actual configured ports. The proxy URL needs HTTP(S) or SOCKS5(H), an explicit
+port, and no userinfo/path/query/fragment. For an SSH target its proxy address is
+on the remote host and uses a separate owned tunnel. Data-proxy credentials are
+independent: `--probe-username`, `--probe-password-env` or `--probe-password-file`
+(mutually exclusive), and `--probe-ca-cert`. References and CA files are local.
+Do not put passwords in URLs or reuse the controller secret.
+
+Active diagnostics are disabled by `--read-only`. IP.SB egress describes that
+request, not a universal node/IP for all rule-mode traffic. Website measurements
+are fresh HEAD time-to-headers (Google, Cloudflare, GitHub), exclude SSH setup,
+and preserve HTTP failures with observed timing. A failed site means nonzero
+exit while partial per-site results remain on stdout; inspect both streams.
