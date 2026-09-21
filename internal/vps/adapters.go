@@ -65,6 +65,12 @@ func (s *Service) call(ctx context.Context, req CreateRequest, args ...string) (
 		return nil, err
 	}
 	if len(strings.TrimSpace(string(b))) == 0 {
+		// OCI CLI render() suppresses an empty list entirely, even with JSON
+		// output. Only a successful, unfiltered, fully paginated list has this
+		// meaning; errors and malformed nonempty responses still fail closed.
+		if req.Provider == "oracle" && oracleCompleteList(args) {
+			return map[string]any{"data": []any{}}, nil
+		}
 		return nil, nil
 	}
 	var value any
@@ -82,6 +88,18 @@ func (s *Service) call(ctx context.Context, req CreateRequest, args ...string) (
 		}
 	}
 	return value, nil
+}
+
+func oracleCompleteList(args []string) bool {
+	list, all := false, false
+	for _, arg := range args {
+		if arg == "--query" || strings.HasPrefix(arg, "--query=") || arg == "--limit" || strings.HasPrefix(arg, "--limit=") || arg == "--page" || strings.HasPrefix(arg, "--page=") {
+			return false
+		}
+		list = list || arg == "list" || arg == "list-vnics"
+		all = all || arg == "--all"
+	}
+	return list && all
 }
 
 func obj(v any) map[string]any { m, _ := v.(map[string]any); return m }
@@ -306,7 +324,10 @@ func (s *Service) createRemote(ctx context.Context, req CreateRequest, operation
 		}
 		metadata, _ := json.Marshal(fields)
 		tags, _ := json.Marshal(map[string]string{"lazyclash-operation": operationID})
-		args = []string{"compute", "instance", "launch", "--compartment-id", req.CompartmentID, "--availability-domain", req.AvailabilityDomain, "--display-name", req.Name, "--shape", req.Plan, "--shape-config", `{"ocpus":1,"memoryInGBs":6}`, "--image-id", req.Image, "--boot-volume-size-in-gbs", "50", "--subnet-id", req.SubnetID, "--assign-public-ip", "true", "--metadata", string(metadata), "--freeform-tags", string(tags), "--opc-retry-token", operationID}
+		// The public OCI CLI does not expose the SDK's opc_retry_token option.
+		// --no-retry is set by call; durable intent and operation tags reconcile
+		// any ambiguous launch instead of resubmitting it with a new CLI token.
+		args = []string{"compute", "instance", "launch", "--compartment-id", req.CompartmentID, "--availability-domain", req.AvailabilityDomain, "--display-name", req.Name, "--shape", req.Plan, "--shape-config", `{"ocpus":1,"memoryInGBs":6}`, "--image-id", req.Image, "--boot-volume-size-in-gbs", "50", "--subnet-id", req.SubnetID, "--assign-public-ip", "true", "--metadata", string(metadata), "--freeform-tags", string(tags)}
 		if req.FirewallID != "" {
 			ids, _ := json.Marshal([]string{req.FirewallID})
 			args = append(args, "--nsg-ids", string(ids))

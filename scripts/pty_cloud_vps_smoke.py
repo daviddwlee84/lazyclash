@@ -76,9 +76,9 @@ if has("sts", "get-caller-identity"):
 elif has("lightsail", "get-regions"):
     value = {"regions":[{"name":"us-east-1", "displayName":"Fixture region", "availabilityZones":[{"zoneName":"us-east-1a", "state":"available"}]}]}
 elif has("lightsail", "get-bundles"):
-    value = {"bundles":[{"bundleId":"small_3_0", "name":"Small", "instanceType":"t3.micro", "price":7, "cpuCount":2, "ramSizeInGb":1, "diskSizeInGb":40, "transferPerMonthInGb":2048, "isActive":True, "supportedPlatforms":["LINUX_UNIX"], "supportedAppCategories":["LfR"], "power":500, "publicIpv4AddressCount":1}]}
+    value = {"bundles":[{"bundleId":"micro_3_0", "name":"Micro", "instanceType":"micro", "price":7, "cpuCount":2, "ramSizeInGb":1, "diskSizeInGb":40, "transferPerMonthInGb":2048, "isActive":True, "supportedPlatforms":["LINUX_UNIX"], "supportedAppCategories":["LfR"], "power":500, "publicIpv4AddressCount":1}]}
 elif has("lightsail", "get-blueprints"):
-    value = {"blueprints":[{"blueprintId":"ubuntu_24_04", "name":"Ubuntu", "group":"ubuntu", "version":"24.04", "versionCode":"1", "platform":"LINUX_UNIX", "type":"os", "isActive":True, "minPower":0}]}
+    value = {"blueprints":[{"blueprintId":"ubuntu_24_04", "name":"Ubuntu", "group":"ubuntu_24", "version":"24.04", "versionCode":"1", "platform":"LINUX_UNIX", "type":"os", "isActive":True, "minPower":0}]}
 else:
     raise SystemExit("mock forbids unknown or mutating cloud command: " + json.dumps(args))
 print(json.dumps(value))
@@ -129,7 +129,7 @@ def main():
             assert not calls.exists(), "canceled provider selection contacted a cloud API"
 
             args = ["vps", "create", "fixture-lightsail", "--provider", "aws-lightsail", "--profile", "fixture",
-                    "--region", "us-east-1", "--plan", "small_3_0", "--image", "ubuntu_24_04",
+                    "--region", "us-east-1", "--plan", "micro_3_0", "--image", "ubuntu_24_04",
                     "--architecture", "amd64", "--availability-zone", "us-east-1a", "--ssh-key", str(key), "--interactive"]
             terminal = CloudTerminal(settings, env, args)
             terminal.wait(lambda: "Create aws-lightsail VPS" in terminal.text(), "prefilled Lightsail form")

@@ -28,16 +28,13 @@ func lightsailBlueprintArchitecture(id string) string {
 	}
 	return ""
 }
-func lightsailArchitecture(instanceType string) string {
-	family, _, _ := strings.Cut(instanceType, ".")
-	switch family {
-	case "t2", "t3", "t3a":
-		return "amd64"
-	case "t4g":
-		return "arm64"
-	default:
-		return ""
-	}
+
+// Bundle.instanceType is a size such as "micro", not an EC2 CPU family.
+// AWS defines bundle/blueprint compatibility by platform and power. Architecture
+// comes from the explicitly reviewed blueprint, never from a size label.
+// https://docs.aws.amazon.com/lightsail/2016-11-28/api-reference/API_Bundle.html
+func lightsailBundleSupportsBlueprint(bundle, blueprint map[string]any) bool {
+	return contains(bundle["supportedPlatforms"], str(blueprint["platform"])) && num(bundle["power"]) >= num(blueprint["minPower"])
 }
 func lightsailJSON(v any) string { b, _ := json.Marshal(v); return string(b) }
 
@@ -126,12 +123,8 @@ func (a lightsailAdapter) bundles(ctx context.Context, r CreateRequest) ([]map[s
 	}
 	var suitable []map[string]any
 	for _, m := range rows {
-		arch := lightsailArchitecture(str(m["instanceType"]))
 		price, memory := num(m["price"]), num(m["ramSizeInGb"])*1024
-		if !truth(m["isActive"]) || !contains(m["supportedPlatforms"], "LINUX_UNIX") || num(m["publicIpv4AddressCount"]) != 1 || arch == "" || memory < 1024 || memory > 4096 || price <= 0 || math.IsNaN(price) || math.IsInf(price, 0) || str(m["bundleId"]) == "" || num(m["diskSizeInGb"]) <= 0 || num(m["transferPerMonthInGb"]) < 0 {
-			continue
-		}
-		if r.Architecture != "" && r.Architecture != "auto" && r.Architecture != arch {
+		if !truth(m["isActive"]) || !contains(m["supportedPlatforms"], "LINUX_UNIX") || num(m["publicIpv4AddressCount"]) != 1 || memory < 1024 || memory > 4096 || price <= 0 || math.IsNaN(price) || math.IsInf(price, 0) || str(m["bundleId"]) == "" || num(m["diskSizeInGb"]) <= 0 || num(m["transferPerMonthInGb"]) < 0 {
 			continue
 		}
 		suitable = append(suitable, m)
@@ -152,7 +145,7 @@ func (a lightsailAdapter) blueprints(ctx context.Context, r CreateRequest) ([]ma
 	var suitable []map[string]any
 	for _, m := range rows {
 		arch := lightsailBlueprintArchitecture(str(m["blueprintId"]))
-		if !truth(m["isActive"]) || str(m["type"]) != "os" || str(m["platform"]) != "LINUX_UNIX" || str(m["group"]) != "ubuntu" || !strings.HasPrefix(str(m["version"]), "24.04") || str(m["versionCode"]) == "" || arch == "" {
+		if !truth(m["isActive"]) || str(m["type"]) != "os" || str(m["platform"]) != "LINUX_UNIX" || !strings.HasPrefix(str(m["version"]), "24.04") || str(m["versionCode"]) == "" || arch == "" {
 			continue
 		}
 		if r.Architecture != "" && r.Architecture != "auto" && r.Architecture != arch {
@@ -196,7 +189,7 @@ func (a lightsailAdapter) Resolve(ctx context.Context, r CreateRequest) (CreateR
 			continue
 		}
 		for _, image := range images {
-			if (r.Image != "" && r.Image != str(image["blueprintId"])) || lightsailArchitecture(str(b["instanceType"])) != lightsailBlueprintArchitecture(str(image["blueprintId"])) || num(b["power"]) < num(image["minPower"]) {
+			if (r.Image != "" && r.Image != str(image["blueprintId"])) || !lightsailBundleSupportsBlueprint(b, image) {
 				continue
 			}
 			bundle, blueprint = b, image
@@ -209,7 +202,7 @@ func (a lightsailAdapter) Resolve(ctx context.Context, r CreateRequest) (CreateR
 	if bundle == nil {
 		return r, q, fmt.Errorf("no active Lightsail Linux IPv4 bundle with at least 1 GiB RAM matches the reviewed Ubuntu 24.04 architecture and minimum power")
 	}
-	r.Plan, r.Architecture, r.Image = str(bundle["bundleId"]), lightsailArchitecture(str(bundle["instanceType"])), str(blueprint["blueprintId"])
+	r.Plan, r.Architecture, r.Image = str(bundle["bundleId"]), lightsailBlueprintArchitecture(str(blueprint["blueprintId"])), str(blueprint["blueprintId"])
 	version := str(blueprint["versionCode"])
 	if r.ImageVersion != "" && r.ImageVersion != version {
 		return r, q, fmt.Errorf("Lightsail blueprint version changed; inspect a new preview")
@@ -281,29 +274,31 @@ func (a lightsailAdapter) Discover(ctx context.Context, r CreateRequest, kind st
 			return nil, err
 		}
 		for _, m := range rows {
-			compatible := false
+			architecture := ""
 			for _, image := range images {
-				compatible = compatible || (lightsailArchitecture(str(m["instanceType"])) == lightsailBlueprintArchitecture(str(image["blueprintId"])) && num(m["power"]) >= num(image["minPower"]))
+				if lightsailBundleSupportsBlueprint(m, image) {
+					architecture = lightsailBlueprintArchitecture(str(image["blueprintId"]))
+					break
+				}
 			}
-			if compatible {
+			if architecture != "" {
 				id := str(m["bundleId"])
-				choices = append(choices, Choice{ID: id, Label: fmt.Sprintf("%s · %s · %.0f MiB · $%.2f/mo bundle incl. IPv4", id, lightsailArchitecture(str(m["instanceType"])), num(m["ramSizeInGb"])*1024, num(m["price"]))})
+				choices = append(choices, Choice{ID: id, Label: fmt.Sprintf("%s · %s · %.0f MiB · $%.2f/mo bundle incl. IPv4", id, architecture, num(m["ramSizeInGb"])*1024, num(m["price"]))})
 			}
 		}
 	case "images":
+		var selectedBundle map[string]any
 		if r.Plan != "" {
 			bundles, err := a.bundles(ctx, r)
 			if err != nil {
 				return nil, err
 			}
-			found := false
 			for _, b := range bundles {
 				if str(b["bundleId"]) == r.Plan {
-					r.Architecture = lightsailArchitecture(str(b["instanceType"]))
-					found = true
+					selectedBundle = b
 				}
 			}
-			if !found {
+			if selectedBundle == nil {
 				return nil, fmt.Errorf("Lightsail plan is unavailable or incompatible")
 			}
 		}
@@ -312,6 +307,9 @@ func (a lightsailAdapter) Discover(ctx context.Context, r CreateRequest, kind st
 			return nil, err
 		}
 		for _, m := range rows {
+			if selectedBundle != nil && !lightsailBundleSupportsBlueprint(selectedBundle, m) {
+				continue
+			}
 			id := str(m["blueprintId"])
 			choices = append(choices, Choice{ID: id, Label: "Ubuntu 24.04 · " + lightsailBlueprintArchitecture(id) + " · " + str(m["versionCode"])})
 		}

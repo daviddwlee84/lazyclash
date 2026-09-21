@@ -138,6 +138,10 @@ func TestOracleNetworkCleanupOrderAndOwnership(t *testing.T) {
 	s.options.Run = func(_ context.Context, _ string, args []string) ([]byte, error) {
 		kind, action := networkInvocation(t, args)
 		if action == "delete" {
+			flag := map[string]string{"subnet": "--subnet-id", "security-list": "--security-list-id", "route-table": "--rt-id", "internet-gateway": "--ig-id", "vcn": "--vcn-id"}[kind]
+			if lightsailTestFlag(args, flag) != "id-"+kind {
+				t.Fatalf("incorrect OCI delete identifier flag: %v", args)
+			}
 			if strings.Contains(strings.Join(args, " "), "shared-subnet") {
 				t.Fatal("deleted shared resource")
 			}

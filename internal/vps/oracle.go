@@ -164,7 +164,11 @@ func (s *Service) oracleFree(ctx context.Context, req CreateRequest) error {
 	now := s.options.Now().UTC()
 	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 	next := start.AddDate(0, 1, 0)
-	v, err = s.call(ctx, req, "usage-api", "usage-summary", "request-summarized-usages", "--tenant-id", req.TenancyID, "--time-usage-started", start.Format(time.RFC3339), "--time-usage-ended", now.Format(time.RFC3339), "--granularity", "DAILY", "--query-type", "USAGE", "--group-by", `["skuPartNumber","unit"]`)
+	// DAILY requires midnight UTC boundaries. Use tomorrow's exclusive boundary
+	// so today's reported usage is included, including at the start of a month.
+	// The reporting-lag reserve below still covers usage not yet reported.
+	usageEnd := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
+	v, err = s.call(ctx, req, "usage-api", "usage-summary", "request-summarized-usages", "--tenant-id", req.TenancyID, "--time-usage-started", start.Format(time.RFC3339), "--time-usage-ended", usageEnd.Format(time.RFC3339), "--granularity", "DAILY", "--query-type", "USAGE", "--group-by", `["skuPartNumber","unit"]`)
 	if err != nil {
 		return fmt.Errorf("Oracle remaining monthly free allowance is unknown: %w", err)
 	}

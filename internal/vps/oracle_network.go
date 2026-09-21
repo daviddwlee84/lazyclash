@@ -242,6 +242,11 @@ func (s *Service) cleanupOracleNetwork(ctx context.Context, host serverstate.Hos
 			return fmt.Errorf("Oracle %s ownership changed; resource retained", kind)
 		}
 		flag := "--" + kind + "-id"
+		if kind == "route-table" {
+			flag = "--rt-id"
+		} else if kind == "internet-gateway" {
+			flag = "--ig-id"
+		}
 		_, err = s.call(ctx, op.Request, "network", kind, "delete", flag, id, "--force", "--wait-for-state", "TERMINATED", "--max-wait-seconds", "120", "--wait-interval-seconds", "2")
 		if err != nil {
 			return fmt.Errorf("Oracle %s cleanup is incomplete; retain the operation and inspect before retrying: %w", kind, err)

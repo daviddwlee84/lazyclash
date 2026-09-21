@@ -86,6 +86,11 @@ func (f *fakeCloud) run(_ context.Context, executable string, args []string) ([]
 	}
 	isCreate := strings.Contains(cmd, "droplet create") || strings.Contains(cmd, "instance create") || strings.Contains(cmd, "linodes create") || strings.Contains(cmd, "instance launch")
 	if isCreate {
+		if f.provider == "oracle" {
+			if strings.Contains(cmd, "--opc-retry-token") || !strings.Contains(cmd, "--no-retry") {
+				f.t.Fatal("OCI launch must use supported CLI options with automatic retries disabled")
+			}
+		}
 		f.createCalls++
 		if f.beforeCreate != nil {
 			f.beforeCreate()

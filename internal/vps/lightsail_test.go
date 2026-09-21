@@ -50,8 +50,8 @@ func newLightsailFixture(t *testing.T) *lightsailFixture {
 	}
 	now := time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC)
 	f := &lightsailFixture{t: t, account: "123456789012", operations: map[string]map[string]any{}}
-	f.bundleRows = []map[string]any{{"bundleId": "small_3_0", "name": "Small", "price": 7., "cpuCount": 2., "ramSizeInGb": 1., "diskSizeInGb": 40., "transferPerMonthInGb": 2048., "instanceType": "t3.micro", "publicIpv4AddressCount": 1., "power": 500., "isActive": true, "supportedPlatforms": []any{"LINUX_UNIX"}}}
-	f.imageRows = []map[string]any{{"blueprintId": "ubuntu_24_04", "name": "Ubuntu", "group": "ubuntu", "version": "24.04", "versionCode": "20260901", "platform": "LINUX_UNIX", "type": "os", "isActive": true, "minPower": 0.}}
+	f.bundleRows = []map[string]any{{"bundleId": "micro_3_0", "name": "Micro", "price": 7., "cpuCount": 2., "ramSizeInGb": 1., "diskSizeInGb": 40., "transferPerMonthInGb": 2048., "instanceType": "micro", "publicIpv4AddressCount": 1., "power": 500., "isActive": true, "supportedPlatforms": []any{"LINUX_UNIX"}}}
+	f.imageRows = []map[string]any{{"blueprintId": "ubuntu_24_04", "name": "Ubuntu", "group": "ubuntu_24", "version": "24.04", "versionCode": "20260901", "platform": "LINUX_UNIX", "type": "os", "isActive": true, "minPower": 0.}}
 	f.s = New(serverstate.Store{Path: filepath.Join(dir, "servers.toml"), StateDir: filepath.Join(dir, "state")}, Options{Now: func() time.Time { return now }, Run: f.run})
 	f.a = lightsailAdapter{s: f.s}
 	r, err := normalizeCloud(CreateRequest{ID: "lightsail-test", Name: "lightsail-test", Provider: "aws-lightsail", Region: "us-east-1", Profile: "fixture", SSHKey: key, SSHCIDR: "192.0.2.0/24"})
@@ -181,7 +181,7 @@ func (f *lightsailFixture) run(_ context.Context, executable string, args []stri
 		if err = json.Unmarshal([]byte(lightsailTestFlag(args, "--tags")), &tags); err != nil {
 			f.t.Fatal(err)
 		}
-		f.instance = map[string]any{"name": f.op.ID, "arn": "arn:aws:lightsail:us-east-1:123456789012:Instance/immutable-instance", "createdAt": created, "location": location, "tags": tags, "blueprintId": "ubuntu_24_04", "bundleId": "small_3_0", "state": map[string]any{"name": "running"}, "hardware": map[string]any{"disks": []any{map[string]any{"isSystemDisk": true}}}}
+		f.instance = map[string]any{"name": f.op.ID, "arn": "arn:aws:lightsail:us-east-1:123456789012:Instance/immutable-instance", "createdAt": created, "location": location, "tags": tags, "blueprintId": "ubuntu_24_04", "bundleId": "micro_3_0", "state": map[string]any{"name": "running"}, "hardware": map[string]any{"disks": []any{map[string]any{"isSystemDisk": true}}}}
 		f.ports = []map[string]any{{"fromPort": 22., "toPort": 22., "protocol": "tcp", "state": "open", "cidrs": []any{"0.0.0.0/0"}}, {"fromPort": 80., "toPort": 80., "protocol": "tcp", "state": "open", "cidrs": []any{"0.0.0.0/0"}}}
 	case "lightsail-ip":
 		if f.ip != nil {
@@ -236,7 +236,7 @@ func TestLightsailResolvePinsBundleBlueprintInitializerAndStoppedCost(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Plan != "small_3_0" || r.Architecture != "amd64" || r.ImageVersion != "20260901" || r.InitializerSHA256 == "" || r.InitializerVersion != lightsailInitializerVersion || r.AvailabilityZone != "us-east-1a" {
+	if r.Plan != "micro_3_0" || r.Architecture != "amd64" || r.ImageVersion != "20260901" || r.InitializerSHA256 == "" || r.InitializerVersion != lightsailInitializerVersion || r.AvailabilityZone != "us-east-1a" {
 		t.Fatalf("incomplete resolution: %+v", r)
 	}
 	if q.MonthlyUSD != 7 || q.MemoryMiB != 1024 || len(q.Components) != 1 || q.Components[0].Name != "bundle" || q.StoppedMonthlyUSD == nil || *q.StoppedMonthlyUSD != 7 || q.TransferPricing.Basis != "combined" || len(q.TransferPricing.Tiers) != 0 {
@@ -268,13 +268,53 @@ func TestLightsailBundleFilteringPaginationAndNoSpeculativeARM(t *testing.T) {
 	for _, change := range []struct {
 		key   string
 		value any
-	}{{"publicIpv4AddressCount", 0.}, {"ramSizeInGb", .5}, {"instanceType", "unknown.micro"}, {"instanceType", "t4g.micro"}, {"power", -1.}, {"isActive", false}} {
+	}{{"publicIpv4AddressCount", 0.}, {"ramSizeInGb", .5}, {"supportedPlatforms", []any{"WINDOWS"}}, {"power", -1.}, {"isActive", false}} {
 		old := f.bundleRows[0][change.key]
 		f.bundleRows[0][change.key] = change.value
 		if _, _, err = f.a.Resolve(context.Background(), f.op.Request); err == nil {
 			t.Fatalf("accepted unsupported bundle %s=%v", change.key, change.value)
 		}
 		f.bundleRows[0][change.key] = old
+	}
+}
+
+func TestLightsailLiveCatalogSchema(t *testing.T) {
+	// Public catalog fields returned by get-bundles/get-blueprints in
+	// ap-southeast-1 on 2026-09-22. instanceType is a size, not an EC2 family.
+	f := newLightsailFixture(t)
+	f.bundleRows = []map[string]any{{"bundleId": "micro_3_0", "name": "Micro", "price": 7., "cpuCount": 2., "ramSizeInGb": 1., "diskSizeInGb": 40., "transferPerMonthInGb": 2048., "instanceType": "micro", "publicIpv4AddressCount": 1., "power": 500., "isActive": true, "supportedPlatforms": []any{"LINUX_UNIX"}}}
+	f.imageRows = []map[string]any{{"blueprintId": "ubuntu_24_04", "name": "Ubuntu", "group": "ubuntu_24", "version": "24.04 LTS", "versionCode": "1", "platform": "LINUX_UNIX", "type": "os", "isActive": true, "minPower": 0.}}
+	r := f.op.Request
+	r.Plan, r.ImageVersion = "", ""
+	choices, err := f.a.Discover(context.Background(), r, "plans")
+	if err != nil || len(choices) != 1 || choices[0].ID != "micro_3_0" {
+		t.Fatalf("real Lightsail catalog was rejected: %v %v", choices, err)
+	}
+	resolved, quote, err := f.a.Resolve(context.Background(), r)
+	if err != nil || resolved.Plan != "micro_3_0" || resolved.Architecture != "amd64" || resolved.ImageVersion != "1" || quote.MonthlyUSD != 7 || quote.MemoryMiB != 1024 {
+		t.Fatalf("real Lightsail quote mismatch: %+v %+v %v", resolved, quote, err)
+	}
+	r.Plan = resolved.Plan
+	choices, err = f.a.Discover(context.Background(), r, "images")
+	if err != nil || len(choices) != 1 || choices[0].ID != "ubuntu_24_04" {
+		t.Fatalf("real Ubuntu blueprint was rejected: %v %v", choices, err)
+	}
+	f.imageRows[0]["minPower"] = 1000.
+	if _, err = f.a.Discover(context.Background(), r, "images"); err == nil {
+		t.Fatal("image discovery ignored the selected bundle's power")
+	}
+	f.imageRows[0]["minPower"] = 0.
+	r.Architecture = "arm64"
+	if _, _, err = f.a.Resolve(context.Background(), r); err == nil {
+		t.Fatal("x86 Ubuntu blueprint accepted for explicit ARM request")
+	}
+	if _, err = f.a.Discover(context.Background(), r, "images"); err == nil {
+		t.Fatal("image discovery replaced the requested ARM architecture")
+	}
+	r.Architecture = "auto"
+	f.imageRows[0]["blueprintId"] = "ubuntu_24_04_unreviewed"
+	if _, _, err = f.a.Resolve(context.Background(), r); err == nil {
+		t.Fatal("unreviewed Ubuntu blueprint accepted")
 	}
 }
 func TestLightsailProvisionLifecycleAndOwnedResourceReceipts(t *testing.T) {
