@@ -128,6 +128,8 @@ New client and source workflows are available from `:` and the target picker:
 lazyclash setup                                      # client setup wizard
 lazyclash servers deploy                             # server / VPS deployment wizard
 lazyclash vps catalog                                # dated cost and sizing comparison
+lazyclash vps guide --provider aws-lightsail --region ap-northeast-1
+lazyclash vps guide --provider oracle --format agent  # offline CLI setup + agent handoff
 lazyclash --target desktop configs source set --interactive
 lazyclash --target desktop proxies export 'My node' --interactive
 lazyclash --target desktop groups edit PROXY --interactive

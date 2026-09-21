@@ -10,6 +10,23 @@ DigitalOcean, Azure, AWS Lightsail and EC2 use their official authenticated CLIs
 API credentials remain there. Provider IDs are `azure`, `aws-lightsail` and
 `aws-ec2`; Azure uses explicit `--subscription`, AWS uses the existing `--profile`.
 Use a public key file for all three. No global CLI account defaults are changed.
+
+`vps guide [ID] --provider PROVIDER [--region REGION]` prints a copyable hybrid
+runbook: CLI installation/login, original official CLI queries, then lazyclash
+discovery, preview, reviewed apply and recovery. `--format agent` adds a handoff
+prompt; `--json` returns structured steps. Generation is offline and only checks
+PATH, even with broken settings. It never reads credentials or runs commands.
+Missing inputs use guarded `${LC_*:?}` shell variables; resolve them from the
+actual account rather than inventing IDs. Installation commands are explicitly
+labeled macOS/Homebrew; use the linked vendor instructions on other platforms.
+Oracle defaults to browser sessions and scopes `OCI_CLI_AUTH=security_token` to
+the emitted commands; use `--oci-auth api_key` for an existing API-key profile.
+Explicit config/inventory scope is preserved; adjust local paths when handing
+off to a different machine. Run one step at a time within the user's authorized
+scope, review costs and identity before assigning the exact preview digest, and
+never turn this document into an automatically approved script. Official CLI
+queries bypass catalog filters for diagnosis; managed writes still use lazyclash
+receipts and reconciliation. Missing/free-tier eligibility stays unknown.
 Oracle only offers a checked Always Free A1 recipe; unknown eligibility or
 capacity does not authorize a paid substitute.
 New owned Oracle VMs receive a version/hash-bound cloud-init that preserves

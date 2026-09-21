@@ -14,6 +14,46 @@ lazyclash vps list --json
 lazyclash servers list --json
 ```
 
+## 可複製 CLI 指令與 agent handoff
+
+不想使用 wizard，或遇到登入／方案篩選問題時，可以產生逐步指令指南：
+
+```sh
+lazyclash vps guide test-jp --provider aws-lightsail --profile default --region ap-northeast-1
+lazyclash vps guide test-jp --provider aws-lightsail --region ap-northeast-1 --format agent
+lazyclash vps guide oracle-jp --provider oracle --region ap-tokyo-1 --profile my-session
+lazyclash vps guide --provider azure --json
+```
+
+支援所有 managed VPS providers。指南只檢查官方 CLI 是否在 PATH，不讀取雲端
+憑證、不呼叫 API、不要求登入，也不安裝或建立任何資源；設定檔損壞時仍可產生。
+缺少 CLI 時會標示，例如 macOS 的 `brew install awscli`，並附官方安裝文件。
+每一步都標明執行效果，包含官方 CLI 原始查詢、lazyclash 相容選項、VM 預覽、
+帶 digest 的套用、狀態／恢復，以及代理服務預覽。
+
+`--format agent` 加入交接指示，可整份貼給另一個 agent；`--json` 提供結構化
+步驟和缺少的參數。文件本身不是額外的花費授權，也不是可整份執行的 script。
+逐段執行，根據帳戶與查詢結果設定 `LC_REGION`、`LC_PLAN`、`LC_SSH_PUBLIC_KEY`
+等 shell 變數；`${LC_*:?…}` 會在缺值時停止命令，避免執行占位參數。
+SSH 公鑰和管理者 CIDR 須自行指定；不輸出 SSH 私鑰或 API token。
+
+Oracle 預設使用瀏覽器 session，產生的 OCI／lazyclash 命令都有局部的
+`OCI_CLI_AUTH=security_token`；已有 API key profile 時使用 `--oci-auth api_key`。
+guide 與 create 共用建機選項，可預填 `--plan`、`--image`、`--ssh-key` 等。
+明確的 `--config`／`--servers-config`（或對應環境變數）會保留成絕對路徑；
+跨機器交接時須調整本地 binary、設定檔與公鑰路徑。
+
+官方 CLI 查詢能繞過 picker 篩選，直接診斷認證錯誤或 API schema 差異。
+實際建立仍走 lazyclash 的費用／身分預覽、操作記錄和恢復流程。檢查 VM 預覽
+後才設定 `LC_REVIEWED_DIGEST` 套用；不要自動擷取 digest 後立即批准。
+代理服務部署另需自己的預覽 digest。未知建機結果先 `vps status/resume`，
+不能用原生建機命令盲目重試。CLI 指令和 adapter 仍需隨上游版本維護。
+
+Oracle 指南另提供 `compute-capacity-report create`，只產生容量報告，不建立 VM
+或預留容量。`OUT_OF_HOST_CAPACITY` 與登入失敗、免費額度不足分開處理；已有
+quota 不代表實體主機有空位。API-key 設定的 OCID 必須是 `ocid1.user...`／
+`ocid1.tenancy...`，而且 `oci setup config` 之後仍須在 Console 登記 API 公鑰。
+
 ## SSH / homelab
 
 遠端首版支援 Ubuntu 24.04 LTS、amd64／arm64 與 systemd。管理使用 OpenSSH，

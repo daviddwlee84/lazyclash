@@ -421,6 +421,8 @@ func (o *options) registerCompletions(root *cobra.Command) {
 		}
 		if cmd.Flags().Lookup("format") != nil {
 			switch path {
+			case "vps guide":
+				_ = cmd.RegisterFlagCompletionFunc("format", values("markdown", "agent"))
 			case "proxy docker render":
 				_ = cmd.RegisterFlagCompletionFunc("format", values("env-file", "compose", "build-args", "client-json"))
 			case "proxies export":
@@ -428,6 +430,9 @@ func (o *options) registerCompletions(root *cobra.Command) {
 			case "servers export":
 				_ = cmd.RegisterFlagCompletionFunc("format", values("uri", "qr", "mihomo", "starter", "client-bundle", "admin-bundle"))
 			}
+		}
+		if path == "vps guide" {
+			_ = cmd.RegisterFlagCompletionFunc("oci-auth", values("security_token", "api_key"))
 		}
 		if cmd.Flags().Lookup("scope") != nil && path == "proxy docker render" {
 			_ = cmd.RegisterFlagCompletionFunc("scope", values("runtime", "build", "both"))

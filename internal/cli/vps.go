@@ -1,8 +1,13 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"strconv"
+	"strings"
 
 	"github.com/daviddwlee84/lazyclash/internal/serverstate"
 	"github.com/daviddwlee84/lazyclash/internal/vps"
@@ -23,7 +28,7 @@ func (o *options) vpsService(cmd *cobra.Command) (*vps.Service, error) {
 
 func (o *options) vpsCommand() *cobra.Command {
 	group := &cobra.Command{Use: "vps", Short: "Compare, create and manage proxy-server VPS hosts through official cloud CLIs"}
-	group.AddCommand(o.vpsEstimateCommand())
+	group.AddCommand(o.vpsEstimateCommand(), o.vpsGuideCommand())
 	group.AddCommand(&cobra.Command{Use: "catalog", Short: "Show dated price snapshots and recommended VPS starting sizes", Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error { return o.output(cmd, vps.Catalog()) }})
 	group.AddCommand(&cobra.Command{Use: "list", Short: "List remembered cloud and existing SSH hosts without connecting", Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error {
 		s, e := o.vpsService(cmd)
@@ -156,21 +161,7 @@ func (o *options) vpsCommand() *cobra.Command {
 		}
 		return e
 	}}
-	create.Flags().StringVar(&req.Name, "name", "", "cloud display name (default: ID)")
-	create.Flags().StringVar(&req.Provider, "provider", "", vpsProviderHelp)
-	create.Flags().StringVar(&req.Profile, "profile", "", "official CLI profile (Vultr: config file path)")
-	create.Flags().StringVar(&req.Region, "region", "", "provider region")
-	create.Flags().StringVar(&req.Plan, "plan", "", "provider plan (default: 1 GB baseline; Azure/AWS select a low fixed-cost compatible plan)")
-	create.Flags().StringVar(&req.Image, "image", "", "Ubuntu 24.04 image ID; Azure/AWS resolve a fixed matching image during preview")
-	create.Flags().StringVar(&req.SSHKey, "ssh-key", "", "DO/Vultr provider key ID; other providers: SSH public key file")
-	create.Flags().StringVar(&req.SSHUser, "ssh-user", "", "SSH user (root, or ubuntu for Oracle/Azure/AWS)")
-	vpsCloudFlags(create.Flags(), &req)
-	create.Flags().StringVar(&req.SSHCIDR, "ssh-cidr", "0.0.0.0/0", "SSH ingress CIDR for owned cloud firewall (restrict to your administrator IP when possible)")
-	create.Flags().StringVar(&req.FirewallID, "firewall", "", "reuse an existing cloud firewall/NSG (never owned or deleted)")
-	create.Flags().StringVar(&req.TenancyID, "tenancy", "", "Oracle tenancy OCID")
-	create.Flags().StringVar(&req.CompartmentID, "compartment", "", "Oracle compartment OCID")
-	create.Flags().StringVar(&req.SubnetID, "subnet", "", "Oracle existing public subnet OCID (blank: create owned public network)")
-	create.Flags().StringVar(&req.AvailabilityDomain, "availability-domain", "", "Oracle availability domain")
+	vpsCreateFlags(create.Flags(), &req, "0.0.0.0/0")
 	create.Flags().BoolVar(&yes, "yes", false, "create the exactly reviewed VM")
 	create.Flags().StringVar(&expect, "expect", "", "reviewed preview digest")
 	create.Flags().BoolVar(&interactive, "interactive", false, "select and review VPS settings in a terminal wizard")
@@ -378,7 +369,29 @@ func (o *options) vpsCommand() *cobra.Command {
 	return group
 }
 
-func (o *options) runVPSCreateWizard(cmd *cobra.Command, req vps.CreateRequest) (serverstate.Host, error) {
+func (o *options) runVPSCreateWizard(cmd *cobra.Command, req vps.CreateRequest) (host serverstate.Host, err error) {
+	defer func() {
+		if err == nil || req.Provider == "" || errors.Is(err, wizard.ErrCanceled) || errors.Is(err, context.Canceled) {
+			return
+		}
+		binary, e := os.Executable()
+		if e != nil {
+			binary = "lazyclash"
+		}
+		parts := []string{guideQuote(binary), "vps guide --provider", guideQuote(req.Provider)}
+		for _, flag := range []struct{ name, value string }{{"--profile", req.Profile}, {"--region", req.Region}, {"--subscription", req.SubscriptionID}, {"--config", o.path}, {"--servers-config", o.serversPath}} {
+			if flag.value != "" {
+				parts = append(parts, flag.name, guideQuote(flag.value))
+			}
+		}
+		install := ""
+		if provider, ok := vpsGuideProviders[req.Provider]; ok {
+			if _, lookupErr := exec.LookPath(provider.cli); lookupErr != nil {
+				install = fmt.Sprintf("\n%s is missing from PATH. On macOS with Homebrew: brew install %s", provider.cli, provider.formula)
+			}
+		}
+		err = fmt.Errorf("%w%s\nCLI setup and copyable diagnostic/deployment steps: %s", err, install, strings.Join(parts, " "))
+	}()
 	if err := vps.ValidateDraft(req); err != nil {
 		return serverstate.Host{}, usage("%s", err)
 	}
@@ -492,6 +505,24 @@ func (o *options) runVPSCreateWizard(cmd *cobra.Command, req vps.CreateRequest) 
 }
 
 const vpsProviderHelp = "oracle, vultr, linode, digitalocean, azure, aws-lightsail, aws-ec2"
+
+func vpsCreateFlags(flags *pflag.FlagSet, req *vps.CreateRequest, defaultSSHCIDR string) {
+	flags.StringVar(&req.Name, "name", "", "cloud display name (default: ID)")
+	flags.StringVar(&req.Provider, "provider", "", vpsProviderHelp)
+	flags.StringVar(&req.Profile, "profile", "", "official CLI profile (Vultr: config file path)")
+	flags.StringVar(&req.Region, "region", "", "provider region")
+	flags.StringVar(&req.Plan, "plan", "", "provider plan (default: 1 GB baseline; Azure/AWS select a low fixed-cost compatible plan)")
+	flags.StringVar(&req.Image, "image", "", "Ubuntu 24.04 image ID; Azure/AWS resolve a fixed matching image during preview")
+	flags.StringVar(&req.SSHKey, "ssh-key", "", "DO/Vultr provider key ID; other providers: SSH public key file")
+	flags.StringVar(&req.SSHUser, "ssh-user", "", "SSH user (root, or ubuntu for Oracle/Azure/AWS)")
+	vpsCloudFlags(flags, req)
+	flags.StringVar(&req.SSHCIDR, "ssh-cidr", defaultSSHCIDR, "SSH ingress CIDR for owned cloud firewall (restrict to your administrator IP when possible)")
+	flags.StringVar(&req.FirewallID, "firewall", "", "reuse an existing cloud firewall/NSG (never owned or deleted)")
+	flags.StringVar(&req.TenancyID, "tenancy", "", "Oracle tenancy OCID")
+	flags.StringVar(&req.CompartmentID, "compartment", "", "Oracle compartment OCID")
+	flags.StringVar(&req.SubnetID, "subnet", "", "Oracle existing public subnet OCID (blank: create owned public network)")
+	flags.StringVar(&req.AvailabilityDomain, "availability-domain", "", "Oracle availability domain")
+}
 
 func vpsCloudFlags(flags *pflag.FlagSet, req *vps.CreateRequest) {
 	flags.StringVar(&req.SubscriptionID, "subscription", "", "Azure subscription ID (does not change the CLI default)")
