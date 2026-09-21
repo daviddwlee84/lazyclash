@@ -61,7 +61,16 @@ func expressions(raw []byte) ([]expression, error) {
 		} else {
 			v := n.Value()
 			r := v.Raw
-			if r.Length == 0 {
+			if r.Length == 0 && v.Kind == unstable.Array {
+				from, to, err := arrayValueRange(raw, start)
+				if err != nil {
+					return nil, err
+				}
+				e.from, e.to = from, to
+				out = append(out, e)
+				continue
+			}
+			if r.Length == 0 && len(v.Data) > 0 {
 				r = p.Range(v.Data)
 			}
 			e.from = int(r.Offset)
@@ -275,8 +284,103 @@ func preserve(raw []byte, inv Inventory) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	out, err = reconcile(out, "tailnet", inv.TailnetNodes)
+	if err != nil {
+		return nil, err
+	}
+	out, err = reconcile(out, "tailnet_proxies", inv.TailnetProxies)
+	if err != nil {
+		return nil, err
+	}
 	if _, err = decode(out); err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+// The TOML parser does not expose a Raw range for arrays. Scan delimiters
+// without interpreting string content, including TOML multiline strings and
+// quote runs at their closing delimiters. Unknown fields retain their bytes.
+func arrayValueRange(raw []byte, start int) (int, int, error) {
+	at := start
+	for at < len(raw) {
+		switch raw[at] {
+		case '\'', '"':
+			next, err := tomlStringEnd(raw, at)
+			if err != nil {
+				return 0, 0, err
+			}
+			at = next
+			continue
+		case '=':
+			at++
+			for at < len(raw) && (raw[at] == ' ' || raw[at] == '\t' || raw[at] == '\n' || raw[at] == '\r') {
+				at++
+			}
+			if at >= len(raw) || raw[at] != '[' {
+				return 0, 0, errors.New("cannot locate TOML array value")
+			}
+			from, depth := at, 0
+			for at < len(raw) {
+				switch raw[at] {
+				case '\'', '"':
+					next, err := tomlStringEnd(raw, at)
+					if err != nil {
+						return 0, 0, err
+					}
+					at = next
+					continue
+				case '#':
+					for at < len(raw) && raw[at] != '\n' {
+						at++
+					}
+					continue
+				case '[':
+					depth++
+				case ']':
+					depth--
+					if depth == 0 {
+						return from, at + 1, nil
+					}
+				}
+				at++
+			}
+			return 0, 0, errors.New("unterminated TOML array value")
+		}
+		at++
+	}
+	return 0, 0, errors.New("cannot locate TOML array value")
+}
+
+func tomlStringEnd(raw []byte, start int) (int, error) {
+	quote := raw[start]
+	multiline := start+2 < len(raw) && raw[start+1] == quote && raw[start+2] == quote
+	at := start + 1
+	if multiline {
+		at = start + 3
+	}
+	for at < len(raw) {
+		if quote == '"' && raw[at] == '\\' {
+			at += 2
+			continue
+		}
+		if raw[at] == quote {
+			if !multiline {
+				return at + 1, nil
+			}
+			end := at
+			for end < len(raw) && raw[end] == quote {
+				end++
+			}
+			// Three close a multiline string. A valid four/five-quote run also
+			// contains one/two literal trailing quotes; all belong to this value.
+			if end-at >= 3 {
+				return end, nil
+			}
+			at = end
+			continue
+		}
+		at++
+	}
+	return 0, errors.New("unterminated TOML string")
 }

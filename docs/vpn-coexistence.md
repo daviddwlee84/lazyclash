@@ -54,9 +54,13 @@ Tailscale exit node 將一般 Internet 流量導入 tailnet；Mihomo `auto-route
 使某一方看不到流量。Tailscale 官方明確表示一般 split-tunnel exclusion 的 workaround
 不適用於 exit-node 模式。[官方共存說明](https://tailscale.com/docs/reference/faq/other-vpns)
 
-本版要求先選擇預設路由的管理者：保留其他全流量 VPN 並使用 Mihomo explicit proxy，
+先選擇預設路由的管理者：保留其他全流量 VPN 並使用 Mihomo explicit proxy，
 或由使用者在原生 VPN 中調整模式後重新檢查。工具不自動停用企業 VPN，也不宣稱
 已支援雙全流量 VPN 串接。其他 VPN 的 kill switch／管理政策可能有額外限制。
+
+`tailnet exit use` 可以對已確認的本機 Mihomo 執行有快照的 runtime TUN 交接；
+`release` 在設定及 owner 身分仍符合時恢復。Verge 重啟可能重新套用原生 TUN 偏好，
+需要重新驗證；工具不直接修改運行中的 Verge 設定檔。詳見[Tailscale 管理](tailnet.md)。
 
 ## 權限、服務與復原
 

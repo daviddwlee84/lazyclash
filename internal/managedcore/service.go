@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -66,6 +68,18 @@ func normalize(request Request) (Request, error) {
 	if request.Network.TUN && request.ServiceScope != "system" {
 		return request, errors.New("host TUN requires a system-owned installation; select --service-scope system")
 	}
+	if request.ProxyListen != "" {
+		ip, e := netip.ParseAddr(request.ProxyListen)
+		if e != nil || !(netip.MustParsePrefix("100.64.0.0/10").Contains(ip) || netip.MustParsePrefix("fd7a:115c:a1e0::/48").Contains(ip)) {
+			return request, errors.New("private gateway listener must be an explicit Tailscale IP")
+		}
+		if request.Network.TUN || request.Network.SystemProxy {
+			return request, errors.New("a private gateway cannot own host TUN or system proxy settings")
+		}
+	}
+	if request.ProxyGateway && (request.Network.TUN || request.Network.SystemProxy) {
+		return request, errors.New("a private gateway cannot own host TUN or system proxy settings")
+	}
 	if err := config.ValidateTarget(config.Target{Controller: "http://127.0.0.1:9090", SSHHost: request.SSHHost}); err != nil {
 		return request, err
 	}
@@ -98,6 +112,9 @@ func preview(ctx context.Context, request Request, opts Options, current *Instan
 	}
 
 	plan := Plan{current: current, ID: request.ID, Request: request, Host: host, Controller: fmt.Sprintf("http://127.0.0.1:%d", request.ControllerPort), ProbeProxy: fmt.Sprintf("http://127.0.0.1:%d", request.MixedPort), InputSHA256: hashBytes(request.Input), Warnings: []string{}, Blockers: []string{}, Changes: []string{}, NeedsPrivilege: request.ServiceScope == "system"}
+	if request.ProxyListen != "" {
+		plan.ProbeProxy = "http://" + net.JoinHostPort(request.ProxyListen, fmt.Sprint(request.MixedPort))
+	}
 	if host.OS != "darwin" && host.OS != "linux" {
 		plan.Blockers = append(plan.Blockers, "managed clients support macOS and Linux")
 	}
@@ -234,7 +251,7 @@ func preview(ctx context.Context, request Request, opts Options, current *Instan
 		if e != nil {
 			return plan, e
 		}
-		if old.ControllerPort != request.ControllerPort || old.MixedPort != request.MixedPort || old.Boot != request.Boot || old.SSHHost != request.SSHHost || old.DockerContext != request.DockerContext {
+		if old.ControllerPort != request.ControllerPort || old.MixedPort != request.MixedPort || old.Boot != request.Boot || old.SSHHost != request.SSHHost || old.DockerContext != request.DockerContext || old.ProxyListen != request.ProxyListen || old.ProxyGateway != request.ProxyGateway {
 			plan.Blockers = append(plan.Blockers, "configure retains host, ports, boot policy and Docker context; create a separately reviewed instance to migrate them")
 		}
 	}
@@ -268,6 +285,9 @@ func preview(ctx context.Context, request Request, opts Options, current *Instan
 	}
 	plan.Warnings = append(plan.Warnings, warnings...)
 	plan.Changes = []string{"Create or update only this explicitly owned instance: " + root, "Listen on loopback controller and data-proxy ports with a generated private API secret", "Validate the candidate in isolated storage before starting its service", "Verify API authentication and record explicit proxy connectivity separately"}
+	if request.ProxyListen != "" {
+		plan.Changes[1] = "Listen on the explicit Tailscale data-proxy address with required authentication; keep the controller private"
+	}
 	if current != nil {
 		plan.Changes[0] = "Configure owned instance: " + root
 	}
@@ -379,7 +399,7 @@ func Apply(ctx context.Context, request Request, expected string, opts Options) 
 	if err = saveReceipt(receipt, opts); err != nil {
 		return receipt, err
 	}
-	response, err := callHost(ctx, request.SSHHost, request.ServiceScope == "system", hostRequest{Op: "install", ID: request.ID, Root: plan.Root, Backend: request.Backend, Version: request.Version, ServiceScope: request.ServiceScope, DockerEndpoint: plan.Host.DockerEndpoint, Ports: []int{request.ControllerPort, request.MixedPort}, OwnerToken: owner, Profile: profile, ProfileSHA256: hashBytes(profile), Resources: plan.resources, Artifact: artifact, ArtifactSHA256: plan.Artifact.SHA256, DockerArchive: request.DockerArchive, DockerArchiveSHA256: request.DockerArchiveSHA256, ConfigSHA256: plan.Artifact.ConfigSHA256, Image: plan.Artifact.Image, Platform: plan.Artifact.Platform, Network: request.Network, Boot: request.Boot}, opts)
+	response, err := callHost(ctx, request.SSHHost, request.ServiceScope == "system", hostRequest{Op: "install", ID: request.ID, Root: plan.Root, Backend: request.Backend, Version: request.Version, ServiceScope: request.ServiceScope, DockerEndpoint: plan.Host.DockerEndpoint, Ports: []int{request.ControllerPort, request.MixedPort}, ProxyListen: request.ProxyListen, ProxyUDP: request.ProxyUDP, OwnerToken: owner, Profile: profile, ProfileSHA256: hashBytes(profile), Resources: plan.resources, Artifact: artifact, ArtifactSHA256: plan.Artifact.SHA256, DockerArchive: request.DockerArchive, DockerArchiveSHA256: request.DockerArchiveSHA256, ConfigSHA256: plan.Artifact.ConfigSHA256, Image: plan.Artifact.Image, Platform: plan.Artifact.Platform, Network: request.Network, Boot: request.Boot}, opts)
 	if err != nil {
 		if response.Status == "not_installed" {
 			receipt.Status = "not_installed"

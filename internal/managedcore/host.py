@@ -243,7 +243,11 @@ def compose_data(root, request, boot=False):
     service={"image":request.get("runtime_image") or request["image"],"platform":request["platform"],"restart":"unless-stopped" if boot else "no","labels":{"io.lazyclash.owner":request["owner_token"],"io.lazyclash.instance":request["id"]},"volumes":[{"type":"bind","source":str(root/"home"),"target":"/root/.config/mihomo","bind":{"create_host_path":False}}]}
     if request.get("network",{}).get("tun"):
         service.update(network_mode="host",devices=["/dev/net/tun:/dev/net/tun"],cap_add=["NET_ADMIN"])
-    else:service["ports"]=["127.0.0.1:%d:%d"%(port,port) for port in request["ports"]]
+    else:
+        ports=request["ports"];bind=request.get("proxy_listen") or "127.0.0.1"
+        if ":" in bind:bind="["+bind+"]"
+        service["ports"]=["127.0.0.1:%d:%d"%(ports[0],ports[0]),"%s:%d:%d"%(bind,ports[1],ports[1])]
+        if request.get("proxy_udp"):service["ports"].append("%s:%d:%d/udp"%(bind,ports[1],ports[1]))
     return json.dumps({"services":{"mihomo":service}},sort_keys=True).encode()
 
 def verify_owned_files(root,request,info):

@@ -188,3 +188,103 @@ annotation='firewall annotation'
 		t.Fatalf("resource annotations collided:\n%s", data)
 	}
 }
+
+func TestTailnetArrayPreservation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "servers.toml")
+	source := "version = 1\n# peer comment\n[[tailnet]]\nid = 'rpi'\npeer_id = 'peer1'\nssh_host = 'rpi'\nips = [\n  '100.72.151.78', # address comment\n  'fd7a:115c:a1e0::1',\n]\nfuture = 'keep' # future comment\n"
+	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s := Store{Path: path}
+	for i := 0; i < 2; i++ {
+		if err := s.Update(func(inv *Inventory) error {
+			n, e := inv.TailnetNode("rpi")
+			if e != nil {
+				return e
+			}
+			n.ExitManaged = true
+			n.IPs = []string{"100.72.151.79"}
+			return inv.UpsertTailnetNode(n)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"# peer comment", "future = 'keep' # future comment", "100.72.151.79"} {
+		if !strings.Contains(string(b), want) {
+			t.Fatalf("lost preserved content %q: %s", want, b)
+		}
+	}
+	inv, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inv.TailnetNodes) != 1 || !inv.TailnetNodes[0].ExitManaged {
+		t.Fatalf("bad saved peer: %+v", inv)
+	}
+}
+
+func TestTailnetPreservesUnknownMultilineArrays(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "servers.toml")
+	unknown := `future = [
+  """A single " quote before ] and # is content.
+A pair "" also stays inside this string, plus [ and =.
+An escaped quote \" is still content, ending with a literal quote"""",
+  '''A single ' quote before ] and # is literal content.
+A pair '' does not end the multiline literal, nor do [ or =.
+Finish with two literal quotes''''',
+  { name = "brackets [ ] # =", nested = ["escaped \\\" ]", '''nested ' ] # literal'''] },
+] # keep the array comment
+`
+	from, to, err := arrayValueRange([]byte(unknown), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if from != strings.Index(unknown, "[") || to != strings.LastIndex(unknown, "] # keep the array comment")+1 {
+		t.Fatalf("array scanner stopped inside a multiline string: range %d:%d", from, to)
+	}
+	source := "version = 1\n# leading comment\n[[tailnet]]\nid = 'rpi'\npeer_id = 'peer1'\nssh_host = 'rpi'\nips = ['100.72.151.78'] # keep IP comment\n" + unknown + "after_unknown = 'keep this too' # final comment\n"
+	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s := Store{Path: path}
+	if _, err := s.Load(); err != nil {
+		t.Fatalf("fixture is not valid TOML: %v", err)
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := s.Update(func(inv *Inventory) error {
+			n, err := inv.TailnetNode("rpi")
+			if err != nil {
+				return err
+			}
+			n.ExitStatus = "available"
+			n.ExitManaged = true
+			return inv.UpsertTailnetNode(n)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), unknown) {
+		t.Fatalf("unknown multiline array was changed:\n%s", data)
+	}
+	for _, comment := range []string{"# leading comment", "# keep IP comment", "after_unknown = 'keep this too' # final comment"} {
+		if !strings.Contains(string(data), comment) {
+			t.Fatalf("surrounding content lost %q:\n%s", comment, data)
+		}
+	}
+	inv, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := inv.TailnetNode("rpi")
+	if err != nil || n.ExitStatus != "available" || !n.ExitManaged {
+		t.Fatalf("tailnet update failed: %+v %v", n, err)
+	}
+}

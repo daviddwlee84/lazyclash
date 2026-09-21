@@ -66,9 +66,11 @@ type Deployment struct {
 }
 
 type Inventory struct {
-	Version     int          `toml:"version" json:"version"`
-	Hosts       []Host       `toml:"hosts" json:"hosts"`
-	Deployments []Deployment `toml:"deployments" json:"deployments"`
+	Version        int            `toml:"version" json:"version"`
+	Hosts          []Host         `toml:"hosts" json:"hosts"`
+	Deployments    []Deployment   `toml:"deployments" json:"deployments"`
+	TailnetNodes   []TailnetNode  `toml:"tailnet,omitempty" json:"tailnet"`
+	TailnetProxies []TailnetProxy `toml:"tailnet_proxies,omitempty" json:"tailnet_proxies"`
 }
 
 type Store struct{ Path, StateDir string }
@@ -240,7 +242,7 @@ func Validate(inv Inventory) error {
 			}
 		}
 	}
-	return nil
+	return validateTailnet(inv)
 }
 
 func (i Inventory) Host(id string) (Host, error) {

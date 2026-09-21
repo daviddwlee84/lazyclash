@@ -21,6 +21,8 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/selfupdate"
 	"github.com/daviddwlee84/lazyclash/internal/serverdeploy"
 	"github.com/daviddwlee84/lazyclash/internal/serverstate"
+	"github.com/daviddwlee84/lazyclash/internal/tailnet"
+	"github.com/daviddwlee84/lazyclash/internal/tailnetproxy"
 	"github.com/daviddwlee84/lazyclash/internal/tui"
 	"github.com/daviddwlee84/lazyclash/internal/vps"
 	"github.com/daviddwlee84/lazyclash/internal/wizard"
@@ -59,6 +61,8 @@ func ExitCode(err error) int {
 type Dependencies struct {
 	Managed      managedcore.Options
 	Servers      serverdeploy.Options
+	Tailnet      tailnet.Options
+	TailnetProxy tailnetproxy.Options
 	VPS          vps.Options
 	ServerStore  serverstate.Store
 	Open         func(context.Context, config.Target, bool) (*core.Client, io.Closer, error)
@@ -265,7 +269,7 @@ func New(deps Dependencies) *cobra.Command {
 	f.BoolVar(&o.readOnly, "read-only", false, "disable control actions, latency tests and healthchecks")
 	root.AddCommand(o.targetCommands(), o.configCommands(), o.statusCommand(), o.proxyCommands(), o.proxyCommand(), o.connectionCommands(), o.logsCommand(), o.rulesCommand(), o.providerCommands(), o.modeCommand(), o.tunCommand(), o.allowLANCommand(), o.settingsCommand())
 	root.AddCommand(o.skillCommand(), o.diagnosticsCommand(), o.upgradeCommand(), o.groupsCommand(), o.setupCommand(), o.coresCommand())
-	root.AddCommand(o.vpsCommand(), o.serversCommand())
+	root.AddCommand(o.vpsCommand(), o.serversCommand(), o.tailnetCommand())
 	root.AddCommand(o.completionCommand(root))
 	o.registerCompletions(root)
 	return root

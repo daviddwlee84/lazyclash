@@ -8,7 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-const serverHelpText = "Servers / VPS\n↑↓ or j/k select · Tab switches list/details · Enter inspects selected remote status\nr reloads local inventory and refreshes selected row · a opens shared CLI actions\nn deploys to an existing SSH host or creates a cloud VPS\nProxy-service start/stop/remove and VPS power/delete are separate actions. Stopped VMs can still be billed.\nExports contain credentials. Client import previews the selected persistent configuration source.\nEsc returns from help, then closes the view; pending reads are canceled and late results are discarded."
+const serverHelpText = "Servers / VPS\n↑↓ or j/k select · Tab switches list/details · Enter inspects selected remote status\nr reloads local inventory and refreshes selected row · a opens shared CLI actions\nn deploys to an existing SSH host or creates a cloud VPS · t registers a Tailnet device or sets up an exit · p deploys a Tailnet proxy\nTailnet actions select/release exits or manage owned proxies without stopping Tailscale.\nProxy-service start/stop/remove and VPS power/delete are separate actions. Stopped VMs can still be billed.\nExports contain credentials. Client import previews the selected persistent configuration source.\nEsc returns from help, then closes the view; pending reads are canceled and late results are discarded."
 
 func (m *Model) serverWork() bool {
 	return m.work != nil && strings.HasPrefix(m.work.request.Kind, "servers-")
@@ -97,7 +97,7 @@ func (m *Model) receiveServerWork(msg workMsg) tea.Cmd {
 func (m *Model) serverButtons() []button {
 	_, has := m.selectedServerRow()
 	idle := !m.toolPending
-	return []button{{"server-deploy", "n Deploy", idle && !m.options.ReadOnly}, {"server-actions", "a Actions", idle && has}, {"server-refresh", "r Refresh", idle}, {"server-help", "? Help", true}}
+	return []button{{"server-deploy", "n Deploy", idle && !m.options.ReadOnly}, {"server-tailnet", "t Tailnet", idle && !m.options.ReadOnly}, {"server-tailnet-proxy", "p Proxy", idle && !m.options.ReadOnly}, {"server-actions", "a Actions", idle && has}, {"server-refresh", "r Refresh", idle}, {"server-help", "? Help", true}}
 }
 
 func (m *Model) serverButton(id string) tea.Cmd {
@@ -125,6 +125,14 @@ func (m *Model) serverButton(id string) tea.Cmd {
 		if !m.options.ReadOnly {
 			return m.runTool("Deploy proxy server", false, "servers", "deploy", "--interactive")
 		}
+	case "server-tailnet":
+		if !m.options.ReadOnly {
+			return m.runTool("Set up Tailnet device", false, "tailnet", "setup", "--interactive")
+		}
+	case "server-tailnet-proxy":
+		if !m.options.ReadOnly {
+			return m.runTool("Deploy Tailnet proxy", false, "tailnet", "proxy", "deploy", "--interactive")
+		}
 	case "server-refresh":
 		return m.refreshServerWork(false)
 	case "server-status":
@@ -137,6 +145,12 @@ func (m *Model) serverButton(id string) tea.Cmd {
 		kind, serverID, _ := strings.Cut(row.ID, ":")
 		if kind == "server" {
 			return m.runTool("Manage proxy server", false, "servers", "manage", serverID, "--interactive")
+		}
+		if kind == "tailnet" {
+			return m.runTool("Manage Tailnet exit", false, "tailnet", "exit", "manage", serverID, "--interactive")
+		}
+		if kind == "tailnet-proxy" {
+			return m.runTool("Manage Tailnet proxy", false, "tailnet", "proxy", "manage", serverID, "--interactive")
 		}
 		if kind == "host" {
 			return m.runTool("Manage VPS", false, "vps", "manage", serverID, "--interactive")
@@ -171,7 +185,7 @@ func (m *Model) serverKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		m.work.focus = 1
 		return true, nil
 	}
-	for _, binding := range []struct{ key, id string }{{"n", "server-deploy"}, {"a", "server-actions"}, {"r", "server-refresh"}, {"enter", "server-status"}, {"?", "server-help"}} {
+	for _, binding := range []struct{ key, id string }{{"n", "server-deploy"}, {"t", "server-tailnet"}, {"p", "server-tailnet-proxy"}, {"a", "server-actions"}, {"r", "server-refresh"}, {"enter", "server-status"}, {"?", "server-help"}} {
 		if msg.String() == binding.key {
 			return true, m.serverButton(binding.id)
 		}

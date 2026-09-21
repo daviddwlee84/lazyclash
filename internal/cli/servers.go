@@ -517,10 +517,20 @@ func (o *options) serverManageCommand() *cobra.Command {
 }
 
 func (o *options) serverConnectCommand() *cobra.Command {
+	return o.clientNodeConnectCommand("server")
+}
+
+// Both public-server and Tailnet imports use the same persistent source preview,
+// receipt recovery and native-owner activation workflow.
+func (o *options) clientNodeConnectCommand(kind string) *cobra.Command {
+	description := "Review importing a deployed node into a saved client configuration source"
+	if kind == "tailnet-proxy" {
+		description = "Review importing a private proxy into a client with Tailnet access"
+	}
 	var interactive, yes, verify bool
 	var expected string
 	var groups []string
-	cmd := &cobra.Command{Use: "connect [ID]", Short: "Review importing a deployed node into a saved client configuration source", Args: serverOptionalID, RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "connect [ID]", Short: description, Args: serverOptionalID, RunE: func(cmd *cobra.Command, args []string) error {
 		defer connection.CloseAuthentications()
 		if err := serverReviewFlags(yes, expected); err != nil {
 			return err
@@ -541,7 +551,11 @@ func (o *options) serverConnectCommand() *cobra.Command {
 		if len(args) > 0 {
 			id = args[0]
 		}
-		id, err = o.chooseServerID(cmd, id, ui)
+		if kind == "tailnet-proxy" {
+			id, err = o.chooseTailnetID(cmd, id, ui, true)
+		} else {
+			id, err = o.chooseServerID(cmd, id, ui)
+		}
 		if err != nil {
 			return err
 		}
@@ -573,7 +587,7 @@ func (o *options) serverConnectCommand() *cobra.Command {
 			return err
 		}
 		workOpts := o.configWorkOptions(cmd)
-		connectionPath, err := serverConnectionPath(opts.Store, id, target)
+		connectionPath, err := clientConnectionPath(opts.Store, kind, id, target)
 		if err != nil {
 			return err
 		}
@@ -588,7 +602,16 @@ func (o *options) serverConnectCommand() *cobra.Command {
 			}
 			return o.verifyServerConnection(cmd, target, record, connectionPath, workOpts)
 		}
-		node, err := serverdeploy.ClientNode(cmd.Context(), id, opts)
+		var node []byte
+		if kind == "tailnet-proxy" {
+			service, e := o.tailnetProxyService(cmd)
+			if e != nil {
+				return e
+			}
+			node, err = service.ClientNode(id)
+		} else {
+			node, err = serverdeploy.ClientNode(cmd.Context(), id, opts)
+		}
 		if err != nil {
 			return err
 		}
@@ -625,7 +648,7 @@ func (o *options) serverConnectCommand() *cobra.Command {
 		if err = o.writable(); err != nil {
 			return err
 		}
-		result, err := applyServerConnection(cmd.Context(), opts.Store, id, target, req, expected, connectionPath, workOpts)
+		result, err := applyClientConnection(cmd.Context(), opts.Store, kind, id, target, req, expected, connectionPath, workOpts)
 		if result.ID != "" {
 			if e := o.output(cmd, result); e != nil {
 				return e
@@ -853,15 +876,21 @@ func (o *options) runServerWorkbench(ctx context.Context, r tui.WorkRequest) (tu
 	if err != nil {
 		return tui.WorkResult{}, err
 	}
-	result := tui.WorkResult{Title: "Servers / VPS", Summary: "Saved inventory. Enter refreshes selected service status; a opens actions. Service stop does not stop VM billing."}
+	result := tui.WorkResult{Title: "Servers / VPS", Summary: "Saved inventory. Enter refreshes status; a opens actions; t sets up a Tailnet device. Service stop does not stop VM billing."}
 	for _, d := range inv.Deployments {
 		result.Rows = append(result.Rows, tui.WorkRow{ID: "server:" + d.ID, Label: d.ID + " · " + d.Recipe + " · " + d.Status, Detail: workJSON(d)})
 	}
 	for _, h := range inv.Hosts {
 		result.Rows = append(result.Rows, tui.WorkRow{ID: "host:" + h.ID, Label: h.ID + " · VPS / " + h.Provider + " · " + h.Status, Detail: workJSON(h)})
 	}
+	for _, n := range inv.TailnetNodes {
+		result.Rows = append(result.Rows, tui.WorkRow{ID: "tailnet:" + n.ID, Label: n.ID + " · Tailnet exit · " + n.ExitStatus, Detail: workJSON(n)})
+	}
+	for _, p := range inv.TailnetProxies {
+		result.Rows = append(result.Rows, tui.WorkRow{ID: "tailnet-proxy:" + p.ID, Label: p.ID + " · Tailnet proxy / " + p.Mode + " · " + p.Status, Detail: workJSON(p)})
+	}
 	if len(result.Rows) == 0 {
-		result.Summary = "No servers or VPS registered. Press n to deploy: create a VPS or register an existing SSH host."
+		result.Summary = "No servers, VPS or Tailnet devices registered. Press t to set up a Tailnet device. Press n to deploy: create a VPS or register an existing SSH host."
 	}
 	if r.Kind == "servers-status" {
 		kind, id, _ := strings.Cut(r.Receipt, ":")
@@ -878,8 +907,20 @@ func (o *options) runServerWorkbench(ctx context.Context, r tui.WorkRequest) (tu
 				return result, e
 			}
 			status, err = service.Status(ctx, id)
+		} else if kind == "tailnet" {
+			service, e := o.tailnetService(cmd)
+			if e != nil {
+				return result, e
+			}
+			status, err = service.Status(ctx, id)
+		} else if kind == "tailnet-proxy" {
+			service, e := o.tailnetProxyService(cmd)
+			if e != nil {
+				return result, e
+			}
+			status, err = service.Status(ctx, id)
 		} else {
-			return result, errors.New("select a server or VPS first")
+			return result, errors.New("select a server, VPS or Tailnet resource first")
 		}
 		for i := range result.Rows {
 			if result.Rows[i].ID == r.Receipt {

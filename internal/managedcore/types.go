@@ -29,28 +29,33 @@ type NetworkOptions struct {
 }
 
 type Request struct {
-	ID                  string            `json:"id"`
-	Name                string            `json:"name,omitempty"`
-	SSHHost             string            `json:"ssh_host,omitempty"`
-	Backend             string            `json:"backend"`
-	Version             string            `json:"version"`
-	InputKind           string            `json:"input_kind"`
-	Input               []byte            `json:"-"`
-	InputBaseDir        string            `json:"-"`
-	Preset              string            `json:"preset"`
-	Categories          []string          `json:"categories,omitempty"`
-	PolicyRoles         map[string]string `json:"policy_roles,omitempty"`
-	ControllerPort      int               `json:"controller_port"`
-	MixedPort           int               `json:"mixed_port"`
-	ServiceScope        string            `json:"service_scope"`
-	Boot                bool              `json:"boot"`
-	DockerContext       string            `json:"docker_context,omitempty"`
-	Network             NetworkOptions    `json:"network"`
-	DockerArchive       string            `json:"docker_archive,omitempty"`
-	DockerArchiveSHA256 string            `json:"docker_archive_sha256,omitempty"`
-	BootstrapTarget     string            `json:"bootstrap_target,omitempty"`
-	ArtifactFile        string            `json:"-"`
-	ArtifactSHA256      string            `json:"artifact_sha256,omitempty"`
+	ID             string            `json:"id"`
+	Name           string            `json:"name,omitempty"`
+	SSHHost        string            `json:"ssh_host,omitempty"`
+	Backend        string            `json:"backend"`
+	Version        string            `json:"version"`
+	InputKind      string            `json:"input_kind"`
+	Input          []byte            `json:"-"`
+	InputBaseDir   string            `json:"-"`
+	Preset         string            `json:"preset"`
+	Categories     []string          `json:"categories,omitempty"`
+	PolicyRoles    map[string]string `json:"policy_roles,omitempty"`
+	ControllerPort int               `json:"controller_port"`
+	MixedPort      int               `json:"mixed_port"`
+	// ProxyListen is an explicit Tailnet address for a private gateway. Empty
+	// retains the ordinary loopback-only managed client behavior.
+	ProxyListen         string         `json:"proxy_listen,omitempty"`
+	ProxyUDP            bool           `json:"proxy_udp,omitempty"`
+	ProxyGateway        bool           `json:"proxy_gateway,omitempty"`
+	ServiceScope        string         `json:"service_scope"`
+	Boot                bool           `json:"boot"`
+	DockerContext       string         `json:"docker_context,omitempty"`
+	Network             NetworkOptions `json:"network"`
+	DockerArchive       string         `json:"docker_archive,omitempty"`
+	DockerArchiveSHA256 string         `json:"docker_archive_sha256,omitempty"`
+	BootstrapTarget     string         `json:"bootstrap_target,omitempty"`
+	ArtifactFile        string         `json:"-"`
+	ArtifactSHA256      string         `json:"artifact_sha256,omitempty"`
 }
 
 type HostFacts struct {

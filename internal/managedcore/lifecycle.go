@@ -83,7 +83,7 @@ func GetStatus(ctx context.Context, id string, opts Options) (Status, error) {
 }
 
 func lifecycleRequest(instance Instance, request Request, op string) hostRequest {
-	return hostRequest{Op: op, ID: instance.ID, Root: instance.Root, Backend: instance.Backend, Version: instance.Version, ServiceScope: instance.ServiceScope, DockerContext: instance.DockerContext, DockerEndpoint: instance.DockerEndpoint, OwnerToken: instance.OwnerToken, Expected: instance.Digest, Image: instance.Artifact.Image, Platform: instance.Artifact.Platform, GuardRef: instance.CoreGuardRef, Network: instance.Network, Boot: instance.Boot, Ports: []int{request.ControllerPort, request.MixedPort}}
+	return hostRequest{Op: op, ID: instance.ID, Root: instance.Root, Backend: instance.Backend, Version: instance.Version, ServiceScope: instance.ServiceScope, DockerContext: instance.DockerContext, DockerEndpoint: instance.DockerEndpoint, OwnerToken: instance.OwnerToken, Expected: instance.Digest, Image: instance.Artifact.Image, Platform: instance.Artifact.Platform, GuardRef: instance.CoreGuardRef, Network: instance.Network, Boot: instance.Boot, Ports: []int{request.ControllerPort, request.MixedPort}, ProxyListen: request.ProxyListen, ProxyUDP: request.ProxyUDP}
 }
 
 func PreviewAction(ctx context.Context, id, operation string, opts Options) (ActionPlan, error) {

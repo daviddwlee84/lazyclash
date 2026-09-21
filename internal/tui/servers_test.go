@@ -121,3 +121,31 @@ func TestServersEmptyReadOnlyAndResize(t *testing.T) {
 		}
 	}
 }
+
+func TestTailnetRowsUseSharedCLIAndReadOnlySetupDisabled(t *testing.T) {
+	m := testModel(t)
+	m.options.Workbench = func(context.Context, WorkRequest) (WorkResult, error) { return WorkResult{}, nil }
+	m.options.RunCommand = func(context.Context, []string, io.Reader, io.Writer, io.Writer) error { return nil }
+	m.startServers()
+	m.work.pending = false
+	m.work.result = WorkResult{Rows: []WorkRow{{ID: "tailnet:pi", Label: "pi"}, {ID: "tailnet-proxy:gateway", Label: "gateway"}}}
+	if command := m.serverButton("server-actions"); command == nil || m.status != "Manage Tailnet exit" {
+		t.Fatal("exit action missing")
+	}
+	m.receiveTool(toolMsg{generation: m.generation, serial: m.toolSerial, label: "Manage Tailnet exit"})
+	m.work.pending = false
+	m.work.index = 1
+	if command := m.serverButton("server-actions"); command == nil || m.status != "Manage Tailnet proxy" {
+		t.Fatal("proxy action missing")
+	}
+	m.receiveTool(toolMsg{generation: m.generation, serial: m.toolSerial, label: "Manage Tailnet proxy"})
+	m.work.pending = false
+	m.options.ReadOnly = true
+	if m.serverButton("server-tailnet") != nil || m.serverButton("server-tailnet-proxy") != nil {
+		t.Fatal("readonly setup enabled")
+	}
+	m.options.ReadOnly = false
+	if command := m.serverButton("server-tailnet"); command == nil || m.status != "Set up Tailnet device" {
+		t.Fatal("Tailnet setup not discoverable")
+	}
+}

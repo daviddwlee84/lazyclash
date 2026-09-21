@@ -35,6 +35,8 @@ type hostRequest struct {
 	DockerContext       string                        `json:"docker_context,omitempty"`
 	DockerEndpoint      string                        `json:"docker_endpoint,omitempty"`
 	Ports               []int                         `json:"ports,omitempty"`
+	ProxyListen         string                        `json:"proxy_listen,omitempty"`
+	ProxyUDP            bool                          `json:"proxy_udp,omitempty"`
 	OwnerToken          string                        `json:"owner_token,omitempty"`
 	Expected            string                        `json:"expected,omitempty"`
 	Profile             []byte                        `json:"profile,omitempty"`

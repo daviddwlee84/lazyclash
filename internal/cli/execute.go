@@ -14,6 +14,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/core"
 	"github.com/daviddwlee84/lazyclash/internal/proxyenv"
 	"github.com/daviddwlee84/lazyclash/internal/serverstate"
+	"github.com/daviddwlee84/lazyclash/internal/tailnet"
 	"github.com/daviddwlee84/lazyclash/internal/wizard"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -61,6 +62,7 @@ func describeError(err error) errorDetails {
 	var controllerErr *core.Error
 	var usageErr *UsageError
 	var proxyAmbiguous *proxyenv.AmbiguousError
+	var authorization *tailnet.AuthorizationRequiredError
 	switch {
 	case errors.As(err, &controllerErr):
 		// Preserve unknown-write-result even when its cause is cancellation.
@@ -69,6 +71,8 @@ func describeError(err error) errorDetails {
 		result.HTTPStatus = controllerErr.StatusCode
 	case errors.As(err, &usageErr), strings.HasPrefix(err.Error(), "unknown command "):
 		result.Code = "usage"
+	case errors.As(err, &authorization):
+		result.Code = "authorization-required"
 	case connection.IsAuthRequired(err):
 		result.Code = "ssh-auth-required"
 	case errors.As(err, &proxyAmbiguous):

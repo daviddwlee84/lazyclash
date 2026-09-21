@@ -175,6 +175,40 @@ func buildProfile(ctx context.Context, request Request) ([]byte, map[string][]by
 		controllerHost = "0.0.0.0"
 		document["bind-address"] = "*"
 	}
+	if request.ProxyListen != "" || request.ProxyGateway {
+		auth, _ := document["authentication"].([]any)
+		if len(auth) == 0 {
+			return nil, nil, "", nil, errors.New("a Tailnet gateway requires explicit proxy authentication")
+		}
+		for _, entry := range auth {
+			value, ok := entry.(string)
+			user, password, found := strings.Cut(value, ":")
+			if !ok || !found || user == "" || password == "" {
+				return nil, nil, "", nil, errors.New("a Tailnet gateway requires nonempty proxy usernames and passwords")
+			}
+		}
+		// Docker binds inside its private bridge namespace and publishes only
+		// the reviewed host Tailnet IP. Binding that IP inside the bridge fails.
+		if request.Backend != "docker" && request.ProxyListen != "" {
+			document["bind-address"] = request.ProxyListen
+		}
+		document["allow-lan"] = true
+		document["skip-auth-prefixes"] = []string{}
+		users := []any{}
+		for _, value := range auth {
+			user, password, _ := strings.Cut(value.(string), ":")
+			users = append(users, map[string]any{"username": user, "password": password})
+		}
+		listen := "127.0.0.1"
+		if request.ProxyListen != "" {
+			listen = request.ProxyListen
+		}
+		if request.Backend == "docker" {
+			listen = "0.0.0.0"
+		}
+		document["mixed-port"] = 0
+		document["listeners"] = []any{map[string]any{"name": "lazyclash-tailnet", "type": "mixed", "listen": listen, "port": request.MixedPort, "udp": request.ProxyUDP, "users": users}}
+	}
 	document["external-controller"] = fmt.Sprintf("%s:%d", controllerHost, request.ControllerPort)
 	document["secret"] = "__LAZYCLASH_GENERATED_SECRET__"
 	delete(document, "external-controller-tls")

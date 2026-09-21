@@ -31,6 +31,10 @@ type serverConnection struct {
 }
 
 func serverConnectionPath(store serverstate.Store, id string, target config.Target) (string, error) {
+	return clientConnectionPath(store, "server", id, target)
+}
+
+func clientConnectionPath(store serverstate.Store, kind, id string, target config.Target) (string, error) {
 	if err := serverstate.ValidateID(id); err != nil {
 		return "", err
 	}
@@ -38,7 +42,11 @@ func serverConnectionPath(store serverstate.Store, id string, target config.Targ
 	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256([]byte(id + "\x00" + target.ID + "\x00" + configwork.Binding(target)))
+	identity := id // Preserve receipts written before Tailnet support.
+	if kind != "server" {
+		identity = kind + "\x00" + id
+	}
+	sum := sha256.Sum256([]byte(identity + "\x00" + target.ID + "\x00" + configwork.Binding(target)))
 	return filepath.Join(root, "connections", hex.EncodeToString(sum[:]), "connection.json"), nil
 }
 
@@ -76,6 +84,15 @@ func saveServerConnection(path string, record serverConnection) error {
 }
 
 func applyServerConnection(ctx context.Context, store serverstate.Store, id string, target config.Target, req configwork.Request, expected, path string, opts configwork.Options) (configwork.Receipt, error) {
+	return applyClientConnection(ctx, store, "server", id, target, req, expected, path, opts)
+}
+
+func applyClientConnection(ctx context.Context, store serverstate.Store, kind, id string, target config.Target, req configwork.Request, expected, path string, opts configwork.Options) (configwork.Receipt, error) {
+	command := "servers connect"
+	if kind == "tailnet-proxy" {
+		command = "tailnet proxy connect"
+	}
+
 	if opts.ReadOnly {
 		return configwork.Receipt{}, errors.New("client import is disabled in read-only mode")
 	}
@@ -89,7 +106,7 @@ func applyServerConnection(ctx context.Context, store serverstate.Store, id stri
 		return configwork.Receipt{}, err
 	}
 	if found && previous.Status != "failed-before-write" {
-		return configwork.Receipt{}, usage("an import is already recorded; run servers connect %s --verify --target %s", id, target.ID)
+		return configwork.Receipt{}, usage("an import is already recorded; run %s %s --verify --target %s", command, id, target.ID)
 	}
 	record := serverConnection{ServerID: id, TargetID: target.ID, Binding: configwork.Binding(target), Digest: expected, Status: "applying", StartedAt: time.Now().UTC()}
 	if err = saveServerConnection(path, record); err != nil {
@@ -103,7 +120,7 @@ func applyServerConnection(ctx context.Context, store serverstate.Store, id stri
 		record.Status = result.Status
 	}
 	if err = saveServerConnection(path, record); err != nil {
-		return result, errors.Join(applyErr, fmt.Errorf("save client import result: %w; use servers connect --verify before retrying", err))
+		return result, errors.Join(applyErr, fmt.Errorf("save client import result: %w; use %s --verify before retrying", err, command))
 	}
 	return result, applyErr
 }

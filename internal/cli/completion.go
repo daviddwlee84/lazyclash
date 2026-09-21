@@ -270,6 +270,33 @@ func (o *options) registerCompletions(root *cobra.Command) {
 			return ids, cobra.ShellCompDirectiveNoFileComp
 		}
 	}
+	tailnetIDs := func(proxies bool) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return func(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+			if len(args) > 0 {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			store, err := o.serverStore(cmd)
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			inv, err := store.Load()
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			var ids []string
+			if proxies {
+				for _, p := range inv.TailnetProxies {
+					ids = append(ids, p.ID)
+				}
+			} else {
+				for _, n := range inv.TailnetNodes {
+					ids = append(ids, n.ID)
+				}
+			}
+			sort.Strings(ids)
+			return ids, cobra.ShellCompDirectiveNoFileComp
+		}
+	}
 	for _, name := range []string{"config", "secret-file", "ca-cert", "servers-config"} {
 		_ = root.MarkPersistentFlagFilename(name)
 	}
@@ -320,6 +347,10 @@ func (o *options) registerCompletions(root *cobra.Command) {
 			cmd.ValidArgsFunction = local("cores")
 		case "servers status", "servers start", "servers stop", "servers restart", "servers remove", "servers resume", "servers export", "servers connect", "servers manage":
 			cmd.ValidArgsFunction = serverIDs(false)
+		case "tailnet exit export", "tailnet exit status", "tailnet exit enable", "tailnet exit disable", "tailnet exit remove", "tailnet exit use", "tailnet exit manage":
+			cmd.ValidArgsFunction = tailnetIDs(false)
+		case "tailnet proxy status", "tailnet proxy configure", "tailnet proxy start", "tailnet proxy stop", "tailnet proxy restart", "tailnet proxy remove", "tailnet proxy export", "tailnet proxy connect", "tailnet proxy manage":
+			cmd.ValidArgsFunction = tailnetIDs(true)
 		case "vps status", "vps start", "vps stop", "vps reboot", "vps delete", "vps resume", "vps manage":
 			cmd.ValidArgsFunction = serverIDs(true)
 		case "proxies copy":
@@ -345,6 +376,20 @@ func (o *options) registerCompletions(root *cobra.Command) {
 		if path == "servers deploy" {
 			_ = cmd.RegisterFlagCompletionFunc("host", serverIDs(true))
 			_ = cmd.RegisterFlagCompletionFunc("recipe", values("vless-reality", "hysteria2", "legacy-vmess-ws-tls"))
+		}
+		if strings.HasPrefix(path, "tailnet proxy ") {
+			if cmd.Flags().Lookup("node") != nil {
+				_ = cmd.RegisterFlagCompletionFunc("node", tailnetIDs(false))
+			}
+			if cmd.Flags().Lookup("mode") != nil {
+				_ = cmd.RegisterFlagCompletionFunc("mode", values("serve", "direct"))
+			}
+			if cmd.Flags().Lookup("egress") != nil {
+				_ = cmd.RegisterFlagCompletionFunc("egress", values("direct", "upstream", "existing"))
+			}
+			if cmd.Flags().Lookup("format") != nil {
+				_ = cmd.RegisterFlagCompletionFunc("format", values("mihomo", "starter", "client-bundle"))
+			}
 		}
 		if strings.HasPrefix(path, "vps ") && cmd.Flags().Lookup("provider") != nil {
 			_ = cmd.RegisterFlagCompletionFunc("provider", values("oracle", "vultr", "linode", "digitalocean"))

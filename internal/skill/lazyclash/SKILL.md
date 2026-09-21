@@ -56,3 +56,4 @@ the request is only to inspect.
 - [Proxy environments](references/environment.md), also `lazyclash skill print environment`: current-shell versus child scope, both SSH forwarding directions, remote shells, service lifetime checks, Docker namespaces and consumer tests.
 - [Managed setup and network ownership](references/setup.md), also `lazyclash skill print setup`: native/Docker installation, offline starter data, privilege, TUN/VPN conflicts, receipts and host rollback.
 - [Proxy servers and VPSs](references/servers.md), also `lazyclash skill print servers`: separate cloud/SSH inventory, protocol recipes, reviewed creation, service lifecycle, recovery and explicit credential exports.
+- [Tailscale exits and private proxies](references/tailnet.md), also `lazyclash skill print tailnet`: existing peer identity, exit advertisement versus local selection, runtime TUN handoff, private Serve/direct-IP gateways and scoped recovery.

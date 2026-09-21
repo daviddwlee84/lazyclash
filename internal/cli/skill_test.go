@@ -64,6 +64,7 @@ func TestSkillOutputIsStaticAndMatchesEmbeddedDocuments(t *testing.T) {
 		{args: []string{"skill", "print", "sources"}, topic: "sources"},
 		{args: []string{"skill", "print", "environment"}, topic: "environment"},
 		{args: []string{"skill", "print", "setup"}, topic: "setup"},
+		{args: []string{"skill", "print", "tailnet"}, topic: "tailnet"},
 		{args: []string{"--config", "/does/not/exist", "--skill"}},
 		{args: []string{"--target", "unused", "--controller", "http://127.0.0.1:1", "skill", "print"}},
 	} {

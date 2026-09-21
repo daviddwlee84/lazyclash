@@ -11,6 +11,11 @@ manages hosts through Oracle, Vultr, Linode and DigitalOcean's official CLIs.
 Servers have a separate inventory, reviewed changes, recoverable operations and
 client exports. See [server deployment and VPS selection](docs/server-deployment.md).
 
+`tailnet` adds Exit Node setup and local selection on existing Tailscale devices,
+plus private HTTP/SOCKS gateways over Serve TCP or a Tailnet IP. Saved ownership,
+runtime TUN handoff and scoped lifecycle keep exit routing and proxy sharing
+separate. See [Tailscale exits and private proxies](docs/tailnet.md).
+
 ## Prebuilt releases
 
 Download the archive for your macOS/Linux amd64/arm64 platform from
