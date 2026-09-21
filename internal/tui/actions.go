@@ -24,10 +24,11 @@ type confirmation struct {
 
 func (m *Model) actions() []action {
 	connected := m.client != nil && !m.opening
-	write := connected && !m.options.ReadOnly && m.pending == ""
+	write := connected && !m.options.ReadOnly && !m.client.IsReadOnly() && m.pending == ""
 	selected, hasRow := m.selectedRow()
 	group, hasGroup := m.group()
 	cfg := m.configData()
+	modeWrite := write && m.knownRoutingMode() && m.state().snap("config").err == nil
 	a := []action{
 		{"tool-setup", "Setup Mihomo client", nil, m.canRunTool() && !m.options.ReadOnly},
 		{"tool-core", "Manage installed cores", nil, m.canRunTool()},
@@ -48,7 +49,10 @@ func (m *Model) actions() []action {
 		{"target-default", "Make current target default", nil, m.target.ID != ""}, {"target-up", "Move current target earlier", nil, m.target.ID != ""}, {"target-down", "Move current target later", nil, m.target.ID != ""},
 		{"discover", "Discover local controllers", nil, m.options.Discover != nil}, {"discover-ssh", "Discover SSH host", nil, m.options.DiscoverHost != nil},
 		{"authenticate", "Authenticate SSH and reconnect", []string{"A"}, m.canAuthenticate()},
-		{"mode", "Cycle mode (rule / global / direct)", []string{"m"}, write && str(cfg, "mode") != ""},
+		{"mode", "Cycle mode (rule / global / direct)", []string{"m"}, modeWrite},
+		{"mode-rule", "Set routing mode: Rule", nil, modeWrite && m.routingMode() != "rule"},
+		{"mode-global", "Set routing mode: Global", nil, modeWrite && m.routingMode() != "global"},
+		{"mode-direct", "Set routing mode: Direct", nil, modeWrite && m.routingMode() != "direct"},
 		{"tun", "Toggle TUN", []string{"u"}, write && knownBool(object(cfg["tun"]), "enable")},
 		{"lan", "Toggle Allow LAN", []string{"a"}, write && knownBool(cfg, "allow-lan")},
 	}
@@ -498,6 +502,9 @@ func (m *Model) runAction(id string) tea.Cmd {
 			next = "direct"
 		}
 		return m.patch("Set mode to "+next, core.Object{"mode": next})
+	case "mode-rule", "mode-global", "mode-direct":
+		mode := strings.TrimPrefix(id, "mode-")
+		return m.patch("Set mode to "+mode, core.Object{"mode": mode})
 	case "tun":
 		enabled, _ := object(m.configData()["tun"])["enable"].(bool)
 		return m.patch(fmt.Sprintf("Set TUN %t (core state)", !enabled), core.Object{"tun": core.Object{"enable": !enabled}})

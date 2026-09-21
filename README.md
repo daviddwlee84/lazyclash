@@ -146,7 +146,14 @@ Read [nodes and groups](docs/proxies-and-groups.md), [proxy environments](docs/p
 for source ownership, explicit credential exports, SSH session lifetime,
 Docker consumers, offline bootstrap and rollback behavior.
 
-The header identifies the target and its runtime mode/TUN state. Overview opens
+The header identifies the target and its runtime mode/TUN state. Overview starts
+with a controller status panel: local, SSH or remote scope; connectivity; a
+highlighted Rule / Global / Direct selector; core-reported TUN, LAN and mixed
+port. Click a named mode to select it directly; `m` still cycles modes. The
+toolbar keeps the current mode visible while scrolling. Offline/stale values
+are labeled as last-known, and unavailable controls cannot change the core.
+This reports the selected controller, not the operating system's system proxy.
+Overview opens
 first with upload/download speed and totals, core RSS, connection count, traffic
 and resource histories, protocol distribution, top outbounds and observed
 routes. The existing Proxies, Connections, Logs, Rules, Providers and Configs

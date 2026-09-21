@@ -16,8 +16,7 @@ func (m *Model) overviewLayout(width int) ([]string, []hitRegion) {
 	s := m.state()
 	now := time.Now()
 	snap := s.metrics.Snapshot(now)
-	var lines []string
-	var hits []hitRegion
+	lines, hits := m.overviewStatusLayout(width)
 	add := func(text string) { lines = append(lines, fit(text, width)) }
 	value := func(sample dashboard.Sample, rate bool) string {
 		if !sample.Valid {
@@ -53,11 +52,20 @@ func (m *Model) overviewLayout(width int) ([]string, []hitRegion) {
 	for start := 0; start < len(cards); start += columns {
 		widths := columnWidths(width, columns)
 		parts := [][]string{}
+		cardHeight := 3
+		compact := width >= 60 && width < 120
+		if compact {
+			cardHeight = 1
+		}
 		for i := 0; i < columns && start+i < len(cards); i++ {
 			c := cards[start+i]
-			parts = append(parts, panel(c.title, []string{m.accent(c.value)}, widths[i]))
+			if compact {
+				parts = append(parts, []string{fit(c.title+" "+m.accent(c.value), widths[i])})
+			} else {
+				parts = append(parts, panel(c.title, []string{m.accent(c.value)}, widths[i]))
+			}
 		}
-		lines = append(lines, strings.Split(joinColumns(parts, widths, 3), "\n")...)
+		lines = append(lines, strings.Split(joinColumns(parts, widths, cardHeight), "\n")...)
 	}
 	if s.lastOperation != "" {
 		add("Last operation: " + s.lastOperation)
