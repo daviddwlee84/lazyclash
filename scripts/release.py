@@ -90,7 +90,16 @@ class GitHub:
         if result.returncode == 0:
             return json.loads(result.stdout)
         if "HTTP 404" in result.stderr:
-            return None
+            # GitHub's tag endpoint may omit drafts, even for their creator.
+            # Enumerate every page before deciding it is safe to create one.
+            pages = json.loads(self.call("api", "--paginate", "--slurp",
+                                         f"repos/{self.repo}/releases?per_page=100"))
+            if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+                raise RuntimeError("invalid paginated release listing")
+            matches = [item for page in pages for item in page if item.get("tag_name") == tag]
+            if len(matches) > 1:
+                raise RuntimeError("multiple releases match this tag; refusing to create or select a draft")
+            return matches[0] if matches else None
         raise RuntimeError(f"cannot inspect release: {result.stderr.strip()}")
 
     def create(self, tag):

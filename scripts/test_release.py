@@ -1,5 +1,8 @@
 import hashlib
 import io
+import json
+import subprocess
+from unittest import mock
 from pathlib import Path
 import struct
 import tarfile
@@ -109,6 +112,43 @@ class ReleaseTests(unittest.TestCase):
         (self.root / "checksums.txt").write_text("\n".join(lines[:-1]) + "\n")
         with self.assertRaisesRegex(ValueError, "exactly the four"):
             release.verify_dist(self.root, "example", "example", "0.1.0")
+
+
+class GitHubAPITests(unittest.TestCase):
+    def lookup(self, pages):
+        missing = subprocess.CompletedProcess([], 1, "", "gh: Not Found (HTTP 404)")
+        with mock.patch("release.subprocess.run", return_value=missing), mock.patch(
+            "release.subprocess.check_output", return_value=json.dumps(pages)
+        ) as request:
+            result = release.GitHub("example/tool").release("v0.1.0")
+            request.assert_called_once_with(
+                ["gh", "api", "--paginate", "--slurp", "repos/example/tool/releases?per_page=100"], text=True)
+            return result
+
+    def test_tag_endpoint_404_finds_draft_on_later_page(self):
+        draft = {"id": 392759439, "tag_name": "v0.1.0", "draft": True, "prerelease": False, "assets": []}
+        self.assertEqual(self.lookup([[{"id": 1, "tag_name": "v0.0.9"}], [draft]]), draft)
+
+    def test_absent_tag_after_full_listing(self):
+        self.assertIsNone(self.lookup([[]]))
+
+    def test_ambiguous_draft_listing_is_not_selected_or_recreated(self):
+        with self.assertRaisesRegex(RuntimeError, "multiple releases"):
+            self.lookup([[{"id": 1, "tag_name": "v0.1.0"}], [{"id": 2, "tag_name": "v0.1.0"}]])
+
+    def test_published_tag_lookup_does_not_enumerate(self):
+        public = {"tag_name": "v0.1.0", "draft": False, "prerelease": False, "assets": []}
+        result = subprocess.CompletedProcess([], 0, json.dumps(public), "")
+        with mock.patch("release.subprocess.run", return_value=result), mock.patch("release.subprocess.check_output") as pages:
+            self.assertEqual(release.GitHub("example/tool").release("v0.1.0"), public)
+            pages.assert_not_called()
+
+    def test_non_404_error_is_not_absence(self):
+        result = subprocess.CompletedProcess([], 1, "", "gh: Forbidden (HTTP 403)")
+        with mock.patch("release.subprocess.run", return_value=result), mock.patch("release.subprocess.check_output") as pages:
+            with self.assertRaisesRegex(RuntimeError, "cannot inspect"):
+                release.GitHub("example/tool").release("v0.1.0")
+            pages.assert_not_called()
 
 
 if __name__ == "__main__":
