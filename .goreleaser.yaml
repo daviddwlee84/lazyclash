@@ -2,7 +2,7 @@ version: 2
 project_name: lazyclash
 before:
   hooks:
-    - sh scripts/release-completions.sh
+    - python3 scripts/release.py completions --project lazyclash --binary lazyclash --main ./cmd/lazyclash
 builds:
   - id: lazyclash
     main: ./cmd/lazyclash
@@ -12,15 +12,23 @@ builds:
     goarch: [amd64, arm64]
     # Preserve linker/VCS build metadata for offline release provenance inspection.
     flags: [-buildvcs=true]
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
       - -s -w -X github.com/daviddwlee84/lazyclash/internal/cli.Version=v{{ .Version }} -X github.com/daviddwlee84/lazyclash/internal/selfupdate.ReleaseStamp=archive-v1:v{{ .Version }}
 archives:
   - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
+    builds_info:
+      mtime: "{{ .CommitDate }}"
     files:
-      - LICENSE
-      - completions/lazyclash.bash
-      - completions/lazyclash.zsh
+      - src: LICENSE
+        info:
+          mode: 0644
+          mtime: "{{ .CommitDate }}"
+      - src: completions/*
+        info:
+          mode: 0644
+          mtime: "{{ .CommitDate }}"
 checksum:
   name_template: checksums.txt
 release:
