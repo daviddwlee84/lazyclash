@@ -11,7 +11,7 @@ lazyclash upgrade
 
 Go 1.25+ is required. The executable package is `/cmd/lazyclash`, not the
 repository root. GOBIN controls install location; otherwise Go uses GOPATH/bin.
-`@latest` selects a published version, `@v0.1.6` pins one, and `@main` opts
+`@latest` selects a published version, `@v0.1.7` pins one, and `@main` opts
 into development. Homebrew and prebuilt archives remain future channels.
 
 The updater resolves the current executable, identifies build provenance and

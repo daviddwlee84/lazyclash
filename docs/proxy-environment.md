@@ -35,6 +35,9 @@ chezmoi adapter 使用這個入口，managed rc 仍由 chezmoi 寫入。
 
 ## SSH target
 
+此段是本機使用遠端代理。反方向的 `proxy ssh`／`proxy tunnel share`、遠端 shell
+與背景服務生命週期檢查見 [雙向 SSH 代理](ssh-proxy-sharing.md)。
+
 `proxy-on server` 在 foreground 完成 native SSH 認證，再建立該 shell 專用的 loopback
 轉發並套用 env。密碼不交給 lazyclash 保存。每個 shell 有自己的 lease／control socket；
 `proxy-off`、正常 exit 只清理自己的 session，既有使用者 ControlMaster 不受影響。

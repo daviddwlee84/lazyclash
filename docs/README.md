@@ -9,6 +9,7 @@ The [changelog](../CHANGELOG.md) identifies the version that introduced a featur
 | Connecting a local/remote core, comparing servers or copying runtime choices | [Targets and configuration](targets-and-config.md) |
 | Adding/editing nodes, configuring groups, copying credentials or sharing QR | [節點與群組](proxies-and-groups.md) |
 | Choosing a shell/data proxy, owning SSH forwards or configuring Docker consumers | [代理環境](proxy-environment.md) |
+| Sharing a local proxy with a remote shell/command and checking endpoint lifetime | [雙向 SSH 代理](ssh-proxy-sharing.md) |
 | Installing an owned native/Docker client or using offline China-routing presets | [Client setup](managed-cores.md) |
 | Inspecting Tailscale/other VPN conflicts, split DNS, service permissions or recovery | [VPN／TUN 共存](vpn-coexistence.md) |
 | Interpreting dashboard metrics or diagnosing a URL | [Diagnostics and routing](diagnostics-and-routing.md) |
@@ -46,6 +47,7 @@ and typing retains ownership of printable keys.
 
 Development checks are `go vet ./...`, `go test -race ./...`, and the real PTY
 harnesses in `scripts/pty_smoke.py`, `scripts/auth_pty_smoke.py` and
-`scripts/tools_pty_smoke.py`. Tests use disposable state and controllers.
+`scripts/tools_pty_smoke.py`. `scripts/reverse_pty_smoke.py` uses an isolated sshd
+for reverse forwarding, remote shells and cleanup. Tests use disposable state and controllers.
 Keep actual OS execution, cross-builds, fixture checks and real-host observations
 distinct in verification reports.

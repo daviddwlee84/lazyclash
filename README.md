@@ -18,7 +18,7 @@ The `/cmd/lazyclash` suffix identifies the executable package. Go installs it in
 `go env GOBIN` when configured, otherwise in the first `go env GOPATH` entry's
 `bin` directory (usually `~/go/bin`). Add that directory to your shell's PATH.
 Repeating the install command upgrades to the latest published version. To pin
-a release, use `@v0.1.6`; `@main` explicitly opts into the development
+a release, use `@v0.1.7`; `@main` explicitly opts into the development
 branch. `@latest` selects a published version, not necessarily the newest commit.
 See [CHANGELOG.md](CHANGELOG.md) for changes between versions.
 
@@ -105,10 +105,13 @@ lazyclash --target desktop proxies export 'My node' --interactive
 lazyclash --target desktop groups edit PROXY --interactive
 eval "$(lazyclash proxy shell-init zsh)"
 proxy-on desktop                                    # shell integration
+lazyclash --target desktop proxy ssh server           # remote shell uses this local proxy
+lazyclash --target desktop proxy tunnel share server  # foreground share for other remote shells
 lazyclash diagnostics network                       # passive VPN/TUN/DNS evidence
 ```
 
 Read [nodes and groups](docs/proxies-and-groups.md), [proxy environments](docs/proxy-environment.md),
+[bidirectional SSH sharing](docs/ssh-proxy-sharing.md),
 [managed clients](docs/managed-cores.md) and [VPN coexistence](docs/vpn-coexistence.md)
 for source ownership, explicit credential exports, SSH session lifetime,
 Docker consumers, offline bootstrap and rollback behavior.
@@ -203,7 +206,7 @@ lazyclash completion zsh
 
 TUN requires a core with suitable OS privileges. After a toggle, lazyclash checks the core's reported setting; it does not claim to have verified OS routes or application traffic, and does not automatically restart the core. Proxy selections can be persisted by Mihomo's `profile.store-selected`; ordinary runtime changes may be replaced on restart or by another client.
 
-Exit codes: `0` success, `1` runtime failure, `2` usage/settings error, `130` interrupted command. Closing an idle dashboard succeeds.
+Exit codes: `0` success, `1` runtime failure, `2` usage/settings error, `4` no configured local proxy, `130` interrupted command. Child commands preserve their own exit codes. Closing an idle dashboard succeeds.
 
 With `--json`, successful data stays on stdout and a failure is a single JSON
 object on stderr, without a text prefix:

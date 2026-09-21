@@ -19,6 +19,35 @@ requests a password; a failed link is unavailable, not a reason to switch direct
 HTTP/SOCKS forwarding can publish loopback URLs; HTTPS proxy hostname validation
 must not be disabled to make a rewritten localhost URL work.
 
+For the reverse direction, select the locally reachable source with `--target`
+or `--endpoint`, then use `proxy ssh HOST [-- COMMAND...]` or foreground
+`proxy tunnel share HOST`. HOST is the consuming SSH host, not the source target.
+The remote host needs no lazyclash installation. HTTP/SOCKS data endpoints without
+credentials are supported; source SSH chaining and HTTPS proxy endpoints are not.
+Source controller credentials remain usable and are not exported.
+
+Remote listeners are checked for actual loopback binding before use. A server
+with GatewayPorts=yes forces wildcard and will be rejected after allocation;
+do not change sshd settings automatically. Fixed --remote-port and optional
+--remote-socks-port are available; zero requests an allocated port. A ready
+tunnel is not evidence of Internet reachability.
+
+The default remote login shell can override proxy env through its startup files.
+--clean-shell uses /bin/sh -i with ENV/BASH_ENV removed; no remote rc files are
+edited. `-- COMMAND...` preserves argv/stdio/exit status without retry; proxy ssh
+does not accept --json. Share --json emits one result and stays running until
+canceled. Do not wait for a share process to exit before using its endpoint.
+Status/stop/cleanup cover both directions. A reverse lease belongs to its local
+invocation and cannot be consumed as a local proxy env session.
+
+Before supplying an endpoint to a background service, use `proxy env --consumer
+service`. It rejects known temporary SSH endpoints using local ownership records
+and endpoint-bound LAZYCLASH_PROXY_ORIGIN metadata; preserve that non-secret
+marker when using remote exports. It cannot identify arbitrary external tunnels
+or guarantee uptime. Ordinary local endpoints remain allowed. Exit 4 /
+proxy-not-configured means no local selection exists; proxy-temporary, ambiguity
+and authentication failure must not silently become DIRECT or another proxy.
+
 `proxy exec` preserves argv, stdio and exit code; it never retries the command.
 The shell's `withproxy` wrapper also supports shell functions/builtins.
 Status distinguishes selected configuration from reachability; `proxy test`

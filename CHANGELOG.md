@@ -1,10 +1,27 @@
 # Changelog
 
 User-facing changes are recorded here for every published version. Install a
-fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.6`,
+fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.7`,
 or use `@latest` to upgrade. Check the installed binary with `lazyclash --version`.
 
 ## Unreleased
+
+## 0.1.7 — 2026-09-21
+
+- Added `proxy ssh HOST [-- COMMAND...]` and foreground `proxy tunnel share HOST`
+  so remote shells and commands can use a local HTTP/SOCKS proxy through SSH.
+  Dynamic/fixed remote ports, actual loopback-listener verification, isolated
+  ownership and cleanup preserve existing SSH sessions.
+- Remote shells retain their normal login setup; `--clean-shell` offers a
+  predictable `/bin/sh` alternative. Single commands preserve input/output and
+  exit status without reconnecting or retrying the command.
+- Added `proxy env --consumer service` to reject known temporary SSH endpoints
+  before they are handed to background services. Endpoint-bound origin metadata
+  also identifies reverse forwards on a remote host.
+- Proxy selection now distinguishes no configured local proxy (exit 4,
+  `proxy-not-configured`) from a failed/ambiguous selection; service rejection
+  reports `proxy-temporary`. Added completion, agent guidance and same-VPS
+  website routing examples.
 
 ## 0.1.6 — 2026-09-21
 
@@ -132,3 +149,5 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 [0.1.4]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.4
 
 [0.1.5]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.5
+[0.1.6]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.6
+[0.1.7]: https://github.com/daviddwlee84/lazyclash/releases/tag/v0.1.7

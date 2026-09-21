@@ -278,6 +278,13 @@ func (o *options) registerCompletions(root *cobra.Command) {
 			cmd.ValidArgsFunction = local("configs")
 		case "proxy shell-init":
 			cmd.ValidArgsFunction = values("bash", "zsh")
+		case "proxy ssh", "proxy tunnel share":
+			cmd.ValidArgsFunction = func(c *cobra.Command, a []string, s string) ([]string, cobra.ShellCompDirective) {
+				if len(a) == 0 {
+					return local("ssh")(c, a, s)
+				}
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
 		case "proxy tunnel start":
 			cmd.ValidArgsFunction = func(c *cobra.Command, a []string, s string) ([]string, cobra.ShellCompDirective) {
 				if len(a) == 0 {
@@ -351,6 +358,9 @@ func (o *options) registerCompletions(root *cobra.Command) {
 		}
 		if cmd.Flags().Lookup("owner-version") != nil {
 			_ = cmd.RegisterFlagCompletionFunc("owner-version", values("2.5.2"))
+		}
+		if cmd.Flags().Lookup("consumer") != nil {
+			_ = cmd.RegisterFlagCompletionFunc("consumer", values("process", "service"))
 		}
 		if cmd.Flags().Lookup("field") != nil {
 			_ = cmd.RegisterFlagCompletionFunc("field", values("mode", "log-level"))

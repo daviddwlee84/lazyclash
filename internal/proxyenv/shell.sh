@@ -4,7 +4,7 @@ __lazyclash_proxy_command() { command @BINARY@ "$@"; }
 __lazyclash_proxy_snapshot() {
   [ "${__lazyclash_proxy_saved:-0}" = 1 ] && return 0
   local lc_key
-  for lc_key in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY LAZYCLASH_PROXY_SESSION; do
+  for lc_key in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY LAZYCLASH_PROXY_SESSION LAZYCLASH_PROXY_ORIGIN; do
     eval "__lazyclash_proxy_set_${lc_key}=\${${lc_key}+x}"
     eval "__lazyclash_proxy_old_${lc_key}=\${${lc_key}-}"
   done
@@ -14,7 +14,7 @@ __lazyclash_proxy_snapshot() {
 __lazyclash_proxy_restore() {
   [ "${__lazyclash_proxy_saved:-0}" = 1 ] || return 0
   local lc_key lc_set lc_value
-  for lc_key in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY LAZYCLASH_PROXY_SESSION; do
+  for lc_key in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY LAZYCLASH_PROXY_SESSION LAZYCLASH_PROXY_ORIGIN; do
     eval "lc_set=\${__lazyclash_proxy_set_${lc_key}-}"
     if [ "$lc_set" = x ]; then
       eval "lc_value=\${__lazyclash_proxy_old_${lc_key}-}"

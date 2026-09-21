@@ -76,6 +76,7 @@ func (o *options) proxySessionOptions(cmd *cobra.Command) proxyenv.SessionOption
 
 func (o *options) proxyCommand() *cobra.Command {
 	var endpoint, socks string
+	var consumer, compatConsumer string
 	group := &cobra.Command{Use: "proxy", Short: "Use a selected data proxy in shells, commands and containers"}
 	group.PersistentFlags().StringVar(&endpoint, "endpoint", "", "explicit data proxy URL; distinct from the controller API")
 	group.PersistentFlags().StringVar(&socks, "socks-endpoint", "", "optional separate SOCKS5(H) endpoint with --endpoint")
@@ -93,11 +94,17 @@ func (o *options) proxyCommand() *cobra.Command {
 	}
 	compat := &cobra.Command{Use: "_resolve-shell", Hidden: true, Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error {
 		defer connection.CloseAuthentications()
+		if err := validateProxyConsumer(compatConsumer); err != nil {
+			return err
+		}
 		if o.json {
 			return usage("_resolve-shell emits a fixed shell assignment protocol")
 		}
 		p, err := getPlan(cmd, "")
 		if err != nil {
+			return err
+		}
+		if err := proxyenv.ValidateConsumer(p, compatConsumer, proxyenv.ConsumerOptions{}); err != nil {
 			return err
 		}
 		if p.SSHHost != "" {
@@ -109,9 +116,13 @@ func (o *options) proxyCommand() *cobra.Command {
 		_, err = fmt.Fprintf(cmd.OutOrStdout(), "_NET_PROXY_CACHE=%s\n_NET_PROXY_SOCKS_CACHE=%s\n_NET_PROXY_SOURCE_CACHE=%s\n", proxyenv.Quote(p.HTTP), proxyenv.Quote(p.All), proxyenv.Quote(p.Source))
 		return err
 	}}
+	compat.Flags().StringVar(&compatConsumer, "consumer", "process", "process or service; service refuses known temporary SSH endpoints")
 	var shell, session string
 	env := &cobra.Command{Use: "env", Short: "Print shell exports (use shell-init for automatic SSH sessions)", Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error {
 		defer connection.CloseAuthentications()
+		if err := validateProxyConsumer(consumer); err != nil {
+			return err
+		}
 		if shell != "sh" && shell != "bash" && shell != "zsh" {
 			return usage("--shell must be sh, bash or zsh")
 		}
@@ -119,8 +130,11 @@ func (o *options) proxyCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
+		if err := proxyenv.ValidateConsumer(p, consumer, proxyenv.ConsumerOptions{}); err != nil {
+			return err
+		}
 		if o.json {
-			return o.output(cmd, map[string]any{"proxy": p, "credentials_redacted": true, "no_proxy": "preserved"})
+			return o.output(cmd, map[string]any{"proxy": p, "consumer": consumer, "credentials_redacted": true, "no_proxy": "preserved"})
 		}
 		text, err := proxyenv.RenderEnv(p, shell)
 		if err != nil {
@@ -131,6 +145,7 @@ func (o *options) proxyCommand() *cobra.Command {
 	}}
 	env.Flags().StringVar(&shell, "shell", "sh", "shell syntax: sh, bash or zsh")
 	env.Flags().StringVar(&session, "session", "", "use an existing owned shell session")
+	env.Flags().StringVar(&consumer, "consumer", "process", "process or service; service refuses known temporary SSH endpoints")
 	var initShell string
 	var replace bool
 	init := &cobra.Command{Use: "shell-init [bash|zsh]", Short: "Print standalone proxy-on/off functions and safe exit hooks", Args: argsMaxOne("shell-init"), RunE: func(cmd *cobra.Command, args []string) error {
@@ -226,8 +241,15 @@ func (o *options) proxyCommand() *cobra.Command {
 		defer cleanup()
 		return proxyenv.Exec(cmd.Context(), p, args, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 	}}
-	group.AddCommand(env, init, status, test, execute, compat, o.proxyTunnelCommand(&endpoint, &socks), o.proxyDockerCommand(&endpoint, &socks))
+	group.AddCommand(env, init, status, test, execute, compat, o.proxyReverseCommand(&endpoint, &socks, false), o.proxyTunnelCommand(&endpoint, &socks), o.proxyDockerCommand(&endpoint, &socks))
 	return group
+}
+
+func validateProxyConsumer(value string) error {
+	if value != "process" && value != "service" {
+		return usage("--consumer must be process or service")
+	}
+	return nil
 }
 
 func argsMaxOne(name string) cobra.PositionalArgs {
@@ -257,6 +279,7 @@ func (o *options) proxyExecutionPlan(cmd *cobra.Command, p proxyenv.Plan) (proxy
 
 func (o *options) proxyTunnelCommand(endpoint, socks *string) *cobra.Command {
 	group := &cobra.Command{Use: "tunnel", Short: "Manage private persistent shell proxy sessions"}
+	group.AddCommand(o.proxyReverseCommand(endpoint, socks, true))
 	group.AddCommand(&cobra.Command{Use: "new-id", Hidden: true, Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error {
 		id, err := proxyenv.NewID()
 		if err != nil {

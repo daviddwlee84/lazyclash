@@ -17,7 +17,7 @@ import (
 func TestNewSurfaceCompletionUsesOnlyOfflineMetadata(t *testing.T) {
 	path := isolated(t)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	cfg := config.Config{Targets: []config.Target{{ID: "saved", Controller: "http://127.0.0.1:1", SecretEnv: "NEVER_READ_COMPLETION_SECRET", ManagedCoreID: "fixture-core"}}}
+	cfg := config.Config{Targets: []config.Target{{ID: "saved", Controller: "http://127.0.0.1:1", SSHHost: "saved-host", SecretEnv: "NEVER_READ_COMPLETION_SECRET", ManagedCoreID: "fixture-core"}}}
 	if err := config.Save(path, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -34,6 +34,9 @@ func TestNewSurfaceCompletionUsesOnlyOfflineMetadata(t *testing.T) {
 	}{
 		{[]string{"proxy", "shell-init", ""}, "bash"},
 		{[]string{"proxy", "env", "--shell", ""}, "sh"},
+		{[]string{"proxy", "env", "--consumer", ""}, "service"},
+		{[]string{"proxy", "ssh", ""}, "saved-host"},
+		{[]string{"proxy", "tunnel", "share", ""}, "saved-host"},
 		{[]string{"proxy", "docker", "render", "--format", ""}, "compose"},
 		{[]string{"proxy", "docker", "render", "--scope", ""}, "runtime"},
 		{[]string{"proxy", "tunnel", "start", ""}, "saved"},

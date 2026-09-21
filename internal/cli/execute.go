@@ -72,6 +72,10 @@ func describeError(err error) errorDetails {
 		result.Code = "ssh-auth-required"
 	case errors.As(err, &proxyAmbiguous):
 		result.Code = "proxy-target-ambiguous"
+	case errors.Is(err, proxyenv.ErrNoProxyConfigured):
+		result.Code = "proxy-not-configured"
+	case errors.Is(err, proxyenv.ErrTemporaryProxy):
+		result.Code = "proxy-temporary"
 	case errors.Is(err, config.ErrConflict):
 		result.Code = "config-conflict"
 	case errors.Is(err, context.Canceled), errors.Is(err, wizard.ErrCanceled):

@@ -20,7 +20,8 @@ Failures with `--json` emit one JSON object on stderr, with this shape:
 than matching human messages. Earlier stdout may already contain log entries
 when a stream fails; capture stdout and stderr separately and check exit status.
 Exit codes are `0` for success, `1` for operational failure, `2` for usage error,
-and `130` for cancellation.
+`4` when proxy selection finds no configured local proxy, and `130` for cancellation.
+Child commands preserve their own exit status.
 
 - `auth` / `tls`: fix the matching credential reference or trust configuration.
 - `unreachable`: inspect the endpoint or tunnel; a read may be retried.
@@ -34,6 +35,10 @@ and `130` for cancellation.
   OpenSSH master before retrying a machine read. A private fallback session
   ends with its CLI process; a prior test alone does not guarantee reuse.
 - `config-conflict`: reload local settings before reapplying the intended edit.
+- `proxy-not-configured`: auto selection found no proxy; this differs from an
+  explicit target failure, ambiguity or authentication error.
+- `proxy-temporary`: a service consumer selected an invocation/shell-owned SSH
+  endpoint. Choose a stable endpoint; do not silently start directly instead.
 - `usage`: correct the command using its `--help`.
 - `canceled` / `timeout`: collection or the caller's context ended; an uncertain
   write retains `unknown-write-result` instead of becoming safe to repeat.
@@ -64,7 +69,8 @@ writes, swap endpoints after failure, or infer that cancellation undid a request
 
 `lazyclash --skill` and `skill print [topic]` are offline Markdown surfaces and
 must be called without `--json`; they remain available when saved settings are
-invalid. Their topics are `controllers`, `runtime`, and `automation`.
+invalid. Their topics are `controllers`, `runtime`, `automation`, `diagnosis`,
+`workflows`, `sources`, `environment` and `setup`.
 
 ## Updating the local CLI
 

@@ -37,6 +37,7 @@ func RenderDocker(p Plan, opts DockerRenderOptions) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	delete(values, OriginVariable)
 	keys := append([]string{}, Variables...)
 	if opts.NoProxy != "" {
 		values["no_proxy"], values["NO_PROXY"] = opts.NoProxy, opts.NoProxy

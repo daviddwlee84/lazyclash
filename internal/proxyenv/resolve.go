@@ -67,7 +67,7 @@ func Resolve(ctx context.Context, cfg config.Config, request Request, opts Optio
 		}
 	}
 	if len(local) == 0 {
-		return Plan{}, errors.New("no local proxy target found; set --target ID or --endpoint URL")
+		return Plan{}, ErrNoProxyConfigured
 	}
 	if len(local) > 1 {
 		return Plan{}, &AmbiguousError{Targets: local}

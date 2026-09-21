@@ -27,12 +27,12 @@ func TestNativeSSHPrivateSessions(t *testing.T) {
 		if _, e := os.Stat("/usr/sbin/sshd"); e == nil {
 			sshd = "/usr/sbin/sshd"
 		} else {
-			t.Skip("sshd unavailable")
+			reverseNativeUnavailable(t, "sshd unavailable")
 		}
 	}
 	keygen, err := exec.LookPath("ssh-keygen")
 	if err != nil {
-		t.Skip("ssh-keygen unavailable")
+		reverseNativeUnavailable(t, "ssh-keygen unavailable")
 	}
 	dir := t.TempDir()
 	serverKey, clientKey := filepath.Join(dir, "host"), filepath.Join(dir, "client")
@@ -58,7 +58,7 @@ func TestNativeSSHPrivateSessions(t *testing.T) {
 	daemon := exec.Command(sshd, "-D", "-e", "-f", configFile)
 	daemon.Stderr = &daemonLog
 	if err = daemon.Start(); err != nil {
-		t.Skipf("isolated sshd unavailable: %v", err)
+		reverseNativeUnavailable(t, fmt.Sprintf("isolated sshd unavailable: %v", err))
 	}
 	done := make(chan error, 1)
 	go func() { done <- daemon.Wait() }()
@@ -79,13 +79,13 @@ func TestNativeSSHPrivateSessions(t *testing.T) {
 		}
 		select {
 		case e := <-done:
-			t.Skipf("isolated sshd capability unavailable: %v (%s)", e, daemonLog.String())
+			reverseNativeUnavailable(t, fmt.Sprintf("isolated sshd capability unavailable: %v (%s)", e, daemonLog.String()))
 		default:
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	if !ready {
-		t.Skip("isolated sshd did not become ready")
+		reverseNativeUnavailable(t, "isolated sshd did not become ready")
 	}
 	socketDir, err := os.MkdirTemp("", "lc-ssh-")
 	if err != nil {
@@ -119,7 +119,7 @@ func TestNativeSSHPrivateSessions(t *testing.T) {
 	// ControlPath even though the host config offers it for automatic reuse.
 	userMaster := exec.CommandContext(ctx, "ssh", "-F", clientFile, "-M", "-N", "-f", "-o", "BatchMode=yes", "--", "isolated-proxy-fixture")
 	if out, e := userMaster.CombinedOutput(); e != nil {
-		t.Skipf("isolated sshd cannot authenticate this test user: %v (%s)", e, out)
+		reverseNativeUnavailable(t, fmt.Sprintf("isolated sshd cannot authenticate this test user: %v (%s)", e, out))
 	}
 	t.Cleanup(func() {
 		_ = exec.Command("ssh", "-F", os.DevNull, "-S", userSocket, "-O", "exit", "--", "isolated-proxy-fixture").Run()

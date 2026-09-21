@@ -25,23 +25,24 @@ var sessionID = regexp.MustCompile(`^[a-f0-9]{32}$`)
 var masterPID = regexp.MustCompile(`Master running \(pid=([0-9]+)\)`)
 
 type Session struct {
-	ID             string    `json:"id"`
-	State          string    `json:"state"`
-	ShellPID       int       `json:"shell_pid"`
-	ShellIdentity  string    `json:"shell_identity"`
-	Created        time.Time `json:"created"`
-	Plan           Plan      `json:"plan"`
-	Local          Plan      `json:"local"`
-	Username       string    `json:"username,omitempty"`
-	PasswordEnv    string    `json:"password_env,omitempty"`
-	PasswordFile   string    `json:"password_file,omitempty"`
-	CAFile         string    `json:"ca_file,omitempty"`
-	SocketDir      string    `json:"socket_dir,omitempty"`
-	Socket         string    `json:"socket,omitempty"`
-	SocketIdentity string    `json:"socket_identity,omitempty"`
-	MasterPID      int       `json:"master_pid,omitempty"`
-	MasterIdentity string    `json:"master_identity,omitempty"`
-	Forwards       []string  `json:"forwards,omitempty"`
+	ID             string          `json:"id"`
+	State          string          `json:"state"`
+	ShellPID       int             `json:"shell_pid"`
+	ShellIdentity  string          `json:"shell_identity"`
+	Created        time.Time       `json:"created"`
+	Plan           Plan            `json:"plan"`
+	Local          Plan            `json:"local"`
+	Username       string          `json:"username,omitempty"`
+	PasswordEnv    string          `json:"password_env,omitempty"`
+	PasswordFile   string          `json:"password_file,omitempty"`
+	CAFile         string          `json:"ca_file,omitempty"`
+	SocketDir      string          `json:"socket_dir,omitempty"`
+	Socket         string          `json:"socket,omitempty"`
+	SocketIdentity string          `json:"socket_identity,omitempty"`
+	MasterPID      int             `json:"master_pid,omitempty"`
+	MasterIdentity string          `json:"master_identity,omitempty"`
+	Forwards       []string        `json:"forwards,omitempty"`
+	Reverse        *ReverseSession `json:"reverse,omitempty"`
 }
 
 type SessionOptions struct {
@@ -125,6 +126,19 @@ func readSession(dir, id string) (Session, error) {
 		return s, errors.New("invalid session record")
 	}
 	s.Local.Username, s.Local.PasswordEnv, s.Local.PasswordFile, s.Local.CAFile = s.Username, s.PasswordEnv, s.PasswordFile, s.CAFile
+	if s.Reverse != nil {
+		if err := validateReverseRecord(s); err != nil {
+			return s, err
+		}
+		if s.State == "ready" {
+			s.Reverse.Remote.Origin, err = TemporaryOrigin(s.Reverse.Remote, "ssh-reverse")
+		}
+	} else if s.Plan.SSHHost != "" {
+		s.Local.Origin, err = TemporaryOrigin(s.Local, "ssh-forward")
+	}
+	if err != nil {
+		return s, err
+	}
 	if s.Socket != "" && (filepath.Dir(s.Socket) != s.SocketDir || filepath.Base(s.Socket) != "control" || !strings.HasPrefix(filepath.Base(s.SocketDir), "lazyclash-proxy-")) {
 		return s, errors.New("invalid session control path")
 	}
@@ -317,6 +331,12 @@ func Start(ctx context.Context, id string, shellPID int, p Plan, opts SessionOpt
 		}
 	}
 	s.State = "ready"
+	if p.SSHHost != "" {
+		s.Local.Origin, err = TemporaryOrigin(s.Local, "ssh-forward")
+		if err != nil {
+			return s, err
+		}
+	}
 	if err = saveSession(dir, s); err != nil {
 		return s, err
 	}
@@ -358,7 +378,7 @@ func control(ctx context.Context, s Session, operation string, extra []string, o
 	defer cancel()
 	args := []string{"-F", os.DevNull, "-o", "BatchMode=yes", "-o", "ControlMaster=no", "-S", strings.ReplaceAll(s.Socket, "%", "%%"), "-O", operation}
 	args = append(args, extra...)
-	args = append(args, "--", s.Plan.SSHHost)
+	args = append(args, "--", sessionHost(s))
 	cmd := exec.CommandContext(query, "ssh", args...)
 	cmd.WaitDelay = time.Second
 	var b cappedBuffer
@@ -403,11 +423,12 @@ func Status(ctx context.Context, id string, opts SessionOptions) (Session, error
 	if err != nil {
 		return s, err
 	}
-	identity, err := processIdentity(s.ShellPID)
+	ownerPID, ownerIdentity := sessionOwner(s)
+	identity, err := processIdentity(ownerPID)
 	if err != nil {
 		return s, err
 	}
-	if identity != s.ShellIdentity {
+	if identity != ownerIdentity {
 		s.State = "orphaned"
 		return s, nil
 	}
@@ -425,6 +446,9 @@ func SessionPlan(ctx context.Context, id string, opts SessionOptions) (Plan, err
 	}
 	if s.State != "ready" {
 		return Plan{}, errors.New("proxy session is unavailable; run proxy-on to recreate it")
+	}
+	if s.Reverse != nil {
+		return Plan{}, errors.New("reverse SSH endpoints belong on the remote host; use proxy tunnel share or proxy ssh, not a local shell session")
 	}
 	return s.Local, nil
 }
@@ -525,11 +549,12 @@ func Cleanup(ctx context.Context, opts SessionOptions) ([]string, error) {
 		if e != nil {
 			return removed, e
 		}
-		identity, e := processIdentity(s.ShellPID)
+		ownerPID, ownerIdentity := sessionOwner(s)
+		identity, e := processIdentity(ownerPID)
 		if e != nil {
 			return removed, e
 		}
-		if identity == s.ShellIdentity {
+		if identity == ownerIdentity {
 			continue
 		}
 		if e = Stop(ctx, id, opts); e != nil {
@@ -541,7 +566,28 @@ func Cleanup(ctx context.Context, opts SessionOptions) ([]string, error) {
 }
 
 func SessionSummary(s Session) map[string]any {
-	return map[string]any{"id": s.ID, "state": s.State, "target_id": s.Plan.TargetID, "source": s.Plan.Source, "http_proxy": s.Local.HTTP, "all_proxy": s.Local.All, "ssh_host": s.Plan.SSHHost, "shell_pid": s.ShellPID, "created": s.Created}
+	if s.Reverse != nil {
+		return map[string]any{"id": s.ID, "state": s.State, "direction": "reverse", "owner_kind": "invocation", "owner_pid": s.Reverse.OwnerPID, "target_id": s.Plan.TargetID, "source": s.Plan.Source, "local": s.Local, "remote": s.Reverse.Remote, "ssh_host": s.Reverse.Host, "created": s.Created}
+	}
+	direction := "local"
+	if s.Plan.SSHHost != "" {
+		direction = "forward"
+	}
+	return map[string]any{"id": s.ID, "state": s.State, "direction": direction, "owner_kind": "shell", "target_id": s.Plan.TargetID, "source": s.Plan.Source, "http_proxy": s.Local.HTTP, "all_proxy": s.Local.All, "ssh_host": s.Plan.SSHHost, "shell_pid": s.ShellPID, "created": s.Created}
+}
+
+func sessionHost(s Session) string {
+	if s.Reverse != nil {
+		return s.Reverse.Host
+	}
+	return s.Plan.SSHHost
+}
+
+func sessionOwner(s Session) (int, string) {
+	if s.Reverse != nil {
+		return s.Reverse.OwnerPID, s.Reverse.OwnerIdentity
+	}
+	return s.ShellPID, s.ShellIdentity
 }
 
 func listSessions(ctx context.Context, opts SessionOptions) ([]Session, error) {

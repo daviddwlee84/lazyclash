@@ -13,6 +13,7 @@ import (
 )
 
 var Variables = []string{"http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"}
+var EnvironmentVariables = append(append([]string{}, Variables...), OriginVariable)
 
 func credential(p Plan) (string, error) {
 	var password string
@@ -66,7 +67,11 @@ func Values(p Plan) (map[string]string, error) {
 		return u.String()
 	}
 	http, all := withAuth(p.HTTP), withAuth(p.All)
-	return map[string]string{"http_proxy": http, "https_proxy": http, "HTTP_PROXY": http, "HTTPS_PROXY": http, "all_proxy": all, "ALL_PROXY": all}, nil
+	origin, err := environmentOrigin(p)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{"http_proxy": http, "https_proxy": http, "HTTP_PROXY": http, "HTTPS_PROXY": http, "all_proxy": all, "ALL_PROXY": all, OriginVariable: origin}, nil
 }
 
 func Quote(value string) string { return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'" }
@@ -80,7 +85,7 @@ func RenderEnv(p Plan, shell string) (string, error) {
 		return "", err
 	}
 	var out strings.Builder
-	for _, key := range Variables {
+	for _, key := range EnvironmentVariables {
 		fmt.Fprintf(&out, "export %s=%s\n", key, Quote(values[key]))
 	}
 	return out.String(), nil
@@ -88,13 +93,24 @@ func RenderEnv(p Plan, shell string) (string, error) {
 
 func ChildEnvironment(base []string, values map[string]string) []string {
 	out := make([]string, 0, len(base)+len(values))
+	var previousOrigin string
+	for _, entry := range base {
+		key, value, _ := strings.Cut(entry, "=")
+		if key == OriginVariable {
+			previousOrigin = value
+		}
+	}
+	keepSession := values[OriginVariable] != "" && values[OriginVariable] == previousOrigin
 	for _, entry := range base {
 		key, _, _ := strings.Cut(entry, "=")
+		if key == "LAZYCLASH_PROXY_SESSION" && !keepSession {
+			continue
+		}
 		if _, replace := values[key]; !replace {
 			out = append(out, entry)
 		}
 	}
-	for _, key := range Variables {
+	for _, key := range EnvironmentVariables {
 		if value, ok := values[key]; ok {
 			out = append(out, key+"="+value)
 		}

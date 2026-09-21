@@ -1,8 +1,9 @@
 # Shell context and consumer configuration
 
 Read when a CLI changes the calling shell's environment, owns connections beyond
-one invocation, or generates another application's configuration. An ordinary
-one-shot command does not need a shell wrapper or persistent session registry.
+one invocation, lends a local endpoint to a remote SSH consumer, or generates
+another application's configuration. An ordinary one-shot command does not need
+a shell wrapper or persistent session registry.
 
 ## Parent-shell handoff
 
@@ -57,6 +58,49 @@ SIGKILL; provide explicit and opportunistic stale-session cleanup. Report a dead
 session as unavailable instead of silently changing routes or replaying commands.
 A forwarding listener is not proof that the remote service or egress works.
 
+## Reverse forwards and remote shells
+
+A reverse forward lends a client-side endpoint to a listener on the SSH host.
+Keep the origin and consumer explicit; forwarding the controller API is not the
+same as forwarding its data proxy. Preparing a connection must finish before
+running the user's command, with no direct-route fallback or automatic replay.
+
+When the application owns a private master, start it with no forwards using
+`ClearAllForwardings=yes`, then add each exact `-R` through `-O forward` on its
+owned control socket. Do not combine clearing and the new `-R` in one invocation:
+clearing also removes command-line forwards. Control-only requests can use a
+minimal configuration to avoid inheriting unrelated forwards again. Preserve
+normal host, authentication, jump-host and trust policy when opening the master.
+See [ClearAllForwardings](https://man.openbsd.org/ssh_config#ClearAllForwardings).
+
+For remote port zero, `ssh -O forward` returns the allocated port on stdout.
+Parse only a bounded, valid port from that stream; keep stderr separate for
+banners, native prompts and diagnostics. Successful allocation does not prove
+that the destination service or external egress works. Verify the effective
+remote listener too: `GatewayPorts=yes` can force a wildcard bind despite a
+loopback request. If loopback-only exposure is part of the contract, reject a
+wildcard or unverified result and cancel only the owned forward. See
+[ssh remote forwarding](https://man.openbsd.org/ssh#R) and
+[GatewayPorts](https://man.openbsd.org/sshd_config#GatewayPorts).
+
+Choose a lifetime that covers the consumer:
+
+| Consumer | Connection ownership |
+|---|---|
+| One remote command | Invocation lease; preserve argv, stdio and exit status; clean up after completion |
+| Interactive remote shell | Shell lease; keep native terminal behavior and clean up when it exits |
+| Shared endpoint | Explicit foreground or independently supervised owner; report its lifetime |
+| Daemon or future build | Durable reachable endpoint, not a listener borrowed from a short-lived shell |
+
+A normal login shell reads startup files after receiving the prepared environment;
+its rc files may intentionally override proxy variables. Retain that default
+behavior and explain precedence. An explicit clean-shell option can remove hooks
+such as `ENV`/`BASH_ENV` and start a known shell without user login files. Do not
+silently edit remote dotfiles or claim that a clean shell bypasses every server
+or system startup policy. Bash and zsh have different startup rules; see
+[Bash startup files](https://www.gnu.org/software/bash/manual/html_node/Bash-Startup-Files.html)
+and [zsh startup files](https://zsh.sourceforge.io/Doc/Release/Files.html).
+
 ## Existing owners and consumers
 
 Build the standalone contract first; dotfile integration is a thin adapter. Do not
@@ -94,6 +138,10 @@ Container success does not prove a remote builder works.
   two shells, child exit status and no automatic replay.
 - Isolated SSH daemon/keys: separate private sessions, pre-existing shared master
   survives cleanup, failed/canceled preparation and stale registry ownership.
+- Reverse SSH in a PTY: allocated-port stdout with noisy stderr, forced wildcard
+  rejection, exact remote argv/nonzero status without replay, login-rc precedence
+  versus clean shell, Ctrl+C cleanup and restored terminal modes. Test actual
+  proxy traffic separately from a listening socket.
 - Structured consumer calls: no implicit pull or endpoint rewrite, correct format
   escaping, private artifacts and unchanged owner configuration.
 

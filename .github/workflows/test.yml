@@ -20,7 +20,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y zsh bubblewrap
+          sudo apt-get install -y zsh bubblewrap openssh-server
+          sudo mkdir -p /run/sshd
       - name: Enable namespace isolation on the disposable Linux runner
         if: runner.os == 'Linux'
         run: |
@@ -39,6 +40,7 @@ jobs:
       - run: go test -race ./...
         env:
           LAZYCLASH_REQUIRE_NATIVE_ISOLATION: "1"
+          LAZYCLASH_REQUIRE_SSH_ISOLATION: "1"
       - name: Exercise an actual managed native core and TUN on the disposable Linux VM
         if: runner.os == 'Linux'
         timeout-minutes: 8
@@ -50,6 +52,10 @@ jobs:
       - run: go build -o bin/fakecore ./tools/fakecore
       - name: Exercise completion in a real isolated zsh
         run: python3 scripts/completion_pty_smoke.py
+      - name: Exercise reverse SSH with an isolated server and real terminals
+        env:
+          LAZYCLASH_REQUIRE_SSH_ISOLATION: "1"
+        run: python3 scripts/reverse_pty_smoke.py
       - name: Exercise a real terminal with isolated controllers
         run: |
           python3 -m venv "$RUNNER_TEMP/pty-venv"

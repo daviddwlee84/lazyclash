@@ -99,6 +99,40 @@ that either native or core DNS is wrong.
 
 ## Recommendations and privacy
 
+### A website hosted on the proxy VPS
+
+Sharing a server/IP with a proxy node does not by itself select DIRECT. Rule
+mode follows the first matching rule; global mode uses its selected outbound.
+Avoiding a TUN loop for the node's transport connection is not evidence that
+application requests to a website on that IP bypass proxy rules.
+
+```text
+DIRECT:       client → website VPS
+Same node:    client → encrypted proxy → website on the same VPS
+Other node:   client → another proxy VPS → website VPS
+```
+
+If the website really terminates on the same host, the proxy-to-website leg may
+be host-local. This topology does not imply twice the public egress; a CDN,
+another reverse-proxy backend or another selected node changes the path. Provider
+billing requires its own evidence. DIRECT to an HTTPS website still uses the
+website's TLS; proxy encapsulation is an additional layer.
+
+Inspect an actual URL and the observed connection chain first:
+
+```sh
+lazyclash --target desktop diagnostics url https://site.example.com --via PROXY
+# If direct reachability works and bypass is intended, preview an exact rule:
+lazyclash --target desktop rules add-domain site.example.com --via DIRECT
+```
+
+Rule source binding, reviewed apply and owner activation still apply. Do not
+automatically bypass a node's entire IP or shared hosting range. See
+[Mihomo routing rules](https://wiki.metacubex.one/config/rules/) and
+[operating modes](https://wiki.metacubex.one/config/general/).
+
+### Recommendations and report privacy
+
 DIRECT transport failure plus a chosen proxy's response sample can justify a
 tentative exact DOMAIN recommendation, not a claim that the website functions.
 HTTP error responses remain visible. NO_PROXY, missing application proxy or

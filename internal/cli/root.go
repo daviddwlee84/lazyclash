@@ -40,6 +40,9 @@ func ExitCode(err error) int {
 	if errors.As(err, &child) {
 		return child.Code
 	}
+	if errors.Is(err, proxyenv.ErrNoProxyConfigured) {
+		return 4
+	}
 	var u *UsageError
 	if errors.As(err, &u) {
 		return 2

@@ -34,6 +34,7 @@ type Plan struct {
 	PasswordEnv  string `json:"-"`
 	PasswordFile string `json:"-"`
 	CAFile       string `json:"-"`
+	Origin       string `json:"-"`
 }
 
 type AmbiguousError struct{ Targets []config.Target }

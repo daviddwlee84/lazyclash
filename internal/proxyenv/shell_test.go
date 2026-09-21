@@ -24,7 +24,7 @@ case "$1 $2 $3" in
  'proxy tunnel new-id') n=0; [ ! -f "$FIXTURE_COUNTER" ] || n=$(cat "$FIXTURE_COUNTER"); n=$((n+1)); printf '%s' "$n" > "$FIXTURE_COUNTER"; printf '%032d\n' "$n" ;;
  'proxy tunnel start') case "$*" in *fail*) exit 9;; esac; printf 'start\n' >> "$FIXTURE_LOG" ;;
  'proxy tunnel stop') printf 'stop:%s\n' "$4" >> "$FIXTURE_LOG" ;;
- 'proxy env --session'|'proxy env --shell') printf '%s\n' "export http_proxy='http://fixture:7890'" "export https_proxy='http://fixture:7890'" "export HTTP_PROXY='http://fixture:7890'" "export HTTPS_PROXY='http://fixture:7890'" "export all_proxy='socks5h://fixture:7891'" "export ALL_PROXY='socks5h://fixture:7891'" ;;
+ 'proxy env --session'|'proxy env --shell') printf '%s\n' "export http_proxy='http://fixture:7890'" "export https_proxy='http://fixture:7890'" "export HTTP_PROXY='http://fixture:7890'" "export HTTPS_PROXY='http://fixture:7890'" "export all_proxy='socks5h://fixture:7891'" "export ALL_PROXY='socks5h://fixture:7891'" "export LAZYCLASH_PROXY_ORIGIN='temporary-fixture'" ;;
  *) exit 0 ;;
 esac
 `
@@ -46,11 +46,13 @@ add-zsh-hook zshexit prior_hook
 export http_proxy="old'quoted"
 unset ALL_PROXY
 export NO_PROXY='preserve.local'
+export LAZYCLASH_PROXY_ORIGIN='prior-origin'
 ` + init + `
 [ "$(proxy-on)" = existing ] || exit 41
 lazyclash-proxy-on --endpoint http://fixture:7890 || exit 42
 [ "$http_proxy" = http://fixture:7890 ] || exit 43
 [ "$NO_PROXY" = preserve.local ] || exit 44
+[ "$LAZYCLASH_PROXY_ORIGIN" = temporary-fixture ] || exit 53
 old_session=$LAZYCLASH_PROXY_SESSION
 lazyclash-proxy-on --endpoint fail && exit 45
 [ "$LAZYCLASH_PROXY_SESSION" = "$old_session" ] || exit 46
@@ -60,6 +62,7 @@ lazyclash-proxy-off || exit 48
 [ "$http_proxy" = "old'quoted" ] || exit 49
 [ "${ALL_PROXY+x}" != x ] || exit 50
 [ "$NO_PROXY" = preserve.local ] || exit 51
+[ "$LAZYCLASH_PROXY_ORIGIN" = prior-origin ] || exit 54
 lazyclash-proxy-on --endpoint http://fixture:7890 || exit 52
 exit 23
 `

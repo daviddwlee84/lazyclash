@@ -73,6 +73,14 @@ result as a healthy system.
 
 ## Product inspiration and related knowledge
 
+Reverse proxy sharing uses [OpenSSH remote forwarding](https://man.openbsd.org/ssh),
+[GatewayPorts](https://man.openbsd.org/sshd_config#GatewayPorts), and the distinction
+between [Bash startup files](https://www.gnu.org/software/bash/manual/html_node/Bash-Startup-Files.html)
+and [zsh startup files](https://zsh.sourceforge.io/Doc/Release/Files.html).
+The [operating guide](ssh-proxy-sharing.md) records lifecycle and consumer limits;
+isolated SSH tests verify the implementation rather than assuming `-R 127.0.0.1`
+alone proves the actual bind address. Reviewed 2026-09-21.
+
 | Reference | What we learned | Boundary |
 |---|---|---|
 | [MetaCubeXD](https://github.com/MetaCubeX/metacubexd) and [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev) | Traffic, resource summaries, connection distributions and route presentation; user screenshots reviewed 2026-09-20 | Visual inspiration, not evidence for API semantics |
