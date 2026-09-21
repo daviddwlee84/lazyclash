@@ -229,3 +229,19 @@ func TestPublishedAssetInventory(t *testing.T) {
 		t.Fatal(got, err)
 	}
 }
+
+func TestReleaseArtifact(t *testing.T) {
+	binary := os.Getenv("RELEASE_BINARY")
+	if binary == "" {
+		t.Skip("set RELEASE_BINARY to inspect a built native release archive executable")
+	}
+	version := os.Getenv("RELEASE_VERSION")
+	info, err := InspectPath(binary)
+	if err != nil || info.Method != "release-asset" || info.BuildKind != "release" || info.Version != version || info.GOOS != runtime.GOOS || info.GOARCH != runtime.GOARCH {
+		t.Fatal(info, err)
+	}
+	output, err := candidateVersion(context.Background(), binary)
+	if err != nil || strings.TrimSpace(output) != "lazyclash version "+version {
+		t.Fatal(output, err)
+	}
+}

@@ -10,7 +10,8 @@ builds:
     env: [CGO_ENABLED=0]
     goos: [darwin, linux]
     goarch: [amd64, arm64]
-    flags: [-trimpath]
+    # Preserve linker/VCS build metadata for offline release provenance inspection.
+    flags: [-buildvcs=true]
     ldflags:
       - -s -w -X github.com/daviddwlee84/lazyclash/internal/cli.Version=v{{ .Version }} -X github.com/daviddwlee84/lazyclash/internal/selfupdate.ReleaseStamp=archive-v1:v{{ .Version }}
 archives:

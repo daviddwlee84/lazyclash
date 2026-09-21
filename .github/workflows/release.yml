@@ -42,6 +42,11 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      - name: Verify native archive provenance and version offline
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+          RELEASE_BINARY: ${{ github.workspace }}/dist/lazyclash_linux_amd64_v1/lazyclash
+        run: go test ./internal/selfupdate -run '^TestReleaseArtifact$' -count=1 -v
       - name: Verify complete assets before publication
         env:
           VERSION: ${{ github.ref_name }}
