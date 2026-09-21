@@ -42,11 +42,12 @@ type Request struct {
 }
 
 type Options struct {
-	Store    serverstate.Store
-	ReadOnly bool
-	Execute  func(context.Context, string, RemoteRequest) (RemoteResponse, error)
-	Resolve  func(context.Context, Request, string) (Artifact, error)
-	Probe    func(context.Context, []byte) (string, error)
+	Store           serverstate.Store
+	ReadOnly        bool
+	VerifyInterface string
+	Execute         func(context.Context, string, RemoteRequest) (RemoteResponse, error)
+	Resolve         func(context.Context, Request, string) (Artifact, error)
+	Probe           func(context.Context, []byte) (string, error)
 }
 
 type Plan struct {
@@ -76,16 +77,17 @@ type Result struct {
 }
 
 type Status struct {
-	ID                   string    `json:"id"`
-	HostID               string    `json:"host_id"`
-	Service              string    `json:"service"`
-	SSH                  string    `json:"ssh"`
-	PublicHost           string    `json:"public_host"`
-	PublicPort           int       `json:"public_port"`
-	Message              string    `json:"message,omitempty"`
-	ObservedExitIP       string    `json:"observed_exit_ip,omitempty"`
-	ClientUpdateRequired bool      `json:"client_update_required"`
-	VerifiedAt           time.Time `json:"verified_at,omitempty"`
+	ID                    string    `json:"id"`
+	HostID                string    `json:"host_id"`
+	Service               string    `json:"service"`
+	SSH                   string    `json:"ssh"`
+	PublicHost            string    `json:"public_host"`
+	PublicPort            int       `json:"public_port"`
+	Message               string    `json:"message,omitempty"`
+	ObservedExitIP        string    `json:"observed_exit_ip,omitempty"`
+	ClientUpdateRequired  bool      `json:"client_update_required"`
+	VerifiedAt            time.Time `json:"verified_at,omitempty"`
+	VerificationInterface string    `json:"verification_interface,omitempty"`
 }
 
 type Artifact struct {
@@ -129,16 +131,17 @@ type credentials struct {
 	WSPath     string `json:"ws_path"`
 }
 type journal struct {
-	Plan           Plan              `json:"plan"`
-	Host           serverstate.Host  `json:"host"`
-	Token          string            `json:"token"`
-	Credentials    credentials       `json:"credentials"`
-	Files          map[string]string `json:"files"`
-	Integrity      string            `json:"integrity"`
-	Approved       bool              `json:"approved"`
-	Phase          string            `json:"phase"`
-	CreatedAt      time.Time         `json:"created_at"`
-	UpdatedAt      time.Time         `json:"updated_at"`
-	ObservedExitIP string            `json:"observed_exit_ip,omitempty"`
-	VerifiedAt     time.Time         `json:"verified_at,omitempty"`
+	Plan                  Plan              `json:"plan"`
+	Host                  serverstate.Host  `json:"host"`
+	Token                 string            `json:"token"`
+	Credentials           credentials       `json:"credentials"`
+	Files                 map[string]string `json:"files"`
+	Integrity             string            `json:"integrity"`
+	Approved              bool              `json:"approved"`
+	Phase                 string            `json:"phase"`
+	CreatedAt             time.Time         `json:"created_at"`
+	UpdatedAt             time.Time         `json:"updated_at"`
+	ObservedExitIP        string            `json:"observed_exit_ip,omitempty"`
+	VerifiedAt            time.Time         `json:"verified_at,omitempty"`
+	VerificationInterface string            `json:"verification_interface,omitempty"`
 }

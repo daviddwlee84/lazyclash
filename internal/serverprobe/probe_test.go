@@ -106,6 +106,53 @@ func TestAuthenticatedTunnelAndCleanup(t *testing.T) {
 	}
 }
 
+func TestExplicitInterfaceOnlyAffectsPrivateVerificationClient(t *testing.T) {
+	interfaces, err := net.Interfaces()
+	if err != nil || len(interfaces) == 0 {
+		t.Skip("no local interface available")
+	}
+	endpoint := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"ip":"203.0.113.42"}`)
+	}))
+	defer endpoint.Close()
+	roots := x509.NewCertPool()
+	roots.AddCert(endpoint.Certificate())
+	var stopped atomic.Bool
+	var path string
+	opts := testOptions(t, endpoint.URL, roots, false, &stopped, &path)
+	opts.InterfaceName = interfaces[0].Name
+	start := opts.Start
+	opts.Start = func(ctx context.Context, binary, path string) (func(), <-chan struct{}, error) {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, nil, err
+		}
+		var profile map[string]any
+		if err = yaml.Unmarshal(data, &profile); err != nil {
+			return nil, nil, err
+		}
+		if profile["interface-name"] != opts.InterfaceName || profile["tun"] != nil {
+			t.Fatal("interface binding enabled TUN or was not scoped to the verifier")
+		}
+		return start(ctx, binary, path)
+	}
+	ip, err := ProbeWithOptions(context.Background(), testNode, opts)
+	if err != nil || ip != "203.0.113.42" || !stopped.Load() {
+		t.Fatalf("explicit interface broke authenticated verification: %q %v", ip, err)
+	}
+	if _, err = os.Stat(filepath.Dir(path)); !os.IsNotExist(err) {
+		t.Fatal("private verification configuration was retained")
+	}
+	called := false
+	_, err = ProbeWithOptions(context.Background(), testNode, Options{InterfaceName: "lazyclash-nonexistent-interface", ResolveBinary: func(context.Context, string) (string, error) {
+		called = true
+		return "", nil
+	}})
+	if err == nil || called {
+		t.Fatal("invalid interface reached client acquisition")
+	}
+}
+
 func TestFailureNeverFallsBackToDirect(t *testing.T) {
 	var requests atomic.Int32
 	endpoint := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

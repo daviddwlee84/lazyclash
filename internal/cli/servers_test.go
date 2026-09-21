@@ -48,6 +48,19 @@ func serverCLIFixture(t *testing.T) (Dependencies, *[]string) {
 	return deps, &calls
 }
 
+func TestServerVerificationInterfaceRejectedBeforeRemoteWork(t *testing.T) {
+	deps, calls := serverCLIFixture(t)
+	for _, args := range [][]string{
+		{"servers", "deploy", "demo", "--host", "vm", "--verify-interface", "lazyclash-nonexistent-interface", "--json"},
+		{"servers", "resume", "demo", "--verify-interface", "lazyclash-nonexistent-interface", "--json"},
+	} {
+		_, _, err := run(t, deps, args...)
+		if ExitCode(err) != 2 || len(*calls) != 0 {
+			t.Fatalf("invalid local interface reached remote work: %v calls=%v", err, *calls)
+		}
+	}
+}
+
 func deployedCLIServer(t *testing.T, deps Dependencies) serverdeploy.Plan {
 	t.Helper()
 	out, _, err := run(t, deps, "servers", "deploy", "demo", "--host", "vm", "--json")

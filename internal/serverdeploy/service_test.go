@@ -126,6 +126,7 @@ func TestDeploymentRetriesKeepCredentialsAndPartialVerification(t *testing.T) {
 	}
 	before := len(*calls)
 	o.Probe = func(context.Context, []byte) (string, error) { return "198.51.100.21", nil }
+	o.VerifyInterface = "fixture-interface"
 	got, err = Resume(ctx, p.ID, o)
 	if err != nil || got.Status != "ready" {
 		t.Fatalf("resume verify: %v %+v", err, got)
@@ -136,7 +137,7 @@ func TestDeploymentRetriesKeepCredentialsAndPartialVerification(t *testing.T) {
 		}
 	}
 	j, _ := loadJournal(o, p.ID)
-	if j.ObservedExitIP != "198.51.100.21" || j.VerifiedAt.IsZero() {
+	if j.ObservedExitIP != "198.51.100.21" || j.VerifiedAt.IsZero() || j.VerificationInterface != "fixture-interface" {
 		t.Fatal("missing verification evidence")
 	}
 	info, err := os.Stat(filepath.Join(o.Store.StateDir, "deployments", p.ID+".json"))

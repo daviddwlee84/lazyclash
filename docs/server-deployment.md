@@ -271,6 +271,19 @@ VM 關機通常仍收費；BYO SSH 主機沒有 provider 電源 API，不能在�
 狀態分開呈現 SSH、服務程序、上次代理驗證及出口 IP。驗證使用臨時 Mihomo
 進行真實 HTTPS 請求，不改動既有 client；代理失敗不改走直連。
 出口 IP 可能不同於入站 IP。公開位址變更會標記 client 配置需要更新。
+若本機已有 TUN 且啟用 TLS SNI 目的地改寫，獨立驗證 client 的 REALITY 連線可能
+被既有 client 攔截。先診斷路徑，再明確指定暫時驗證 client 的本機網卡：
+
+```sh
+lazyclash servers resume SERVER_ID --verify-interface en1 --json
+# 審查 resume 預覽後，使用相同 --verify-interface 加 --yes --expect DIGEST。
+```
+
+`deploy`、`resume`、`start`、`restart` 支援 `--verify-interface`。它只設定暫時
+驗證 client 的 `interface-name`，不改既有 client、系統路由或 TUN；也不把目的地
+請求退回直連。預設保持系統路由。驗證成功時，`servers status --json` 另記錄
+`verification_interface`，區分驗證路徑與服務狀態。
+
 只改公開端點時仍可檢查、停止和移除已知服務；SSH／provider／resource identity
 改變需要重新審查部署。既有分享連結不會被默默改寫。
 

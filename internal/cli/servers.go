@@ -16,6 +16,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/configwork"
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/serverdeploy"
+	"github.com/daviddwlee84/lazyclash/internal/serverprobe"
 	"github.com/daviddwlee84/lazyclash/internal/serverstate"
 	"github.com/daviddwlee84/lazyclash/internal/tui"
 	"github.com/daviddwlee84/lazyclash/internal/vps"
@@ -31,7 +32,25 @@ func (o *options) serverOptions(cmd *cobra.Command) (serverdeploy.Options, error
 		return opts, err
 	}
 	opts.Store, opts.ReadOnly = store, o.readOnly
+	if cmd.Flags().Lookup("verify-interface") != nil {
+		opts.VerifyInterface, _ = cmd.Flags().GetString("verify-interface")
+	}
 	return opts, nil
+}
+
+func validateServerVerifyInterface(cmd *cobra.Command) error {
+	if cmd.Flags().Lookup("verify-interface") == nil {
+		return nil
+	}
+	name, _ := cmd.Flags().GetString("verify-interface")
+	if err := serverprobe.ValidateInterface(name); err != nil {
+		return usage("%s", err)
+	}
+	return nil
+}
+
+func serverVerifyInterfaceFlag(cmd *cobra.Command) {
+	cmd.Flags().String("verify-interface", "", "explicit local interface for the temporary proxy verification client; leaves live client/TUN settings unchanged")
 }
 
 func serverReviewFlags(yes bool, expected string) error {
@@ -127,6 +146,9 @@ func (o *options) serverDeployCommand() *cobra.Command {
 		return nil
 	}, RunE: func(cmd *cobra.Command, args []string) error {
 		defer connection.CloseAuthentications()
+		if err := validateServerVerifyInterface(cmd); err != nil {
+			return err
+		}
 		if err := validateManagedOverrides(cmd, false, false); err != nil {
 			return err
 		}
@@ -197,6 +219,7 @@ func (o *options) serverDeployCommand() *cobra.Command {
 	f.BoolVar(&interactive, "interactive", false, "open a prefilled deployment wizard")
 	f.BoolVar(&yes, "yes", false, "apply the exact reviewed deployment")
 	f.StringVar(&expected, "expect", "", "reviewed deployment digest required with --yes")
+	serverVerifyInterfaceFlag(cmd)
 	return cmd
 }
 
@@ -290,6 +313,9 @@ func (o *options) serverActionCommand(action string) *cobra.Command {
 	var expected string
 	cmd := &cobra.Command{Use: action + " [ID]", Short: map[string]string{"start": "Start an owned server service", "stop": "Stop a server service; VM billing continues", "restart": "Restart an owned server service", "remove": "Remove owned service files; keep the VPS", "resume": "Resume a recorded incomplete deployment"}[action], Args: serverOptionalID, RunE: func(cmd *cobra.Command, args []string) error {
 		defer connection.CloseAuthentications()
+		if err := validateServerVerifyInterface(cmd); err != nil {
+			return err
+		}
 		if err := validateManagedOverrides(cmd, false, false); err != nil {
 			return err
 		}
@@ -364,6 +390,9 @@ func (o *options) serverActionCommand(action string) *cobra.Command {
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "choose a server and review the operation")
 	cmd.Flags().BoolVar(&yes, "yes", false, "apply the exact reviewed action")
 	cmd.Flags().StringVar(&expected, "expect", "", "reviewed action digest required with --yes")
+	if action == "resume" || action == "start" || action == "restart" {
+		serverVerifyInterfaceFlag(cmd)
+	}
 	return cmd
 }
 

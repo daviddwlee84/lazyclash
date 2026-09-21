@@ -33,12 +33,25 @@ type Options struct {
 	// Binary explicitly selects a local Mihomo binary; empty prefers PATH and
 	// otherwise downloads the same verified release as managed client setup.
 	Binary        string
+	InterfaceName string
 	Endpoint      string
 	RootCAs       *x509.CertPool
 	ResolveBinary func(context.Context, string) (string, error)
 	// Start and Validate allow deterministic lifecycle tests without services.
 	Start    func(context.Context, string, string) (func(), <-chan struct{}, error)
 	Validate func(context.Context, string, string) error
+}
+
+// ValidateInterface checks an explicit caller choice. Verification never
+// silently selects a physical interface or changes an existing VPN/TUN.
+func ValidateInterface(name string) error {
+	if name == "" {
+		return nil
+	}
+	if _, err := net.InterfaceByName(name); err != nil {
+		return fmt.Errorf("local verification interface %q is unavailable", name)
+	}
+	return nil
 }
 
 func Probe(ctx context.Context, nodeYAML []byte) (string, error) {
@@ -48,6 +61,9 @@ func Probe(ctx context.Context, nodeYAML []byte) (string, error) {
 func ProbeWithOptions(parent context.Context, nodeYAML []byte, opts Options) (string, error) {
 	ctx, cancel := context.WithTimeout(parent, 90*time.Second)
 	defer cancel()
+	if err := ValidateInterface(opts.InterfaceName); err != nil {
+		return "", err
+	}
 	nodes, diagnostics, err := configwork.ParseImport(nodeYAML)
 	if err != nil || len(diagnostics) > 0 || len(nodes) != 1 {
 		return "", errors.New("proxy verification requires exactly one valid node")
@@ -85,6 +101,9 @@ func ProbeWithOptions(parent context.Context, nodeYAML []byte, opts Options) (st
 	}
 	password := hex.EncodeToString(secret)
 	profile := map[string]any{"mixed-port": port, "bind-address": "127.0.0.1", "allow-lan": false, "authentication": []string{"verify:" + password}, "mode": "rule", "log-level": "silent", "ipv6": true, "proxies": []any{node}, "rules": []string{"MATCH,LAZYCLASH-VERIFY"}, "profile": map[string]any{"store-selected": false, "store-fake-ip": false}, "dns": map[string]any{"enable": false}}
+	if opts.InterfaceName != "" {
+		profile["interface-name"] = opts.InterfaceName
+	}
 	data, err := yaml.Marshal(profile)
 	if err != nil {
 		listener.Close()

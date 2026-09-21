@@ -283,17 +283,20 @@ func verify(ctx context.Context, path string, j *journal, o Options) (Result, er
 	}
 	probe := o.Probe
 	if probe == nil {
-		probe = serverprobe.Probe
+		probe = func(ctx context.Context, data []byte) (string, error) {
+			return serverprobe.ProbeWithOptions(ctx, data, serverprobe.Options{InterfaceName: o.VerifyInterface})
+		}
 	}
 	ip, err := probe(ctx, data)
 	if err != nil {
 		out := result(*j, "Service installed; authenticated proxy verification has not passed")
-		out.Warnings = []string{"Check public reachability, firewalls, router forwarding and the local verification core, then run resume."}
+		out.Warnings = []string{"Check public reachability, firewalls, router forwarding and the local verification core, then run resume.", "An existing TUN with TLS destination overrides can intercept REALITY. After diagnosis, --verify-interface can explicitly bind only the temporary verification client to a chosen local interface."}
 		return out, nil
 	}
 	j.Phase = "ready"
 	j.ObservedExitIP = ip
 	j.VerifiedAt = time.Now().UTC()
+	j.VerificationInterface = o.VerifyInterface
 	if err = saveJournal(path, j); err != nil {
 		return Result{}, err
 	}
@@ -316,7 +319,7 @@ func GetStatus(ctx context.Context, id string, o Options) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	s := Status{ID: id, HostID: h.ID, PublicHost: j.Plan.PublicHost, PublicPort: j.Plan.PublicPort, SSH: "unknown", Service: j.Phase, ObservedExitIP: j.ObservedExitIP, VerifiedAt: j.VerifiedAt, ClientUpdateRequired: h.PublicHost != "" && h.PublicHost != j.Host.PublicHost}
+	s := Status{ID: id, HostID: h.ID, PublicHost: j.Plan.PublicHost, PublicPort: j.Plan.PublicPort, SSH: "unknown", Service: j.Phase, ObservedExitIP: j.ObservedExitIP, VerifiedAt: j.VerifiedAt, VerificationInterface: j.VerificationInterface, ClientUpdateRequired: h.PublicHost != "" && h.PublicHost != j.Host.PublicHost}
 	if !sameManagementHost(j.Host, h) {
 		s.Message = "Host binding changed; review the new host before further service operations"
 		return s, nil

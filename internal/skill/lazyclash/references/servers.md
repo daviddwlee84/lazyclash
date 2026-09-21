@@ -91,6 +91,11 @@ Status distinguishes service state, SSH and last authenticated HTTPS proxy
 verification. Verification uses an isolated temporary Mihomo with no direct
 fallback. A running service does not prove Mainland connectivity; a failed probe
 does not erase the deployment. Incoming IP and observed exit IP may differ.
+An existing TUN with TLS destination overrides can intercept an independent
+REALITY verifier. After diagnosing that route, `deploy/resume/start/restart
+--verify-interface NAME` explicitly binds only the temporary verifier to a local
+interface; it never rewrites a live client or system routing. The default keeps
+system routing, and successful status records the chosen verification interface.
 
 `servers export ID --format uri|qr|mihomo|starter|client-bundle|admin-bundle`
 is an explicit credential export. QR/admin exports require a new private output
