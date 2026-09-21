@@ -11,8 +11,8 @@ lazyclash upgrade
 
 Go 1.25+ is required. The executable package is `/cmd/lazyclash`, not the
 repository root. GOBIN controls install location; otherwise Go uses GOPATH/bin.
-`@latest` selects a published version, `@v0.1.7` pins one, and `@main` opts
-into development. Homebrew and prebuilt archives remain future channels.
+`@latest` selects a published version, `@v0.1.8` pins one, and `@main` opts
+into development. Prebuilt archives cover macOS/Linux amd64/arm64 and include checksums and Bash/Zsh completions. Package-manager publication is maintained separately.
 
 The updater resolves the current executable, identifies build provenance and
 package ownership, fetches a stable release, builds a fixed-tag candidate,
@@ -84,3 +84,7 @@ Use the same release number in CHANGELOG, docs and install manifests.
 The embedded operating skill ships with the binary. Contributor skill updates
 are published from their canonical agent-skills source and then refreshed in
 this project; ordinary users do not run that development workflow.
+
+## Archive upgrade channel
+
+Official archives carry a release stamp separate from the displayed version. The updater verifies the exact platform archive against `checksums.txt`, inspects the candidate package/module/platform and release stamp, then runs a bounded version check before replacing the same resolved executable. Failed or missing downloads/checksums never fall back to a source build. Source-installed copies continue to build exact stable tags with Go; package-owned copies must use their manager.

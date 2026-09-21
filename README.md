@@ -4,6 +4,19 @@ A keyboard-first terminal console for **Mihomo clients**, including existing cor
 
 Manage runtime state, edit and share source-backed nodes/groups, use a selected proxy from your shell or Docker, compare targets, and diagnose routing. `setup` installs native or Docker clients with an offline regional starter and optional reviewed TUN/system-proxy configuration. Clash Verge companion edits require native profile reactivation. See the [knowledge and operating guide](docs/README.md), [reference index](docs/references.md), and [future milestones](TODO.md).
 
+## Prebuilt releases
+
+Download the archive for your macOS/Linux amd64/arm64 platform from
+[GitHub Releases](https://github.com/daviddwlee84/lazyclash/releases).
+Verify it against `checksums.txt` before extracting. Archives contain the
+`lazyclash` executable, MIT license, and Bash/Zsh completions. Go is only needed
+for source installation. Runtime backends remain separate prerequisites.
+
+Standalone archive installations use verified release archives for `upgrade`;
+source installations retain exact-tag Go builds. Homebrew/Nix/mise installations
+must use their owning package manager. Upgrades never install a missing Go toolchain
+or fall back to source after a download/checksum failure.
+
 ## Install and start
 
 Requires Go 1.25 or newer and OpenSSH for SSH targets.
@@ -18,7 +31,7 @@ The `/cmd/lazyclash` suffix identifies the executable package. Go installs it in
 `go env GOBIN` when configured, otherwise in the first `go env GOPATH` entry's
 `bin` directory (usually `~/go/bin`). Add that directory to your shell's PATH.
 Repeating the install command upgrades to the latest published version. To pin
-a release, use `@v0.1.7`; `@main` explicitly opts into the development
+a release, use `@v0.1.8`; `@main` explicitly opts into the development
 branch. `@latest` selects a published version, not necessarily the newest commit.
 See [CHANGELOG.md](CHANGELOG.md) for changes between versions.
 
@@ -37,7 +50,7 @@ path and update eligibility without writing settings, locks or caches. It works
 with missing/broken lazyclash settings and does not contact a Mihomo controller.
 `--read-only` governs core operations; use `upgrade --check` for an update preview.
 
-The current source-release channel requires Go for an actual update. lazyclash
+The source-install update channel requires Go for an actual update. lazyclash
 pins the discovered stable release tag, builds a private candidate, verifies its
 identity and version, and atomically replaces the **currently running executable's
 resolved path**. A relocated Go release binary is supported; changing GOBIN or
@@ -67,8 +80,7 @@ Source installation does not modify shell startup files. Run
 print activation instructions; `completion status zsh` checks the file.
 Existing completion directories can use `--dir ~/.zfunc`. See
 [installation and completion](docs/install-upgrade-completion.md) for fpath,
-compinit, Bash generation and update behavior. Homebrew and prebuilt release
-archives remain a later distribution milestone.
+compinit, Bash generation and update behavior. Prebuilt archives include Bash/Zsh completions; package-manager publication is maintained separately.
 
 With no saved targets, the dashboard discovers local controllers. Discovery reads known runtime configurations and process/config locations, then probes common loopback controller ports. Multiple candidates are presented for selection; an explicitly selected target never falls back to another core.
 

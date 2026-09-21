@@ -17,7 +17,11 @@ func Inspect() (Installation, error) {
 	if err != nil {
 		return Installation{}, fmt.Errorf("locate running executable: %w", err)
 	}
-	return InspectPath(executable)
+	installation, err := InspectPath(executable)
+	if err == nil && installation.Method == "release-asset" && ReleaseStamp != "archive-v1:"+installation.Version {
+		return Installation{}, fmt.Errorf("running archive provenance does not match build metadata")
+	}
+	return installation, err
 }
 
 // InspectPath also verifies a staged candidate before it replaces the original.
@@ -129,6 +133,12 @@ func classifyBuild(executable, resolved string, info *debug.BuildInfo) Installat
 			installation.Evidence = append(installation.Evidence, "Go dependency replacement is present")
 			break
 		}
+	}
+	if version := archiveVersion(info); version != "" {
+		installation.Version = version
+		installation.Method = "release-asset"
+		development = false
+		installation.Evidence = append(installation.Evidence, "Archive release provenance is present")
 	}
 	if development {
 		installation.BuildKind = "development"

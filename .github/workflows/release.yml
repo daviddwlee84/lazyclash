@@ -1,0 +1,57 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+  release:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Verify immutable stable tag and main ancestry
+        env:
+          VERSION: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          git fetch origin main
+          test "$(git rev-parse "$VERSION^{commit}")" = "$GITHUB_SHA"
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          if existing=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION" 2>/dev/null); then
+            test "$(printf '%s' "$existing" | jq -r .draft)" = true
+          fi
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Verify complete assets before publication
+        env:
+          VERSION: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -c checksums.txt
+          expected=$(printf '%s\n' "lazyclash_${VERSION#v}_darwin_amd64.tar.gz" "lazyclash_${VERSION#v}_darwin_arm64.tar.gz" "lazyclash_${VERSION#v}_linux_amd64.tar.gz" "lazyclash_${VERSION#v}_linux_arm64.tar.gz" checksums.txt | sort)
+          actual=$(gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort)
+          test "$actual" = "$expected"
+          gh release edit "$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false --latest

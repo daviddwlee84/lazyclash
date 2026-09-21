@@ -1,10 +1,15 @@
 # Changelog
 
 User-facing changes are recorded here for every published version. Install a
-fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.7`,
+fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.8`,
 or use `@latest` to upgrade. Check the installed binary with `lazyclash --version`.
 
 ## Unreleased
+
+## 0.1.8 — 2026-09-21
+
+- Publish checksummed macOS/Linux amd64/arm64 archives with shell completions.
+- Upgrade standalone archive installs without Go while preserving source and package-manager ownership rules.
 
 ## 0.1.7 — 2026-09-21
 

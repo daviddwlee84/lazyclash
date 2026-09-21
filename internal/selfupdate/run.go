@@ -29,6 +29,7 @@ type runOptions struct {
 	build            func(context.Context, string, string, string) error
 	inspectCandidate func(string) (Installation, error)
 	version          func(context.Context, string) (string, error)
+	download         func(context.Context, Release, string) error
 }
 
 func run(ctx context.Context, req Request, progress io.Writer, opts runOptions) (Result, error) {
@@ -66,6 +67,11 @@ func run(ctx context.Context, req Request, progress io.Writer, opts runOptions) 
 		result.UpdateAvailable = comparison > 0
 	}
 	goPath, reason := upgradePrerequisites(installation, req.Force, opts.lookPath)
+	if installation.Method == "release-asset" && reason == "" {
+		if _, err := releaseAsset(release, runtime.GOOS, runtime.GOARCH); err != nil {
+			reason = err.Error()
+		}
+	}
 	result.CanUpgrade = reason == ""
 	result.Reason = reason
 	if req.Check {
@@ -97,21 +103,33 @@ func run(ctx context.Context, req Request, progress io.Writer, opts runOptions) 
 		return result, fmt.Errorf("create update staging directory (the executable directory must be writable): %w", err)
 	}
 	defer os.RemoveAll(stage)
-	fmt.Fprintf(progress, "Building lazyclash %s with Go…\n", release.Version)
-	if err := opts.build(ctx, goPath, stage, release.Version); err != nil {
-		if ctx.Err() != nil {
-			return result, ctx.Err()
+	if installation.Method == "release-asset" {
+		fmt.Fprintf(progress, "Downloading lazyclash %s…\n", release.Version)
+		download := opts.download
+		if download == nil {
+			download = downloadRelease
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			return result, fmt.Errorf("building release: %w", context.DeadlineExceeded)
+		if err := download(ctx, release, stage); err != nil {
+			return result, err
 		}
-		if errors.Is(err, context.Canceled) {
-			return result, context.Canceled
+	} else {
+		fmt.Fprintf(progress, "Building lazyclash %s with Go…\n", release.Version)
+		if err = opts.build(ctx, goPath, stage, release.Version); err != nil {
+			if ctx.Err() != nil {
+				return result, ctx.Err()
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				return result, fmt.Errorf("building release: %w", context.DeadlineExceeded)
+			}
+			if errors.Is(err, context.Canceled) {
+				return result, context.Canceled
+			}
+			// Toolchain errors can contain credential-bearing proxy URLs. Keep raw
+			// child output out of both machine results and terminal diagnostics.
+			return result, errors.New("go install failed; check the Go toolchain, GOPROXY and network settings (the existing binary was retained)")
 		}
-		// Toolchain errors can contain credential-bearing proxy URLs. Keep raw
-		// child output out of both machine results and terminal diagnostics.
-		return result, errors.New("go install failed; check the Go toolchain, GOPROXY and network settings (the existing binary was retained)")
 	}
+
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
@@ -121,7 +139,7 @@ func run(ctx context.Context, req Request, progress io.Writer, opts runOptions) 
 		return result, errors.New("built candidate must be a regular executable file (the existing binary was retained)")
 	}
 	info, err := opts.inspectCandidate(candidate)
-	if err != nil || !info.IdentityValid || info.BuildKind != "release" || info.Version != release.Version || info.GOOS != runtime.GOOS || info.GOARCH != runtime.GOARCH {
+	if err != nil || !info.IdentityValid || info.BuildKind != "release" || info.Version != release.Version || info.GOOS != runtime.GOOS || info.GOARCH != runtime.GOARCH || (installation.Method == "release-asset" && info.Method != "release-asset") {
 		return result, errors.New("built candidate did not match the lazyclash package, platform and pinned release (the existing binary was retained)")
 	}
 	printed, err := opts.version(ctx, candidate)
@@ -174,7 +192,11 @@ func upgradePrerequisites(installation Installation, force bool, lookPath func(s
 	if reason := upgradePolicy(installation, force); reason != "" {
 		return "", reason
 	}
-	goPath, err := lookPath("go")
+	var goPath string
+	var err error
+	if installation.Method == "go-install" {
+		goPath, err = lookPath("go")
+	}
 	if err != nil {
 		return "", "Go is required for this installation's upgrade method; install Go from https://go.dev/dl/ and retry"
 	}
@@ -185,7 +207,7 @@ func upgradePrerequisites(installation Installation, force bool, lookPath func(s
 }
 
 func upgradePolicy(installation Installation, force bool) string {
-	if installation.Manager != "" || !installation.IdentityValid || installation.Method != "go-install" {
+	if installation.Manager != "" || !installation.IdentityValid || (installation.Method != "go-install" && installation.Method != "release-asset") {
 		if installation.Reason != "" {
 			return installation.Reason
 		}

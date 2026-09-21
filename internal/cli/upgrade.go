@@ -13,11 +13,12 @@ func (o *options) upgradeCommand() *cobra.Command {
 	var request selfupdate.Request
 	cmd := &cobra.Command{
 		Use: "upgrade", Short: "Check or upgrade this local lazyclash executable",
-		Long: `Upgrade the running executable to the latest stable lazyclash release using Go.
+		Long: `Upgrade the running executable to the latest stable lazyclash release.
 The resolved executable path is retained, including for moved Go release binaries.
 Use --check to inspect the version, build source, destination and update method.
 Development builds require --force; package-managed or unknown binaries are never
-overwritten. Go is required for an upgrade, but not for inspecting the installation.
+overwritten. Archive installations use checksummed platform assets; Go source installations
+require Go. Neither method installs a missing toolchain.
 
 This command runs without prompting, including in pipelines. It does not load
 lazyclash settings, contact a controller, upgrade Mihomo or modify a Git checkout.

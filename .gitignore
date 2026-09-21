@@ -43,3 +43,7 @@
 /coverage.out
 
 /scripts/__pycache__/
+
+# Release artifacts
+/dist/
+/completions/

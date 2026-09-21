@@ -94,7 +94,7 @@ When the user has authorized updating this CLI and the check permits it:
 lazyclash upgrade --json
 ```
 
-The command does not prompt. It pins one stable release tag, stages a Go build,
+The command does not prompt. It pins one stable release tag, stages a verified archive for official archive installations or a Go build for source installations,
 verifies identity/version, revalidates the destination and atomically replaces
 that file. Failures before replacement retain the original. JSON mode suppresses
 build progress; success emits one result on stdout and failure uses the normal

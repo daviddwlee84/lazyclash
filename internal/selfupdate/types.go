@@ -34,9 +34,13 @@ type Installation struct {
 	fileInfo os.FileInfo
 }
 
+// ReleaseStamp is set only by the reviewed archive release workflow.
+var ReleaseStamp string
+
 type Release struct {
-	Version string `json:"version"`
-	URL     string `json:"url"`
+	Assets  []string `json:"assets,omitempty"`
+	Version string   `json:"version"`
+	URL     string   `json:"url"`
 }
 
 type Result struct {
