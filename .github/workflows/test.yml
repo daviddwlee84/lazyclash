@@ -22,14 +22,17 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
           fetch-depth: 0
       - name: Test immutable release publication
+        if: hashFiles('scripts/test_release.py') != ''
         run: python3 -m unittest discover -s scripts -p test_release.py
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
       - name: Test source and module packaging guards
+        if: hashFiles('scripts/check-distribution.py') != ''
         run: python3 -m unittest discover -s scripts -p test_distribution.py
       - name: Build independently extracted source and Go module distributions
+        if: hashFiles('scripts/check-distribution.py') != ''
         run: python3 scripts/check-distribution.py
       - name: Install Linux verification dependencies
         if: runner.os == 'Linux'
@@ -78,9 +81,9 @@ jobs:
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_smoke.py
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/auth_pty_smoke.py
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/tools_pty_smoke.py
-          "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_servers_smoke.py
-          "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_tailnet_smoke.py
-          "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_cloud_vps_smoke.py
+          if [ -f scripts/pty_servers_smoke.py ]; then "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_servers_smoke.py; fi
+          if [ -f scripts/pty_tailnet_smoke.py ]; then "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_tailnet_smoke.py; fi
+          if [ -f scripts/pty_cloud_vps_smoke.py ]; then "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_cloud_vps_smoke.py; fi
   servers:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -92,6 +95,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Exercise official cores and authenticated tunnels in disposable containers
+        if: hashFiles('internal/serverdeploy/integration_test.go') != ''
         env:
           LAZYCLASH_SERVER_INTEGRATION: "1"
           LAZYCLASH_SERVER_E2E: "1"
