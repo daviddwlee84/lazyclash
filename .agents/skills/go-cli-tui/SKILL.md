@@ -1,5 +1,6 @@
 ---
 name: go-cli-tui
+license: MIT
 description: 'Build Go CLIs, terminal dashboards, and interactive wizards with Lazygit-inspired UX. Use when creating a Go command-line tool, adding a CLI/TUI feature, designing Bubble Tea or Charm interfaces, improving keyboard navigation or responsiveness, or adding guided setup and XDG configuration. Defaults to Cobra and the compatible Charm stack, with arrow/Vim navigation, shared operations, and real terminal verification.'
 ---
 

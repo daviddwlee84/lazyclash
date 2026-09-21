@@ -86,7 +86,7 @@ alone proves the actual bind address. Reviewed 2026-09-21.
 | [MetaCubeXD](https://github.com/MetaCubeX/metacubexd) and [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev) | Traffic, resource summaries, connection distributions and route presentation; user screenshots reviewed 2026-09-20 | Visual inspiration, not evidence for API semantics |
 | [btop](https://github.com/aristocratos/btop) | Dense but navigable terminal resource display | Design reference; core RSS is not host RAM |
 | [Lazygit](https://github.com/jesseduffield/lazygit) | Stable context, list/detail panes and explicit actions | Interaction inspiration; Lazygit does not use Bubble Tea |
-| [go-cli-tui development skill](https://github.com/daviddwlee84/agent-skills/tree/main/skills/local/go-cli-tui) | Shared services, input ownership, mouse semantics, real PTY verification | Contributor guidance; not required for end users |
+| [go-cli-tui development skill](https://github.com/daviddwlee84/awesome-lazy-tools/tree/main/skills/go-cli-tui) | Shared services, input ownership, mouse semantics, real PTY verification | Contributor guidance; not required for end users |
 | [clash-proxy-api knowledge](https://github.com/daviddwlee84/agent-skills/tree/main/skills/local/clash-proxy-api) | Controller discovery, host vantage and managed-client ownership | Operational research; this product's explicit source-binding workflow governs writes |
 | [clash-rules](https://github.com/daviddwlee84/clash-rules), [wiring example](https://github.com/daviddwlee84/clash-rules/blob/main/examples/clash.yaml) | Category-to-policy mapping and published ruleset artifacts | v0.1.6 embeds an immutable snapshot; the example is a fragment and composition scripts remain environment-specific |
 
