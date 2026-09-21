@@ -10,9 +10,13 @@ import (
 type CostEstimate struct {
 	Quote                 Quote    `json:"quote"`
 	MonthlyOutbound       float64  `json:"monthly_outbound"`
+	MonthlyInbound        *float64 `json:"monthly_inbound,omitempty"`
 	TransferUnit          string   `json:"transfer_unit"`
+	AllowanceBasis        string   `json:"allowance_basis,omitempty"`
+	IncludedTransfer      float64  `json:"included_transfer,omitempty"`
 	IncludedOutbound      float64  `json:"included_outbound"`
 	ExcessOutbound        float64  `json:"excess_outbound"`
+	ExcessOutboundHigh    float64  `json:"excess_outbound_high,omitempty"`
 	OverageUSDLow         float64  `json:"overage_usd_per_unit_low,omitempty"`
 	OverageUSDHigh        float64  `json:"overage_usd_per_unit_high,omitempty"`
 	EstimatedTotalUSDLow  *float64 `json:"estimated_total_usd_low"`
@@ -23,6 +27,22 @@ type CostEstimate struct {
 }
 
 func EstimateCost(q Quote, outbound float64) (CostEstimate, error) {
+	return EstimateCostWithUsage(q, outbound, nil)
+}
+
+// EstimateCostWithUsage accepts optional ingress because Lightsail consumes its
+// bundle allowance in both directions, but charges overage only on outbound.
+func EstimateCostWithUsage(q Quote, outbound float64, inbound *float64) (CostEstimate, error) {
+	if inbound != nil && (*inbound < 0 || math.IsNaN(*inbound) || math.IsInf(*inbound, 0)) {
+		return CostEstimate{}, fmt.Errorf("monthly inbound must be a finite nonnegative value")
+	}
+	if isCloudProvider(q.Provider) {
+		return estimateCloudCost(q, outbound, inbound)
+	}
+	return estimateLegacyCost(q, outbound)
+}
+
+func estimateLegacyCost(q Quote, outbound float64) (CostEstimate, error) {
 	e := CostEstimate{Quote: q, MonthlyOutbound: outbound, TransferUnit: q.TransferUnit, IncludedOutbound: float64(q.TransferGB), RateChecked: "2026-09-21", Notes: []string{"Input is billable VM outbound in the displayed provider unit, not a speed or an assumed number of users.", "Excludes tax, optional backups, additional disks/IPs and other account resources. Live base price and dated overage rules have different freshness."}}
 	if outbound < 0 || math.IsNaN(outbound) || math.IsInf(outbound, 0) || q.TransferGB < 0 || q.MonthlyUSD < 0 || math.IsNaN(q.MonthlyUSD) || math.IsInf(q.MonthlyUSD, 0) {
 		return e, fmt.Errorf("monthly outbound and quoted costs must be finite nonnegative values")

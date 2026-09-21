@@ -41,6 +41,9 @@ func runCLI(ctx context.Context, executable string, args []string) ([]byte, erro
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, executable, args...)
+	if executable == "aws" {
+		cmd.Env = append(os.Environ(), "AWS_MAX_ATTEMPTS=1", "AWS_RETRY_MODE=standard", "AWS_CLI_AUTO_PROMPT=off", "AWS_PAGER=")
+	}
 	var stdout boundedOutput
 	cmd.Stdout = &stdout
 	cmd.Stderr = nil
@@ -70,6 +73,12 @@ func (b *boundedOutput) Bytes() []byte { return b.buffer.Bytes() }
 var safeID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$`)
 
 func normalize(req CreateRequest) (CreateRequest, error) {
+	if isCloudProvider(req.Provider) {
+		return normalizeCloud(req)
+	}
+	if err := ValidateDraft(req); err != nil {
+		return req, err
+	}
 	if !safeID.MatchString(req.ID) {
 		return req, fmt.Errorf("host ID must be 1–63 letters, digits, dots, underscores or hyphens, starting with a letter or digit")
 	}
@@ -211,6 +220,9 @@ func (s *Service) Register(host serverstate.Host) (serverstate.Host, error) {
 }
 
 func (s *Service) PlanCreate(ctx context.Context, req CreateRequest) (Preview, error) {
+	if isCloudProvider(req.Provider) {
+		return s.cloudPlanCreate(ctx, req)
+	}
 	req, err := normalize(req)
 	if err != nil {
 		return Preview{}, err
@@ -271,6 +283,9 @@ func verify(p Preview, expected string) error {
 }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest, expected string) (serverstate.Host, error) {
+	if isCloudProvider(req.Provider) {
+		return s.cloudCreate(ctx, req, expected)
+	}
 	if s.options.ReadOnly {
 		return serverstate.Host{}, fmt.Errorf("VPS creation is disabled in read-only mode")
 	}
@@ -442,6 +457,9 @@ func (s *Service) readOperation(id string) (operation, error) {
 
 // Resume only reconciles; an uncertain create is never automatically repeated.
 func (s *Service) Resume(ctx context.Context, id string, expected ...string) (serverstate.Host, error) {
+	if s.hasCloudHost(id) {
+		return s.cloudResume(ctx, id, expected...)
+	}
 	if s.options.ReadOnly {
 		return serverstate.Host{}, fmt.Errorf("VPS recovery is disabled in read-only mode")
 	}
@@ -561,6 +579,9 @@ func (s *Service) Resume(ctx context.Context, id string, expected ...string) (se
 }
 
 func (s *Service) PlanResume(ctx context.Context, id string) (Preview, error) {
+	if s.hasCloudHost(id) {
+		return s.cloudPlanResume(ctx, id)
+	}
 	inv, err := s.store.Load()
 	if err != nil {
 		return Preview{}, err
@@ -608,6 +629,9 @@ func (s *Service) PlanResume(ctx context.Context, id string) (Preview, error) {
 }
 
 func (s *Service) Status(ctx context.Context, id string) (serverstate.Host, error) {
+	if s.hasCloudHost(id) {
+		return s.cloudStatus(ctx, id)
+	}
 	if !s.options.ReadOnly {
 		unlock, err := s.lockHost(id)
 		if err != nil {
@@ -623,7 +647,7 @@ func (s *Service) Status(ctx context.Context, id string) (serverstate.Host, erro
 	if err != nil {
 		return host, err
 	}
-	if host.ResourceID == "" {
+	if host.ResourceID == "" || host.Status == "deleted" {
 		return host, nil
 	}
 	if host.Owned {
@@ -665,6 +689,9 @@ func (s *Service) Status(ctx context.Context, id string) (serverstate.Host, erro
 }
 
 func (s *Service) PlanAction(ctx context.Context, id, action string) (Preview, error) {
+	if s.hasCloudHost(id) {
+		return s.cloudPlanAction(ctx, id, action)
+	}
 	switch action {
 	case "start", "stop", "reboot", "delete":
 	default:
@@ -727,6 +754,9 @@ func (s *Service) PlanAction(ctx context.Context, id, action string) (Preview, e
 }
 
 func (s *Service) Action(ctx context.Context, id, action, expected string) (serverstate.Host, error) {
+	if s.hasCloudHost(id) {
+		return s.cloudAction(ctx, id, action, expected)
+	}
 	if s.options.ReadOnly {
 		return serverstate.Host{}, fmt.Errorf("VPS cloud changes are disabled in read-only mode")
 	}

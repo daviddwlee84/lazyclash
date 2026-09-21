@@ -15,6 +15,12 @@ type Choice struct {
 // Discover returns only fields suitable for a picker; raw cloud output (which
 // may contain access tokens, startup scripts or passwords) is never returned.
 func (s *Service) Discover(ctx context.Context, req CreateRequest, kind string) ([]Choice, error) {
+	if isCloudProvider(req.Provider) {
+		if err := validateCloudDraft(req); err != nil {
+			return nil, err
+		}
+		return s.cloudAdapter(req.Provider).Discover(ctx, req, kind)
+	}
 	var args []string
 	key := ""
 	idField := "id"
@@ -167,8 +173,17 @@ func (s *Service) Discover(ctx context.Context, req CreateRequest, kind string) 
 }
 
 func ValidateDraft(req CreateRequest) error {
+	if isCloudProvider(req.Provider) {
+		return validateCloudDraft(req)
+	}
 	if req.Provider != "" && req.Provider != "digitalocean" && req.Provider != "vultr" && req.Provider != "linode" && req.Provider != "oracle" {
-		return fmt.Errorf("provider must be digitalocean, vultr, linode, or oracle")
+		return fmt.Errorf("provider must be azure, aws-lightsail, aws-ec2, digitalocean, vultr, linode, or oracle")
+	}
+	if req.Architecture != "" && req.Architecture != "auto" && req.Architecture != "amd64" && req.Architecture != "arm64" {
+		return fmt.Errorf("architecture must be auto, amd64 or arm64")
+	}
+	if req.Provider != "" && (req.SubscriptionID != "" || req.AvailabilityZone != "" || req.DiskGB != 0 || (req.Architecture != "" && req.Architecture != "auto")) {
+		return fmt.Errorf("subscription, architecture, availability-zone and disk-gb overrides apply only to Azure/AWS providers")
 	}
 	if req.ID != "" && !safeID.MatchString(req.ID) {
 		return fmt.Errorf("invalid host ID")

@@ -392,7 +392,10 @@ func (o *options) registerCompletions(root *cobra.Command) {
 			}
 		}
 		if strings.HasPrefix(path, "vps ") && cmd.Flags().Lookup("provider") != nil {
-			_ = cmd.RegisterFlagCompletionFunc("provider", values("oracle", "vultr", "linode", "digitalocean"))
+			_ = cmd.RegisterFlagCompletionFunc("provider", values("oracle", "vultr", "linode", "digitalocean", "azure", "aws-lightsail", "aws-ec2"))
+		}
+		if strings.HasPrefix(path, "vps ") && cmd.Flags().Lookup("architecture") != nil {
+			_ = cmd.RegisterFlagCompletionFunc("architecture", values("auto", "amd64", "arm64"))
 		}
 		for _, name := range []string{"level", "log-level"} {
 			if cmd.Flags().Lookup(name) != nil {
@@ -400,7 +403,9 @@ func (o *options) registerCompletions(root *cobra.Command) {
 			}
 		}
 		if cmd.Flags().Lookup("kind") != nil {
-			if path == "configs source set" {
+			if path == "vps discover" {
+				_ = cmd.RegisterFlagCompletionFunc("kind", values("regions", "plans", "images", "keys", "zones", "subscriptions", "ads", "compartments"))
+			} else if path == "configs source set" {
 				_ = cmd.RegisterFlagCompletionFunc("kind", values("native", "docker", "verge"))
 			} else {
 				_ = cmd.RegisterFlagCompletionFunc("kind", values("mihomo", "verge"))

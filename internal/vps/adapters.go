@@ -15,6 +15,21 @@ func (s *Service) call(ctx context.Context, req CreateRequest, args ...string) (
 	var executable string
 	var flags []string
 	switch req.Provider {
+	case "azure":
+		executable = "az"
+		flags = []string{"--output", "json", "--only-show-errors"}
+		if req.SubscriptionID != "" {
+			flags = append(flags, "--subscription", req.SubscriptionID)
+		}
+	case "aws-lightsail", "aws-ec2":
+		executable = "aws"
+		flags = []string{"--output", "json", "--no-cli-pager", "--no-cli-auto-prompt", "--color", "off"}
+		if req.Profile != "" {
+			flags = append(flags, "--profile", req.Profile)
+		}
+		if req.Region != "" {
+			flags = append(flags, "--region", req.Region)
+		}
 	case "digitalocean":
 		executable = "doctl"
 		flags = []string{"--output", "json", "--http-retry-max", "0"}
@@ -153,6 +168,16 @@ func contains(v any, value string) bool {
 }
 
 func (s *Service) Quote(ctx context.Context, req CreateRequest) (Quote, error) {
+	if isCloudProvider(req.Provider) {
+		if err := validateCloudDraft(req); err != nil {
+			return Quote{}, err
+		}
+		_, q, err := s.cloudAdapter(req.Provider).Resolve(ctx, req)
+		if err == nil {
+			err = validateCloudQuote(q)
+		}
+		return q, err
+	}
 	q := Quote{Provider: req.Provider, Plan: req.Plan, Region: req.Region, Live: true, TransferUnit: "GB", Notes: []string{"USD monthly base price only; taxes, traffic overages and optional resources are additional. VM stop does not release billable resources."}}
 	var v any
 	var err error

@@ -28,26 +28,33 @@ type Resource struct {
 }
 
 type Host struct {
-	ID             string     `toml:"id" json:"id"`
-	Name           string     `toml:"name,omitempty" json:"name,omitempty"`
-	Provider       string     `toml:"provider" json:"provider"`
-	Profile        string     `toml:"profile,omitempty" json:"profile,omitempty"`
-	ResourceID     string     `toml:"resource_id,omitempty" json:"resource_id,omitempty"`
-	Region         string     `toml:"region,omitempty" json:"region,omitempty"`
-	Plan           string     `toml:"plan,omitempty" json:"plan,omitempty"`
-	MonthlyUSD     float64    `toml:"monthly_usd,omitempty" json:"monthly_usd,omitempty"`
-	Transfer       int        `toml:"transfer,omitempty" json:"transfer,omitempty"`
-	TransferUnit   string     `toml:"transfer_unit,omitempty" json:"transfer_unit,omitempty"`
-	PriceCheckedAt time.Time  `toml:"price_checked_at" json:"price_checked_at"`
-	BillingBasis   string     `toml:"billing_basis,omitempty" json:"billing_basis,omitempty"`
-	SSHHost        string     `toml:"ssh_host,omitempty" json:"ssh_host,omitempty"`
-	PublicHost     string     `toml:"public_host,omitempty" json:"public_host,omitempty"`
-	Status         string     `toml:"status,omitempty" json:"status,omitempty"`
-	OperationID    string     `toml:"operation_id,omitempty" json:"operation_id,omitempty"`
-	Owned          bool       `toml:"owned" json:"owned"`
-	CreatedAt      time.Time  `toml:"created_at" json:"created_at"`
-	UpdatedAt      time.Time  `toml:"updated_at" json:"updated_at"`
-	Resources      []Resource `toml:"resources,omitempty" json:"resources,omitempty"`
+	ID                string     `toml:"id" json:"id"`
+	Name              string     `toml:"name,omitempty" json:"name,omitempty"`
+	Provider          string     `toml:"provider" json:"provider"`
+	Profile           string     `toml:"profile,omitempty" json:"profile,omitempty"`
+	SubscriptionID    string     `toml:"subscription_id,omitempty" json:"subscription_id,omitempty"`
+	Architecture      string     `toml:"architecture,omitempty" json:"architecture,omitempty"`
+	AvailabilityZone  string     `toml:"availability_zone,omitempty" json:"availability_zone,omitempty"`
+	DiskGB            int        `toml:"disk_gb,omitempty" json:"disk_gb,omitempty"`
+	ComputeMonthlyUSD float64    `toml:"compute_monthly_usd,omitempty" json:"compute_monthly_usd,omitempty"`
+	DiskMonthlyUSD    float64    `toml:"disk_monthly_usd,omitempty" json:"disk_monthly_usd,omitempty"`
+	IPv4MonthlyUSD    float64    `toml:"ipv4_monthly_usd,omitempty" json:"ipv4_monthly_usd,omitempty"`
+	ResourceID        string     `toml:"resource_id,omitempty" json:"resource_id,omitempty"`
+	Region            string     `toml:"region,omitempty" json:"region,omitempty"`
+	Plan              string     `toml:"plan,omitempty" json:"plan,omitempty"`
+	MonthlyUSD        float64    `toml:"monthly_usd,omitempty" json:"monthly_usd,omitempty"`
+	Transfer          int        `toml:"transfer,omitempty" json:"transfer,omitempty"`
+	TransferUnit      string     `toml:"transfer_unit,omitempty" json:"transfer_unit,omitempty"`
+	PriceCheckedAt    time.Time  `toml:"price_checked_at" json:"price_checked_at"`
+	BillingBasis      string     `toml:"billing_basis,omitempty" json:"billing_basis,omitempty"`
+	SSHHost           string     `toml:"ssh_host,omitempty" json:"ssh_host,omitempty"`
+	PublicHost        string     `toml:"public_host,omitempty" json:"public_host,omitempty"`
+	Status            string     `toml:"status,omitempty" json:"status,omitempty"`
+	OperationID       string     `toml:"operation_id,omitempty" json:"operation_id,omitempty"`
+	Owned             bool       `toml:"owned" json:"owned"`
+	CreatedAt         time.Time  `toml:"created_at" json:"created_at"`
+	UpdatedAt         time.Time  `toml:"updated_at" json:"updated_at"`
+	Resources         []Resource `toml:"resources,omitempty" json:"resources,omitempty"`
 }
 
 type Deployment struct {
@@ -215,7 +222,7 @@ func Validate(inv Inventory) error {
 			return fmt.Errorf("duplicate host ID %q", h.ID)
 		}
 		hosts[h.ID] = true
-		for _, v := range []string{h.Name, h.Provider, h.Profile, h.SSHHost, h.PublicHost, h.ResourceID, h.Region, h.Plan, h.Status, h.OperationID} {
+		for _, v := range []string{h.Name, h.Provider, h.Profile, h.SubscriptionID, h.Architecture, h.AvailabilityZone, h.SSHHost, h.PublicHost, h.ResourceID, h.Region, h.Plan, h.Status, h.OperationID} {
 			if strings.IndexFunc(v, unicode.IsControl) >= 0 {
 				return errors.New("host fields cannot contain control characters")
 			}

@@ -51,6 +51,9 @@ note = 'unrelated'
 			return e
 		}
 		h.Status = "running"
+		h.SubscriptionID, h.Architecture, h.AvailabilityZone = "subscription-fixture", "arm64", "1"
+		h.DiskGB, h.MonthlyUSD = 32, 12.182
+		h.ComputeMonthlyUSD, h.DiskMonthlyUSD, h.IPv4MonthlyUSD = 6.132, 2.4, 3.65
 		h.Resources = append(h.Resources, Resource{Kind: "vm", ID: "vm-2", Owned: true})
 		if e = i.UpsertHost(h); e != nil {
 			return e
@@ -82,6 +85,9 @@ note = 'unrelated'
 	d, _ := inv.Deployment("main")
 	if h.Status != "running" || len(h.Resources) != 2 || d.Status != "ready" || h.SSHHost == h.PublicHost {
 		t.Fatalf("wrong inventory: %+v", inv)
+	}
+	if h.SubscriptionID != "subscription-fixture" || h.Architecture != "arm64" || h.AvailabilityZone != "1" || h.DiskGB != 32 || h.MonthlyUSD != 12.182 || h.ComputeMonthlyUSD != 6.132 || h.DiskMonthlyUSD != 2.4 || h.IPv4MonthlyUSD != 3.65 {
+		t.Fatalf("cloud ownership and pricing metadata did not survive update: %+v", h)
 	}
 	info, _ := os.Stat(p)
 	if info.Mode().Perm() != 0600 {

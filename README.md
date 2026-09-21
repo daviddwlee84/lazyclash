@@ -7,7 +7,9 @@ Manage runtime state, edit and share source-backed nodes/groups, use a selected 
 `servers deploy` adds owned proxy servers on Ubuntu VPSs or SSH-accessible
 homelabs, with native systemd or Docker Compose: VLESS/REALITY/Vision,
 Hysteria2, and the historical VMess/WebSocket/TLS recipe. `vps` compares and
-manages hosts through Oracle, Vultr, Linode and DigitalOcean's official CLIs.
+manages hosts through Oracle, Vultr, Linode, DigitalOcean, Azure, AWS Lightsail
+and AWS EC2's official CLIs. Azure/EC2 previews include disk and static IPv4
+costs; Lightsail previews show its bundle and two-way transfer allowance.
 Servers have a separate inventory, reviewed changes, recoverable operations and
 client exports. See [server deployment and VPS selection](docs/server-deployment.md).
 

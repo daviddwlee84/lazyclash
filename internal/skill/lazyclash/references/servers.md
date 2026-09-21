@@ -5,8 +5,11 @@
 
 Start with `vps catalog --json`, `vps list --json`, `servers recipes --json`
 and `servers list --json`. Catalog prices are dated references; quote the actual
-provider region/plan before creating a machine. Oracle, Vultr, Linode and
-DigitalOcean use their official authenticated CLIs. API credentials remain there.
+provider region/plan before creating a machine. Oracle, Vultr, Linode,
+DigitalOcean, Azure, AWS Lightsail and EC2 use their official authenticated CLIs.
+API credentials remain there. Provider IDs are `azure`, `aws-lightsail` and
+`aws-ec2`; Azure uses explicit `--subscription`, AWS uses the existing `--profile`.
+Use a public key file for all three. No global CLI account defaults are changed.
 Oracle only offers a checked Always Free A1 recipe; unknown eligibility or
 capacity does not authorize a paid substitute.
 New owned Oracle VMs receive a version/hash-bound cloud-init that preserves
@@ -18,6 +21,21 @@ Existing public-IP homelabs, Azure VMs and arbitrary VPSs use `vps register ID
 OpenSSH jump hosts; it is independent of the public client endpoint. Router
 forwarding, cloud firewall and host firewall are separate. SSH-only hosts cannot
 be powered on remotely after shutdown without a provider management interface.
+
+Azure/AWS creation defaults to Ubuntu 24.04 and at least 1 GiB RAM. `--architecture
+auto|amd64|arm64` controls plan compatibility; auto allows ARM. Omitted plans are
+resolved using available low fixed-cost plans in the requested region. Inspect
+the fixed image ID/version, architecture and availability zone in the preview.
+`--availability-zone` pins a zone; Azure/EC2 `--disk-gb` overrides their default
+32 GiB Standard SSD / 20 GiB encrypted gp3 root disk. Azure/EC2 image IDs are fixed.
+Lightsail uses the verified Ubuntu 24.04 x86 blueprint and rechecks its saved
+version immediately before launch; its API accepts only the blueprint ID.
+Azure/EC2 quote `monthly_usd` includes compute, root disk and static IPv4, with
+components and stopped costs. Lightsail bundles include the base resources;
+`vps estimate --egress N --ingress N` accounts for its two-way allowance. Missing
+inbound remains uncertain, and shared account free traffic/credits are not
+per-VM discounts. CPU credits and region capacity remain material constraints.
+Use `discover --kind subscriptions` for Azure; `--kind zones` for Azure/AWS.
 
 Server recipes are `vless-reality`, `hysteria2`, `legacy-vmess-ws-tls`.
 Remote OS is Ubuntu 24.04 LTS amd64/arm64; native systemd is default and Compose
@@ -44,6 +62,13 @@ or attaching cloud resources; use it to recover an unknown create before cleanup
 reboot/delete` operate cloud infrastructure. Stopping a service or VM does not
 generally stop billing. Delete only the reviewed owned resources; shared networks,
 firewalls and keys are not cleanup authority.
+Azure stop deallocates but retains disk/IP charges; EC2 stop retains EBS/EIP
+charges. Lightsail stop retains its bundle charge. These new providers create
+dedicated owned networks/resources rather than taking over an existing VPC or
+resource group; no NAT Gateway or IAM role is created. EC2 uses IMDSv2 and
+Standard CPU credits. Azure cloud/tenant/subscription or AWS partition/account
+is bound to recovery; do not change account, AZ or idempotency token to retry an
+ambiguous create. Lightsail static IP ownership uses saved receipts, not tags.
 
 Status distinguishes service state, SSH and last authenticated HTTPS proxy
 verification. Verification uses an isolated temporary Mihomo with no direct

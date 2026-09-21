@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/daviddwlee84/lazyclash/internal/serverstate"
 	"github.com/daviddwlee84/lazyclash/internal/vps"
@@ -37,6 +38,9 @@ func (o *options) vpsCommand() *cobra.Command {
 	}})
 	var q vps.CreateRequest
 	quote := &cobra.Command{Use: "quote", Short: "Read a live provider plan price without creating resources", Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error {
+		if e := vps.ValidateDraft(q); e != nil {
+			return usage("%s", e)
+		}
 		if q.Provider == "" || q.Plan == "" {
 			return usage("quote requires --provider and --plan")
 		}
@@ -50,10 +54,11 @@ func (o *options) vpsCommand() *cobra.Command {
 		}
 		return o.output(cmd, v)
 	}}
-	quote.Flags().StringVar(&q.Provider, "provider", "", "digitalocean, vultr, linode, or oracle")
+	quote.Flags().StringVar(&q.Provider, "provider", "", vpsProviderHelp)
 	quote.Flags().StringVar(&q.Plan, "plan", "", "provider plan ID")
 	quote.Flags().StringVar(&q.Region, "region", "", "provider region")
 	quote.Flags().StringVar(&q.Profile, "profile", "", "official CLI profile (Vultr: config file path)")
+	vpsCloudFlags(quote.Flags(), &q)
 	group.AddCommand(quote)
 	var discoverReq vps.CreateRequest
 	var discoverKind string
@@ -77,9 +82,11 @@ func (o *options) vpsCommand() *cobra.Command {
 	discover.Flags().StringVar(&discoverReq.Provider, "provider", "", "cloud provider")
 	discover.Flags().StringVar(&discoverReq.Profile, "profile", "", "official CLI profile")
 	discover.Flags().StringVar(&discoverReq.Region, "region", "", "region for plans/images")
+	discover.Flags().StringVar(&discoverReq.Plan, "plan", "", "selected plan for architecture-compatible images and zones")
+	vpsCloudFlags(discover.Flags(), &discoverReq)
 	discover.Flags().StringVar(&discoverReq.TenancyID, "tenancy", "", "Oracle tenancy OCID")
 	discover.Flags().StringVar(&discoverReq.CompartmentID, "compartment", "", "Oracle compartment OCID")
-	discover.Flags().StringVar(&discoverKind, "kind", "", "regions, plans, images, keys, or Oracle ads/compartments")
+	discover.Flags().StringVar(&discoverKind, "kind", "", "regions, plans, images, keys; Azure/AWS zones; Azure subscriptions; Oracle ads/compartments")
 	group.AddCommand(discover)
 	var req vps.CreateRequest
 	var yes, interactive bool
@@ -134,6 +141,13 @@ func (o *options) vpsCommand() *cobra.Command {
 			}
 			return o.output(cmd, p)
 		}
+		p, e := s.PlanCreate(cmd.Context(), req)
+		if e != nil {
+			return e
+		}
+		if p.Request != nil {
+			req = *p.Request
+		}
 		h, e := s.Create(cmd.Context(), req, expect)
 		if h.ID != "" {
 			if out := o.output(cmd, h); out != nil {
@@ -143,13 +157,14 @@ func (o *options) vpsCommand() *cobra.Command {
 		return e
 	}}
 	create.Flags().StringVar(&req.Name, "name", "", "cloud display name (default: ID)")
-	create.Flags().StringVar(&req.Provider, "provider", "", "digitalocean, vultr, linode, oracle")
+	create.Flags().StringVar(&req.Provider, "provider", "", vpsProviderHelp)
 	create.Flags().StringVar(&req.Profile, "profile", "", "official CLI profile (Vultr: config file path)")
 	create.Flags().StringVar(&req.Region, "region", "", "provider region")
-	create.Flags().StringVar(&req.Plan, "plan", "", "provider plan (default: 1 GB baseline / Oracle A1 1 OCPU 6 GB)")
-	create.Flags().StringVar(&req.Image, "image", "", "Ubuntu 24.04 image ID (Vultr OS ID; Oracle image OCID)")
-	create.Flags().StringVar(&req.SSHKey, "ssh-key", "", "provider key ID/fingerprint; Linode/Oracle: public key file")
-	create.Flags().StringVar(&req.SSHUser, "ssh-user", "", "SSH user (root, or ubuntu on Oracle)")
+	create.Flags().StringVar(&req.Plan, "plan", "", "provider plan (default: 1 GB baseline; Azure/AWS select a low fixed-cost compatible plan)")
+	create.Flags().StringVar(&req.Image, "image", "", "Ubuntu 24.04 image ID; Azure/AWS resolve a fixed matching image during preview")
+	create.Flags().StringVar(&req.SSHKey, "ssh-key", "", "DO/Vultr provider key ID; other providers: SSH public key file")
+	create.Flags().StringVar(&req.SSHUser, "ssh-user", "", "SSH user (root, or ubuntu for Oracle/Azure/AWS)")
+	vpsCloudFlags(create.Flags(), &req)
 	create.Flags().StringVar(&req.SSHCIDR, "ssh-cidr", "0.0.0.0/0", "SSH ingress CIDR for owned cloud firewall (restrict to your administrator IP when possible)")
 	create.Flags().StringVar(&req.FirewallID, "firewall", "", "reuse an existing cloud firewall/NSG (never owned or deleted)")
 	create.Flags().StringVar(&req.TenancyID, "tenancy", "", "Oracle tenancy OCID")
@@ -162,7 +177,7 @@ func (o *options) vpsCommand() *cobra.Command {
 	group.AddCommand(create)
 	var host serverstate.Host
 	var registerInteractive bool
-	register := &cobra.Command{Use: "register [ID]", Short: "Remember an existing VPS, Azure VM or homelab SSH host", Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	register := &cobra.Command{Use: "register [ID]", Short: "Remember an existing cloud VM or homelab SSH host", Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		if o.readOnly {
 			return usage("VPS registration is disabled in read-only mode")
 		}
@@ -371,7 +386,7 @@ func (o *options) runVPSCreateWizard(cmd *cobra.Command, req vps.CreateRequest) 
 		return serverstate.Host{}, usage("VPS creation is disabled in read-only mode")
 	}
 	if req.Provider == "" {
-		v, e := wizard.Choose(cmd.Context(), "VPS provider", []wizard.Choice{{Value: "oracle", Label: "Oracle · strictly checked Always Free A1"}, {Value: "vultr", Label: "Vultr · 1 GB, many regions"}, {Value: "linode", Label: "Linode / Akamai · 1 GB baseline"}, {Value: "digitalocean", Label: "DigitalOcean · 1 GB balanced baseline"}}, cmd.InOrStdin(), cmd.OutOrStdout())
+		v, e := wizard.Choose(cmd.Context(), "VPS provider", vpsProviderChoices(), cmd.InOrStdin(), cmd.OutOrStdout())
 		if e != nil {
 			return serverstate.Host{}, e
 		}
@@ -380,10 +395,15 @@ func (o *options) runVPSCreateWizard(cmd *cobra.Command, req vps.CreateRequest) 
 	if req.SSHCIDR == "" {
 		req.SSHCIDR = "0.0.0.0/0"
 	}
-	fields := []wizard.Field{{Key: "id", Label: "Host ID", Value: req.ID, Required: true}, {Key: "profile", Label: "Official CLI profile (optional; Vultr: config path)", Value: req.Profile}, {Key: "ssh_cidr", Label: "SSH administrator CIDR", Value: req.SSHCIDR, Required: true}}
-	if req.Provider == "linode" || req.Provider == "oracle" {
+	fields := []wizard.Field{{Key: "id", Label: "Host ID", Value: req.ID, Required: true}}
+	if req.Provider != "azure" {
+		fields = append(fields, wizard.Field{Key: "profile", Label: "Official CLI profile (optional; Vultr: config path)", Value: req.Profile})
+	}
+	fields = append(fields, wizard.Field{Key: "ssh_cidr", Label: "SSH administrator CIDR", Value: req.SSHCIDR, Required: true})
+	if vpsUsesPublicKeyFile(req.Provider) {
 		fields = append(fields, wizard.Field{Key: "key", Label: "SSH public key file", Value: req.SSHKey, Required: true})
 	}
+	fields = append(fields, vpsCloudWizardFields(req)...)
 	if req.Provider == "oracle" {
 		fields = append(fields, wizard.Field{Key: "tenancy", Label: "Tenancy OCID (from your OCI CLI profile)", Value: req.TenancyID, Required: true})
 	}
@@ -394,11 +414,17 @@ func (o *options) runVPSCreateWizard(cmd *cobra.Command, req vps.CreateRequest) 
 	req.ID = values["id"]
 	req.Profile = values["profile"]
 	req.SSHCIDR = values["ssh_cidr"]
-	if req.Provider == "linode" || req.Provider == "oracle" {
+	if vpsUsesPublicKeyFile(req.Provider) {
 		req.SSHKey = values["key"]
+	}
+	if e = vpsApplyCloudWizardFields(&req, values); e != nil {
+		return serverstate.Host{}, e
 	}
 	if req.Provider == "oracle" {
 		req.TenancyID = values["tenancy"]
+	}
+	if e = vps.ValidateDraft(req); e != nil {
+		return serverstate.Host{}, usage("%s", e)
 	}
 	s, e := o.vpsService(cmd)
 	if e != nil {
@@ -459,5 +485,74 @@ func (o *options) runVPSCreateWizard(cmd *cobra.Command, req vps.CreateRequest) 
 	if !ok {
 		return serverstate.Host{}, wizard.ErrCanceled
 	}
+	if p.Request != nil {
+		req = *p.Request
+	}
 	return s.Create(cmd.Context(), req, p.Digest)
+}
+
+const vpsProviderHelp = "oracle, vultr, linode, digitalocean, azure, aws-lightsail, aws-ec2"
+
+func vpsCloudFlags(flags *pflag.FlagSet, req *vps.CreateRequest) {
+	flags.StringVar(&req.SubscriptionID, "subscription", "", "Azure subscription ID (does not change the CLI default)")
+	flags.StringVar(&req.Architecture, "architecture", "auto", "auto, amd64 or arm64; auto allows compatible ARM plans")
+	flags.StringVar(&req.AvailabilityZone, "availability-zone", "", "Azure/AWS availability zone (blank: resolve a compatible zone during preview)")
+	flags.IntVar(&req.DiskGB, "disk-gb", 0, "Azure/EC2 root disk GiB (0: Azure 32 GiB Standard SSD or EC2 20 GiB encrypted gp3)")
+}
+
+func vpsProviderChoices() []wizard.Choice {
+	return []wizard.Choice{
+		{Value: "oracle", Label: "Oracle · strictly checked Always Free A1"},
+		{Value: "vultr", Label: "Vultr · 1 GB, many regions"},
+		{Value: "linode", Label: "Linode / Akamai · 1 GB baseline"},
+		{Value: "digitalocean", Label: "DigitalOcean · 1 GB balanced baseline"},
+		{Value: "azure", Label: "Azure · small burstable VM; disk / IPv4 / traffic priced separately"},
+		{Value: "aws-lightsail", Label: "AWS Lightsail · fixed monthly Linux / IPv4 bundle"},
+		{Value: "aws-ec2", Label: "AWS EC2 · burstable ARM / x86; disk / IPv4 / traffic priced separately"},
+	}
+}
+
+func vpsUsesPublicKeyFile(provider string) bool {
+	return provider == "linode" || provider == "oracle" || provider == "azure" || provider == "aws-lightsail" || provider == "aws-ec2"
+}
+
+func vpsCloudWizardFields(req vps.CreateRequest) []wizard.Field {
+	var fields []wizard.Field
+	if req.Provider == "azure" {
+		fields = append(fields, wizard.Field{Key: "subscription", Label: "Azure subscription ID", Value: req.SubscriptionID, Required: true})
+	}
+	if req.Provider != "azure" && req.Provider != "aws-lightsail" && req.Provider != "aws-ec2" {
+		return fields
+	}
+	fields = append(fields, wizard.Field{Key: "architecture", Label: "CPU architecture", Value: req.Architecture, Kind: wizard.Select, Options: []wizard.Choice{{Value: "auto", Label: "Auto · allow ARM and x86; compare total fixed cost"}, {Value: "amd64", Label: "AMD64 / x86_64"}, {Value: "arm64", Label: "ARM64 / aarch64"}}})
+	fields = append(fields, wizard.Field{Key: "zone", Label: "Availability zone (optional)", Value: req.AvailabilityZone, Help: "Blank selects a compatible available zone during preview."})
+	if req.Provider == "azure" || req.Provider == "aws-ec2" {
+		value := ""
+		if req.DiskGB > 0 {
+			value = strconv.Itoa(req.DiskGB)
+		}
+		fields = append(fields, wizard.Field{Key: "disk", Label: "Root disk GiB (optional)", Value: value, Help: "Blank uses Azure 32 GiB Standard SSD / EC2 20 GiB encrypted gp3."})
+	}
+	return fields
+}
+
+func vpsApplyCloudWizardFields(req *vps.CreateRequest, values map[string]string) error {
+	if req.Provider == "azure" {
+		req.SubscriptionID = values["subscription"]
+	}
+	if req.Provider != "azure" && req.Provider != "aws-lightsail" && req.Provider != "aws-ec2" {
+		return nil
+	}
+	req.Architecture, req.AvailabilityZone = values["architecture"], values["zone"]
+	if req.Provider == "azure" || req.Provider == "aws-ec2" {
+		req.DiskGB = 0
+		if values["disk"] != "" {
+			n, err := strconv.Atoi(values["disk"])
+			if err != nil || n < 1 {
+				return usage("root disk must be a positive integer in GiB or blank for the provider default")
+			}
+			req.DiskGB = n
+		}
+	}
+	return nil
 }

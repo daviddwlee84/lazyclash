@@ -82,7 +82,9 @@ Trojan／XHTTP 可作後續配方；目前未宣稱支援其部署／匯出組�
 | Vultr | 1 vCPU／1GB／25GB，約 $5／月 | 1024GB outbound；多個亞洲 region；超額 $0.01/GB |
 | Linode / Akamai | Nanode 1GB／25GB，約 $5／月 | 1000GB outbound；標準 region 超額 $0.005/GB |
 | DigitalOcean Droplet | 512MiB $4／月；1GiB $6／月 | 500／1000GiB outbound；超額 $0.01/GiB；後者是均衡起點 |
-| Azure 既有主機 | VM、磁碟、public IP、outbound 分開計 | 適合重用或有 credits；不是大量流量低價預設 |
+| Azure | 查所選 region 的小型 B-series；VM、磁碟、static IPv4 分項 | `az` 自動建機；按完整固定成本排序，流量另計 |
+| AWS Lightsail | 查所選 region 的 Linux／IPv4 bundle，至少 1GiB RAM | `aws lightsail`；固定月費，inbound＋outbound 共用 allowance |
+| AWS EC2 | 查 T4g／T3a／T3 micro 等小型 burstable VM | `aws ec2`；compute、gp3、EIP、流量分項，CPU credits 使用 Standard |
 
 Oracle 只使用 Always Free A1 配方；目前保守限制為 tenancy 合計 2 OCPU／12GB
 RAM、200GB boot/block storage，並查當月用量。免費額度、trial credits、配額和
@@ -95,19 +97,27 @@ initializer 版本和 SHA-256 綁定在建機 digest；既有 VM／homelab 不�
 自訂其他代理端口仍需另行審查防火牆。
 [Oracle Ubuntu 主機防火牆說明](https://docs.oracle.com/en-us/iaas/Content/developer/apache-on-ubuntu/01oci-ubuntu-apache-summary.htm)。
 
-四個自動建機 adapter 使用已登入的官方 CLI：`oci`、`vultr-cli`、`linode-cli`、
-`doctl`；帳戶憑證留在 CLI。`--profile` 指定對應 context，Vultr 使用 CLI config
-file path。`vps quote` 查即時方案；`vps create` 先產生預覽，再用 `--yes --expect`
-套用。Oracle 的免費條件仍可能受到用量回報延遲及日後使用量影響，不是帳單保證。
+自動建機使用已登入的官方 CLI：`oci`、`vultr-cli`、`linode-cli`、`doctl`、
+`az`、`aws`；帳戶憑證留在 CLI。`--profile` 指定對應 context，Vultr 使用 CLI
+config file path；Azure 以 `--subscription` 明確指定 subscription，不修改
+CLI 的全域預設。`vps quote` 查即時方案；`vps create` 先產生預覽，再用
+`--yes --expect` 套用。Oracle 的免費條件仍可能受到用量回報延遲及日後使用量
+影響，不是帳單保證。
 
 `vps estimate --egress` 加入預期的 VM 月出網量，沿用供應商顯示的 GB／GiB 單位。
 Vultr $5／1024GB 的方案用到 1524GB 時，依此流量費快照估計為 $10。
 Linode 顯示 standard／distributed region 費率範圍，不把未知 region 費率當成精確
 帳單；Oracle 未經免費資格審核前保持總費用未知。試算不會建立任何雲端資源。
 
-成本不能只看機器月租：Azure 亞洲 premium 出網 1000GB 的現行級距約有
-`(1000-100)×$0.12=$108` 頻寬費。Lightsail allowance 同時計入 inbound/outbound，
-代理轉送會消耗兩個方向。託管 image 的 Fly.io 能提供 TCP／UDP，但 dedicated
+Azure／EC2 的 `monthly_usd` 是 compute＋必要 disk＋固定 IPv4 的合計，
+`components` 提供各項價格和來源；stop 預覽另列停止後仍需支付的固定費用。
+Azure／EC2 不會把帳戶共用免費流量、trial credits、Savings Plans／Reserved
+優惠自動當成這台 VM 的折扣。Lightsail 請另傳 `--ingress`；只有出網量時保留
+範圍或未知結果，不假設入站為零。其 allowance 會扣除 inbound 和 outbound，
+但超額收費針對 outbound；代理進出雙向都會消耗 allowance。
+
+成本不能只看機器月租：Azure／EC2 的大量出網費可能高於 VM 本身，請以所選
+region 的 quote／estimate 和實際用量比較。託管 image 的 Fly.io 能提供 TCP／UDP，但 dedicated
 IPv4 $2／月、亞太 outbound $0.04/GB，500GB 就有 $20 流量費。Compose 是安裝
 方式，不等於已整合 Fly／Cloud Run；託管容器 adapter 留待後續。
 
@@ -119,6 +129,70 @@ IPv4 $2／月、亞太 outbound $0.04/GB，500GB 就有 $20 流量費。Compose 
 [Azure](https://azure.microsoft.com/en-us/pricing/details/bandwidth/)、
 [Lightsail](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-faq-data-transfer-allowance.html)、
 [Fly.io](https://fly.io/docs/about/pricing/)。
+
+## Azure、AWS Lightsail 與 EC2
+
+以下命令都是唯讀查詢或建立預覽。執行前登入 Azure CLI／設定 AWS profile。
+
+```sh
+lazyclash vps discover --provider azure --kind subscriptions --json
+lazyclash vps discover --provider azure --subscription SUBSCRIPTION_ID --kind regions --json
+lazyclash vps discover --provider aws-ec2 --profile personal --kind regions --json
+lazyclash vps discover --provider aws-lightsail --profile personal --region ap-northeast-1 --kind plans --json
+
+lazyclash vps create azure-jp --provider azure --subscription SUBSCRIPTION_ID \
+  --region japaneast --architecture auto --ssh-key ~/.ssh/id_ed25519.pub --json
+lazyclash vps create lightsail-jp --provider aws-lightsail --profile personal \
+  --region ap-northeast-1 --ssh-key ~/.ssh/id_ed25519.pub --json
+lazyclash vps create ec2-jp --provider aws-ec2 --profile personal \
+  --region ap-northeast-1 --architecture auto --ssh-key ~/.ssh/id_ed25519.pub --json
+
+# 使用 discovery 回傳的實際 bundle ID；單位以 quote 輸出為準。
+lazyclash vps estimate --provider aws-lightsail --profile personal \
+  --region ap-northeast-1 --plan BUNDLE_ID --egress 500 --ingress 500 --json
+```
+
+檢查預覽中的帳戶、region、AZ、固定映像、完整費用與 SSH CIDR。建立時使用
+相同參數加 `--yes --expect REVIEWED_DIGEST`；若可用性或報價改變，重新預覽。
+`vps create --interactive` 和 TUI 的 **Deploy → Create a cloud VPS** 提供同一
+套選擇與 review。非互動命令省略 `--plan` 時，在所選 region 中解析至少 1GiB
+RAM 的低成本相容方案；`--architecture auto` 同時允許 ARM 與 x86，不保證
+任何型號有容量。ARM／x86 映像必須配對，preview 固定 Ubuntu 24.04 的版本／ID。
+Lightsail 首版只使用已核實的 Ubuntu 24.04 x86 blueprint；Azure／EC2 可選 ARM。
+可用 `--availability-zone` 固定 AZ；`--disk-gb` 僅供 Azure／EC2 調整根磁碟。
+
+`vps catalog` 也提供美東區域的固定費用快照供比較：Lightsail 1GiB IPv4 bundle
+約 $7／月、EC2 T4g micro 加 20GiB gp3 與 IPv4 約 $11.38／月、Azure B2pts v2
+加 32GiB Standard SSD 與 IPv4 約 $12.18／月。這些是 730 小時月份的起點，
+不含流量、稅與 Azure 磁碟交易費；不同區域以即時 quote 為準。
+[Lightsail 價格](https://aws.amazon.com/lightsail/pricing/)、
+[EC2 On-Demand](https://aws.amazon.com/ec2/pricing/on-demand/)、
+[Azure Retail Prices API](https://learn.microsoft.com/en-us/rest/api/cost-management/retail-prices/azure-retail-prices)。
+
+| Provider | 建立的必要資源 | `vps stop` 的行為 |
+|---|---|---|
+| `azure` | 專用 resource group、VNet/subnet、NSG、NIC、Standard Static IPv4；預設 32GiB Standard SSD | deallocate VM；保留 disk／IPv4 費用 |
+| `aws-lightsail` | Linux IPv4 bundle、獨立 static IP、instance firewall；user-data 安裝 SSH 公鑰 | 停止 instance；bundle 月費仍計收 |
+| `aws-ec2` | 專用 VPC/subnet、IGW、route table、SG、EIP、key pair；預設 20GiB encrypted gp3、IMDSv2、Standard CPU credits | 停止 instance；保留 EBS／EIP 費用 |
+
+Azure B-series 與 EC2 T-series 的 CPU burst／credits 限制會顯示於預覽；規格小
+不代表可長期跑滿 CPU。這三個 provider 都使用 SSH 公鑰檔，Lightsail 的
+user-data 路徑支援 Ed25519。新建流程不建立 NAT Gateway／IAM role，不接管
+既有 VPC 或 resource group；既有 VM 仍透過 `vps register` 走 SSH 部署。
+首版支援 Azure 商用雲與 AWS commercial partition。
+
+帳戶綁定 Azure cloud＋tenant＋subscription，或 AWS partition＋account。
+跨步驟帳戶切換會阻止 apply／resume。EC2 固定 launch request、client token
+和 AZ；建立結果不明先 reconcile，不能改 token／AZ 當成同一操作重試。
+Lightsail static IP 無 tags 支援，清理使用保存的 ARN／建立時間 receipt 核對。
+只刪除可證明由該操作建立的資源；刪除部分失敗保留 inventory 及殘留費用資訊。
+
+費用與停止行為來源：[Azure VM 計費狀態](https://learn.microsoft.com/en-us/azure/virtual-machines/states-billing)、
+[Lightsail 計費](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-frequently-asked-questions-faq-billing-and-account-management.html)、
+[EC2 stop/start](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/how-ec2-instance-stop-start-works.html)。
+
+這些 provider 以 mock CLI、唯讀查詢與隔離 PTY 驗證；付費真機建立、刪除與
+各 region 網路品質需使用指定帳戶及預算另行驗證。
 
 ## 管理、恢復與分享
 
