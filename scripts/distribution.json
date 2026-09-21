@@ -1,0 +1,18 @@
+{
+  "main": "./cmd/lazyclash",
+  "version_symbol": "github.com/daviddwlee84/lazyclash/internal/cli.Version",
+  "required": [
+    "cmd/lazyclash/main.go",
+    "internal/skill/lazyclash/SKILL.md",
+    "internal/vps/assets/oracle-cloud-init.yaml",
+    "internal/tailnet/host.py",
+    "internal/tailnetproxy/helper.py",
+    "internal/serverdeploy/helper.py",
+    "internal/proxyenv/shell.sh"
+  ],
+  "smoke": [
+    [
+      "--skill"
+    ]
+  ]
+}

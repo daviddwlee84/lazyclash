@@ -20,12 +20,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
       - name: Test immutable release publication
         run: python3 -m unittest discover -s scripts -p test_release.py
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+      - name: Test source and module packaging guards
+        run: python3 -m unittest discover -s scripts -p test_distribution.py
+      - name: Build independently extracted source and Go module distributions
+        run: python3 scripts/check-distribution.py
       - name: Install Linux verification dependencies
         if: runner.os == 'Linux'
         run: |

@@ -297,9 +297,13 @@ func TestIntegrationNginxRestrictedStartup(t *testing.T) {
 		t.Fatal(err)
 	}
 	container := "lazyclash-nginx-test-" + strings.ToLower(filepath.Base(dir))
-	run("run", "--detach", "--name", container, "--publish", "127.0.0.1::443", "--volume", dir+":/fixture:ro", "ubuntu:24.04", "sleep", "300")
+	// The production helper writes root-owned private configuration. Copy the
+	// runner-owned bind mount before dropping DAC capabilities so the fixture
+	// has the same ownership, without chmod/chown on any host path.
+	run("run", "--detach", "--name", container, "--publish", "127.0.0.1::443", "--volume", dir+":/input:ro", "ubuntu:24.04", "sleep", "300")
 	defer exec.Command("docker", "rm", "-f", container).Run()
 	run("exec", container, "sh", "-c", "export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y -qq --no-install-recommends nginx")
+	run("exec", container, "sh", "-c", "cp -R /input /fixture && chown -R root:root /fixture")
 	run("exec", container, "nginx", "-t", "-c", "/fixture/nginx.conf")
 	run("exec", container, "sh", "-c", "rm -rf /tmp/lazyclash-client /tmp/lazyclash-proxy /tmp/lazyclash-fastcgi /tmp/lazyclash-uwsgi /tmp/lazyclash-scgi")
 	run("exec", "--detach", container, "setpriv", "--bounding-set=-all,+net_bind_service,+setuid,+setgid,+chown", "--no-new-privs", "nginx", "-c", "/fixture/nginx.conf", "-g", "daemon off;")
