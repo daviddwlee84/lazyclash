@@ -24,11 +24,25 @@ Do not replace tailnet-wide policy or invent success when only SSH works.
 Allow native SSH/sudo terminal authentication; never collect/store passwords.
 Machine-output mode must return an actionable authorization requirement.
 
+Switching routes can interrupt existing TCP/SSE streams. If this agent or its
+chat transport depends on the affected proxy, use an independent terminal for
+the switch and reconnect consumers afterward. DNS cache refresh cannot migrate
+established streams across exits. Clearing the exit in Tailscale's native UI
+does not restore the paused TUN; use `tailnet exit release` to finish the owned
+handoff rather than overriding later user changes.
+
 Selecting an exit can temporarily disable an explicitly identified local
 Mihomo TUN. Preserve the mode, system proxy and DNS preferences. Unknown VPNs
 are blockers, not permission to stop their processes. Verify actual OS HTTPS,
 DNS and the preexisting local proxy path. Retain selected exit after successful
 verification; an unavailable exit is not permission to silently use direct.
+
+After a confirmed Mihomo TUN handoff, verify the OS exit first, then clear only
+that core's volatile DNS answer cache before probing the local proxy path.
+This prevents cached answers from the previous route affecting proxy validation.
+Preserve DNS settings and fake-IP mappings. Verification errors identify the
+failed phase: OS exit, DNS cache refresh or local proxy egress. Use that phase
+to investigate the affected path rather than repeating the whole handoff blindly.
 
 TUN handoff is runtime-only. Verge may restore its native TUN preference on
 restart/reload. Re-read runtime and owner-generation evidence before reporting

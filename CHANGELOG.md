@@ -8,7 +8,9 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 
 - Added Tailscale Exit Node setup/selection and private Tailnet proxy management,
   with saved peer identity, scoped lifecycle, runtime Mihomo TUN handoff,
-  recoverable operations, client exports and shared CLI/TUI actions.
+  recoverable operations, client exports and shared CLI/TUI actions. Handoff
+  refreshes only Mihomo's volatile DNS answers after OS exit verification;
+  validation errors identify the failed phase.
 - Added separate VPS/server inventory and a shared CLI/TUI deployment workflow
   for existing SSH hosts/homelabs and Oracle, Vultr, Linode and DigitalOcean CLIs.
 - Added native/Compose server recipes for VLESS/REALITY/Vision, Hysteria2 and

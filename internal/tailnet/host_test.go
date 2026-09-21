@@ -30,7 +30,9 @@ core_snapshot=lambda r:copy.deepcopy(current['core'])
 def change_pref(k,v):current['prefs'][{'exit-node':'exit_node','exit-node-allow-lan-access':'allow_lan','advertise-exit-node':'advertise'}[k]]=v
 set_pref=change_pref
 pref=lambda k:current['prefs'][{'exit-node':'exit_node','exit-node-allow-lan-access':'allow_lan','advertise-exit-node':'advertise'}[k]]
+dns_requests=[]
 def change_core(c,s,method='GET',path='/configs',body=None):
+    if method=='POST':dns_requests.append((c,path))
     if body:
         v=body['tun']['enable'];current['core']['enabled']=v;current['core']['tun']['enable']=v;current['core']['config']['tun']['enable']=v;current['core']['config_hash']=digest(json.dumps(current['core']['config'],sort_keys=True,separators=(',',':')).encode())
 controller_request=change_core
@@ -39,6 +41,18 @@ result=apply(r);directory=pathlib.Path(result['guard']);state=json.loads((direct
 assert state['before']==initial, 'before snapshot was mutated by after changes'
 assert current['prefs']['exit_node']=='100.72.151.78' and not current['core']['enabled']
 assert state['after']==current
+refresh={'scope':r['scope'],'id':'selection','fixture_root':str(fixture),'guard':result['guard'],'ack_token':result['ack_token']}
+assert refresh_dns(refresh)['status']=='dns_cache_refreshed'
+assert dns_requests==[(r['controller'],'/cache/dns/flush')]
+assert current==state['after'], 'DNS cache refresh changed runtime settings'
+bad=dict(refresh);bad['ack_token']='0'*48
+try:refresh_dns(bad);assert False,'accepted a different ownership token'
+except RuntimeError:pass
+current['core']['identity']='foreign-core'
+try:refresh_dns(refresh);assert False,'refreshed DNS on a different core'
+except RuntimeError:pass
+current=copy.deepcopy(state['after'])
+assert len(dns_requests)==1, 'failed ownership checks reached the controller'
 restored=restore(directory,state)
 assert restored['status']=='restored',restored
 assert current==initial, (current,initial)
@@ -211,6 +225,48 @@ print('ok')
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("detached recovery worker: %v\n%s", err, out)
+	}
+	if strings.TrimSpace(string(out)) != "ok" {
+		t.Fatal(string(out))
+	}
+}
+
+func TestPythonProbeFailuresIdentifyPhaseWithoutCredentials(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("Python unavailable")
+	}
+	defs, _, _ := strings.Cut(hostScript, "\n# TAILNET_ENTRYPOINT\n")
+	test := `
+class Reply:
+    def __init__(self,code,out=b''):self.returncode=code;self.stdout=out;self.stderr=b'private-token http://user:password@127.0.0.1:7897'
+cases=[
+ ('proxy-https-trace',28,[Reply(28)]),
+ ('proxy-https-reachability',35,[Reply(0,b'ip=42.73.172.97\n'),Reply(35)]),
+ ('host-dns-resolution',1,[Reply(0,b'ip=42.73.172.97\n'),Reply(0,b'204'),Reply(1)]),
+ ('proxy-https-trace',0,[Reply(0,b'not a trace')]),
+ ('proxy-https-reachability',0,[Reply(0,b'ip=42.73.172.97\n'),Reply(0,b'200')]),
+]
+for phase,code,replies in cases:
+    observed=[]
+    def fake_run(args,**kwargs):
+        observed.append((args,kwargs));return replies.pop(0)
+    subprocess.run=fake_run
+    try:probe({'probe_proxy':'http://user:password@127.0.0.1:7897'});assert False,'probe failure was accepted'
+    except ProbeFailure as e:
+        assert e.phase==phase and e.exit_code==code,(e.phase,e.exit_code)
+        assert 'private-token' not in str(e) and 'password' not in str(e) and '127.0.0.1' not in str(e),str(e)
+    assert all(not any(k.lower() in ('http_proxy','https_proxy','all_proxy','no_proxy') for k in opts['env']) for args,opts in observed)
+def timeout(*args,**kwargs):raise subprocess.TimeoutExpired('private-command',22,stderr=b'private-token')
+subprocess.run=timeout
+try:probe({});assert False,'timeout accepted'
+except ProbeFailure as e:assert e.phase=='direct-ipv4-trace' and e.exit_code==124 and 'private' not in str(e)
+print('ok')
+`
+	cmd := exec.Command(python, "-I", "-c", defs+test)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("probe diagnostics: %v\n%s", err, out)
 	}
 	if strings.TrimSpace(string(out)) != "ok" {
 		t.Fatal(string(out))

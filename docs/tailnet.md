@@ -60,6 +60,17 @@ client 出口驗證，也不要求在短暫的 rollback deadline 內完成批准
 暫停並保存快照；未知 VPN 不會被自動關閉。mode、system proxy 及 DNS 偏好維持原值。
 LAN access 預設關閉，需要時明確啟用。
 
+切換路由可能中斷既有 TCP／SSE 連線。若 agent、chat 或 copilot-proxy 本身使用這個
+Mihomo proxy，建議從獨立終端切換，驗證完成後重新建立 chat 連線；DNS 暫存清理不會
+讓已建立的串流跨出口無縫續接。直接在 Tailscale GUI 關閉出口也不會替 lazyclash
+恢復暫停的 TUN，應使用 `tailnet exit release --interactive` 完成整個交接。
+
+完成已確認的 Mihomo TUN 交接後，先驗證 OS 出口；成功後才清除該 core 的暫存 DNS
+解析結果，再驗證本機 proxy 出口，避免切換前的 DNS answer cache 使 proxy 繼續使用
+舊解析結果。此操作只清除 volatile DNS cache，不修改 DNS 設定或 fake-IP mappings。
+驗證錯誤會標明失敗階段，區分 OS 出口、DNS cache 更新與本機 proxy 出口，方便判斷
+是路由尚未就緒，還是 proxy 路徑需要排查。
+
 Clash Verge 的 TUN 暫停只作用於目前 runtime。其原生設定可在 profile reload、core 或
 app 重啟後重新開啟 TUN。工具保存 core 身分及設定證據，於後續 status／操作偵測衝突，
 不在背景反覆覆寫 native owner，也不跨越已改變的 owner generation 自動恢復 TUN。

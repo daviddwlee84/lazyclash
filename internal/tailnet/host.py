@@ -98,18 +98,39 @@ def inspect(r):
             except OSError:forwarding[k]='unavailable'
     return {'self':me,'peers':sorted([peer(p) for p in (status.get('Peer') or {}).values()],key=lambda p:p['id']),'prefs':prefs,'forwarding':forwarding,'os':platform.system().lower(),'core':core_snapshot(r)}
 
+class ProbeFailure(RuntimeError):
+    def __init__(self,phase,exit_code,detail):
+        self.phase=phase;self.exit_code=exit_code
+        super().__init__(phase+' failed (exit '+str(exit_code)+': '+detail+')')
+
+def probe_run(args,phase,timeout):
+    env={k:v for k,v in os.environ.items() if k.lower() not in ('http_proxy','https_proxy','all_proxy','no_proxy')}
+    try:result=subprocess.run(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout,env=env)
+    except subprocess.TimeoutExpired:raise ProbeFailure(phase,124,'helper deadline exceeded')
+    except OSError:raise ProbeFailure(phase,126,'probe executable unavailable')
+    if result.returncode:
+        descriptions={5:'proxy name resolution failed',6:'destination name resolution failed',7:'connection failed',22:'HTTP error response',28:'operation timed out',35:'TLS handshake failed',51:'TLS identity verification failed',52:'empty response',55:'send failed',56:'receive or proxy tunnel failed',60:'TLS certificate verification failed',97:'proxy handshake failed'}
+        # Never echo stderr or argv: either may contain a proxy credential,
+        # network response text, or an unexpected local environment value.
+        detail=descriptions.get(result.returncode,'probe process failed') if pathlib.Path(args[0]).name=='curl' else 'resolver process failed'
+        raise ProbeFailure(phase,result.returncode,detail)
+    if len(result.stdout)>1<<20:raise ProbeFailure(phase,0,'probe response exceeded its size limit')
+    return result.stdout
+
 def probe(r):
+    proxy=bool(r.get('probe_proxy'))
+    scope='proxy-https' if proxy else 'direct-ipv4'
     base=['curl','-4','--fail','--silent','--show-error','--max-time','18','--connect-timeout','7']
-    args=base+(['--proxy',r['probe_proxy']] if r.get('probe_proxy') else ['--noproxy','*'])
-    body=run(args+['https://www.cloudflare.com/cdn-cgi/trace'],22).decode()
+    args=base+(['--proxy',r['probe_proxy']] if proxy else ['--noproxy','*'])
+    body=probe_run(args+['https://www.cloudflare.com/cdn-cgi/trace'],scope+'-trace',22).decode()
     fields=dict(line.split('=',1) for line in body.splitlines() if '=' in line)
     ip=fields.get('ip','')
     try:ipaddress.ip_address(ip)
-    except ValueError:fail('HTTPS egress probe returned no valid public IP')
-    code=run(args+['-o',os.devnull,'-w','%{http_code}','https://www.google.com/generate_204'],22).decode()
-    if code!='204':fail('external HTTPS reachability probe did not return 204')
+    except ValueError:raise ProbeFailure(scope+'-trace',0,'response did not contain a valid public IP')
+    code=probe_run(args+['-o',os.devnull,'-w','%{http_code}','https://www.google.com/generate_204'],scope+'-reachability',22).decode()
+    if code!='204':raise ProbeFailure(scope+'-reachability',0,'HTTP '+code if re.fullmatch('[0-9]{3}',code) else 'invalid HTTP status response')
     # This exercises the host resolver independently from curl's HTTPS path.
-    run([sys.executable,'-I','-c',"import socket;socket.getaddrinfo('www.cloudflare.com',443,type=socket.SOCK_STREAM)"],8)
+    probe_run([sys.executable,'-I','-c',"import socket;socket.getaddrinfo('www.cloudflare.com',443,type=socket.SOCK_STREAM)"],'host-dns-resolution',8)
     return {'ip':ip,'dns':True,'https':True}
 
 def atomic(path,data,mode=0o600):
@@ -336,6 +357,23 @@ def ack(r):
         time.sleep(.2)
     return {'status':'ack_pending','message':'Rollback acknowledgement has not been confirmed'}
 
+def refresh_dns(r):
+    if r.get('remote'):fail('DNS cache refresh is restricted to the local handoff')
+    directory=validate_guard(r)
+    with lock(global_root(r,True)/'operation.lock'),lock(directory/'guard.lock'):
+        state=json.loads(read_regular(directory/'state.json'))
+        if state['kind']!='local' or state['status']!='armed' or time.time()>=state['deadline']:fail('DNS cache refresh requires an active local verification guard')
+        token=r.get('ack_token','')
+        if not re.fullmatch('[a-f0-9]{48}',token) or digest(token.encode())!=state['token_hash']:fail('DNS cache refresh ownership token does not match')
+        original=state['request'];claim=json.loads(read_regular(claim_path(original,True)))
+        if claim.get('guard')!=str(directory):fail('another transaction owns the local handoff')
+        if not state['before'].get('core',{}).get('enabled') or state['after'].get('core',{}).get('enabled') is not False:fail('DNS cache refresh requires an owned runtime TUN pause')
+        current_matches(original,state['after'])
+        try:controller_request(original['controller'],original.get('secret',''),'POST','/cache/dns/flush')
+        except Exception:raise ProbeFailure('proxy-dns-cache-refresh',0,'the confirmed Mihomo controller could not clear its DNS answer cache; rollback remains armed')
+        state['dns_cache_refreshed']=True;save(directory,state)
+        return {'status':'dns_cache_refreshed'}
+
 def release(root,r):
     p=root/'selection.json'
     if not p.exists():return {'status':'not_selected','message':'No lazyclash exit selection is active'}
@@ -392,8 +430,11 @@ try:
     elif op=='probe':result=probe(request)
     elif op=='apply':result=apply(request)
     elif op=='ack':result=ack(request)
+    elif op=='refresh_dns':result=refresh_dns(request)
     elif op=='selection_status':result=selection_status(request)
     else:fail('unsupported tailnet helper operation')
     print(json.dumps(result))
 except Exception as e:
-    print(json.dumps({'error':str(e)}))
+    failure={'error':str(e)}
+    if isinstance(e,ProbeFailure):failure.update(phase=e.phase,exit_code=e.exit_code)
+    print(json.dumps(failure))

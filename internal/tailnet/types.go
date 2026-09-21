@@ -79,3 +79,13 @@ type AuthorizationRequiredError struct{ Host string }
 func (e *AuthorizationRequiredError) Error() string {
 	return "administrator authorization requires a native terminal or an existing noninteractive sudo policy"
 }
+
+// ProbeFailure identifies a failed verification phase without including remote
+// response text, command arguments, or credentials.
+type ProbeFailure struct {
+	Phase    string `json:"phase"`
+	ExitCode int    `json:"exit_code"`
+	Message  string `json:"message"`
+}
+
+func (e *ProbeFailure) Error() string { return e.Message }

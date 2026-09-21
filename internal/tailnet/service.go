@@ -48,6 +48,8 @@ type receipt struct {
 }
 type response struct {
 	Error      string    `json:"error"`
+	Phase      string    `json:"phase"`
+	ExitCode   int       `json:"exit_code"`
 	Status     string    `json:"status"`
 	Message    string    `json:"message"`
 	Guard      string    `json:"guard"`
@@ -92,6 +94,9 @@ func (s Service) call(ctx context.Context, host string, privileged bool, request
 		return errors.New("tailnet host returned an invalid response")
 	}
 	if check.Error != "" {
+		if check.Phase != "" {
+			return &ProbeFailure{Phase: check.Phase, ExitCode: check.ExitCode, Message: "tailnet: " + check.Error}
+		}
 		return fmt.Errorf("tailnet: %s", check.Error)
 	}
 	if result != nil {
@@ -302,7 +307,9 @@ func (s Service) Preview(ctx context.Context, r Request) (Plan, error) {
 			p.Changes = append(p.Changes, "Select this peer as the system exit; keep DNS and application proxy preferences unchanged")
 			if enabled {
 				p.Changes = append(p.Changes, "Pause the confirmed local Mihomo TUN at runtime before selecting the exit")
+				p.Changes = append(p.Changes, "After verifying OS exit routing, clear only the confirmed Mihomo DNS answer cache before testing its proxy; preserve DNS settings and fake-IP mappings")
 			}
+			p.Warnings = append(p.Warnings, "Routing changes can interrupt existing proxy connections, including chat/SSE streams; switch from an independent terminal and reconnect consumers afterward")
 			p.Warnings = append(p.Warnings, "Runtime TUN handoff can become stale after Mihomo or its owning app restarts; inspect status before reusing it", "No automatic direct fallback is performed when the exit becomes unavailable", "Egress comparison verifies IPv4; IPv6 reachability is not independently verified")
 		} else {
 			p.snapshot = remote
@@ -338,11 +345,12 @@ func (s Service) Preview(ctx context.Context, r Request) (Plan, error) {
 	// Transient peer connectivity and timestamps are excluded; actual preference,
 	// forwarding, core identity and runtime config changes invalidate this plan.
 	material := struct {
+		Revision   int
 		Request    Request
 		PeerID     string
 		Snapshot   snapshot
 		SecretHash string
-	}{p.Request, p.Peer.ID, p.snapshot, digestBytes([]byte(r.ControllerSecret))}
+	}{2, p.Request, p.Peer.ID, p.snapshot, digestBytes([]byte(r.ControllerSecret))}
 	material.Snapshot.Peers = nil
 	material.Snapshot.Self.Connection = ""
 	material.Snapshot.Self.Online = false
@@ -514,6 +522,16 @@ func (s Service) Apply(ctx context.Context, plan Plan, expected string) (Result,
 	if local && directIP != result.DirectIP {
 		return result, errors.New("local HTTPS egress differs from the selected exit host; detached rollback remains armed")
 	}
+	if paused, _ := plan.snapshot.Core["enabled"].(bool); local && paused {
+		refresh := map[string]any{"op": "refresh_dns", "scope": scope, "id": "selection", "guard": applied.Guard, "ack_token": applied.AckToken}
+		var refreshed response
+		if err = s.call(ctx, "", false, refresh, &refreshed); err != nil {
+			return result, fmt.Errorf("Mihomo DNS cache handoff failed; detached rollback remains armed: %w", err)
+		}
+		if refreshed.Status != "dns_cache_refreshed" {
+			return result, errors.New("Mihomo DNS cache refresh was not confirmed; detached rollback remains armed")
+		}
+	}
 	result.DirectIP = directIP
 	if local && r.ProbeProxy != "" {
 		result.ProxyIP, err = s.probe(ctx, "", r.ProbeProxy)
@@ -664,7 +682,7 @@ func (s Service) Status(ctx context.Context, id string) (Result, error) {
 				result.Status = "selected"
 			}
 		}
-		if selected.Message != "" {
+		if selected.Message != "" && result.Status != "offline" && result.Status != "peer_missing" && result.Status != "identity_changed" && result.Status != "inspection_failed" && result.Status != "forwarding_disabled" {
 			result.Message = selected.Message
 		}
 	}

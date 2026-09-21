@@ -50,6 +50,8 @@ func (f *fakeHosts) execute(_ context.Context, host string, priv bool, input []b
 	case "ack":
 		f.ackCount++
 		return json.Marshal(response{Status: "acknowledged"})
+	case "refresh_dns":
+		return json.Marshal(response{Status: "dns_cache_refreshed"})
 	case "selection_status":
 		return json.Marshal(f.selected)
 	default:
@@ -184,12 +186,80 @@ func TestUseRequiresApprovedPeerAndVerifiesActualEgress(t *testing.T) {
 	if !result.Selected || !result.TUNPaused || result.DirectIP != f.remoteIP || result.ProxyIP != f.remoteIP {
 		t.Fatalf("bad selection result: %+v", result)
 	}
+	refreshAt, proxyAt, directAt := -1, -1, -1
+	for i, call := range f.calls {
+		if call["op"] == "refresh_dns" {
+			refreshAt = i
+			if call["host"] != "" || call["id"] != "selection" || call["ack_token"] == "" || call["controller"] != nil {
+				t.Fatalf("DNS refresh must use the owned local guard, not a caller-supplied controller: %v", call)
+			}
+		}
+		if call["op"] == "probe" && call["host"] == "" {
+			if call["probe_proxy"] == "" {
+				directAt = i
+			} else {
+				proxyAt = i
+			}
+		}
+	}
+	if directAt < 0 || refreshAt <= directAt || proxyAt <= refreshAt {
+		t.Fatalf("wrong handoff ordering: direct=%d refresh=%d proxy=%d", directAt, refreshAt, proxyAt)
+	}
 	f.localIP = "1.1.1.1"
 	if _, err = s.Apply(context.Background(), p, p.Digest); err == nil {
 		t.Fatal("accepted different exit IP")
 	}
 	if f.ackCount != 1 {
 		t.Fatal("acknowledged failed egress")
+	}
+}
+
+func TestDNSRefreshFailureDoesNotAcknowledgeOrProbeProxy(t *testing.T) {
+	s, f := fixtureService(t)
+	if _, err := s.Register(context.Background(), "rpi", "rpi"); err != nil {
+		t.Fatal(err)
+	}
+	f.local.Peers[0].ExitAvailable = true
+	f.local.Core = map[string]any{"enabled": true, "device": "utun0", "identity": "core1"}
+	s.Options.Execute = func(ctx context.Context, host string, privileged bool, input []byte) ([]byte, error) {
+		var request map[string]any
+		_ = json.Unmarshal(input, &request)
+		if request["op"] == "refresh_dns" {
+			return []byte(`{"error":"DNS cache refresh failed","phase":"proxy-dns-cache-refresh","exit_code":0}`), nil
+		}
+		return f.execute(ctx, host, privileged, input)
+	}
+	p, err := s.Preview(context.Background(), Request{Action: "use", ID: "rpi", Controller: "unix:///tmp/controller.sock", ProbeProxy: "http://127.0.0.1:7897"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.Apply(context.Background(), p, p.Digest)
+	var failure *ProbeFailure
+	if !errors.As(err, &failure) || failure.Phase != "proxy-dns-cache-refresh" || f.ackCount != 0 {
+		t.Fatalf("failed cache handoff was acknowledged: %v, ack=%d", err, f.ackCount)
+	}
+	for _, call := range f.calls {
+		if call["op"] == "probe" && call["probe_proxy"] != "" {
+			t.Fatal("proxy probe ran after failed DNS handoff")
+		}
+	}
+}
+
+func TestStatusPreservesCurrentInspectionFailureMessage(t *testing.T) {
+	s, f := fixtureService(t)
+	if _, err := s.Register(context.Background(), "rpi", "rpi"); err != nil {
+		t.Fatal(err)
+	}
+	f.selected = response{NodeID: "rpi", Status: "acknowledged", Message: "previous checks succeeded"}
+	s.Options.Execute = func(ctx context.Context, host string, privileged bool, input []byte) ([]byte, error) {
+		if host == "rpi" {
+			return nil, errors.New("host inspection unavailable")
+		}
+		return f.execute(ctx, host, privileged, input)
+	}
+	result, err := s.Status(context.Background(), "rpi")
+	if err != nil || result.Status != "inspection_failed" || result.Message != "Could not verify current SSH host advertisement and forwarding" {
+		t.Fatalf("cached success hid the current failure: %+v %v", result, err)
 	}
 }
 func TestUnknownVPNBlocksSelection(t *testing.T) {
@@ -245,5 +315,17 @@ func TestOfflinePeerIsNotReportedAsAcknowledged(t *testing.T) {
 	}
 	if result.Status != "offline" || !result.Selected {
 		t.Fatalf("offline acknowledged state masked: %+v", result)
+	}
+}
+
+func TestProbeFailureRemainsTypedThroughHostProtocol(t *testing.T) {
+	s, _ := fixtureService(t)
+	s.Options.Execute = func(context.Context, string, bool, []byte) ([]byte, error) {
+		return []byte(`{"error":"proxy-https-trace failed (exit 28: operation timed out)","phase":"proxy-https-trace","exit_code":28}`), nil
+	}
+	_, err := s.probe(context.Background(), "", "http://127.0.0.1:7897")
+	var failure *ProbeFailure
+	if !errors.As(err, &failure) || failure.Phase != "proxy-https-trace" || failure.ExitCode != 28 {
+		t.Fatalf("missing typed diagnostic: %#v %v", failure, err)
 	}
 }
