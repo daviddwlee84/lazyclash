@@ -257,7 +257,8 @@ controller = "{urls[1]}"
             terminal.send(b"\x13")
             terminal.wait(lambda: saved_target_name(settings, env) == "Fixture One Ctrl-S"
                           and "Fixture One Ctrl-S [connected]" in terminal.text()
-                          and "Edit target" not in terminal.text(), "raw Ctrl+S saves current display-name field")
+                          and "Edit target" not in terminal.text()
+                          and "Saving settings" not in terminal.text(), "raw Ctrl+S saves current display-name field")
 
             # Failed validation retains the form, focused input and saved file.
             # Correct it in place and submit again, without traversing 13 fields.
@@ -272,7 +273,8 @@ controller = "{urls[1]}"
             terminal.send("\x15" + urls[0])
             terminal.send(b"\x13")
             terminal.wait(lambda: "Edit target" not in terminal.text()
-                          and "Fixture One Ctrl-S [connected]" in terminal.text(), "corrected field saves without flow-control freeze")
+                          and "Fixture One Ctrl-S [connected]" in terminal.text()
+                          and "Saving settings" not in terminal.text(), "corrected field saves without flow-control freeze")
 
             # Keep later fixture-label assertions unchanged.
             terminal.send("t")
@@ -282,7 +284,8 @@ controller = "{urls[1]}"
             terminal.send(b"\x13")
             terminal.wait(lambda: saved_target_name(settings, env) == "Fixture One"
                           and "Fixture One [connected]" in terminal.text()
-                          and "Edit target" not in terminal.text(), "Ctrl+S restores fixture name")
+                          and "Edit target" not in terminal.text()
+                          and "Saving settings" not in terminal.text(), "Ctrl+S restores fixture name")
 
             # Switch targets; old target writes must never be repeated on new core.
             terminal.send("tj\r")
