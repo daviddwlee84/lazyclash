@@ -246,7 +246,31 @@ func (o *options) registerCompletions(root *cobra.Command) {
 	_ = root.RegisterFlagCompletionFunc("target", local("targets"))
 	_ = root.RegisterFlagCompletionFunc("ssh", local("ssh"))
 	_ = root.RegisterFlagCompletionFunc("page", values("overview", "proxies", "connections", "logs", "rules", "providers", "configs"))
-	for _, name := range []string{"config", "secret-file", "ca-cert"} {
+	serverIDs := func(hosts bool) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return func(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+			store, err := o.serverStore(cmd)
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			inv, err := store.Load()
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			var ids []string
+			if hosts {
+				for _, h := range inv.Hosts {
+					ids = append(ids, h.ID)
+				}
+			} else {
+				for _, d := range inv.Deployments {
+					ids = append(ids, d.ID)
+				}
+			}
+			sort.Strings(ids)
+			return ids, cobra.ShellCompDirectiveNoFileComp
+		}
+	}
+	for _, name := range []string{"config", "secret-file", "ca-cert", "servers-config"} {
 		_ = root.MarkPersistentFlagFilename(name)
 	}
 	_ = root.RegisterFlagCompletionFunc("secret-env", values())
@@ -294,6 +318,10 @@ func (o *options) registerCompletions(root *cobra.Command) {
 			}
 		case "cores status", "cores start", "cores stop", "cores restart", "cores configure", "cores remove":
 			cmd.ValidArgsFunction = local("cores")
+		case "servers status", "servers start", "servers stop", "servers restart", "servers remove", "servers resume", "servers export", "servers connect", "servers manage":
+			cmd.ValidArgsFunction = serverIDs(false)
+		case "vps status", "vps start", "vps stop", "vps reboot", "vps delete", "vps resume", "vps manage":
+			cmd.ValidArgsFunction = serverIDs(true)
 		case "proxies copy":
 			cmd.ValidArgsFunction = func(c *cobra.Command, a []string, s string) ([]string, cobra.ShellCompDirective) {
 				if len(a) < 2 && !globalChanged(c, "target") {
@@ -313,6 +341,13 @@ func (o *options) registerCompletions(root *cobra.Command) {
 		}
 		if cmd.LocalNonPersistentFlags().Lookup("ssh") != nil {
 			_ = cmd.RegisterFlagCompletionFunc("ssh", local("ssh"))
+		}
+		if path == "servers deploy" {
+			_ = cmd.RegisterFlagCompletionFunc("host", serverIDs(true))
+			_ = cmd.RegisterFlagCompletionFunc("recipe", values("vless-reality", "hysteria2", "legacy-vmess-ws-tls"))
+		}
+		if strings.HasPrefix(path, "vps ") && cmd.Flags().Lookup("provider") != nil {
+			_ = cmd.RegisterFlagCompletionFunc("provider", values("oracle", "vultr", "linode", "digitalocean"))
 		}
 		for _, name := range []string{"level", "log-level"} {
 			if cmd.Flags().Lookup(name) != nil {
@@ -340,6 +375,8 @@ func (o *options) registerCompletions(root *cobra.Command) {
 				_ = cmd.RegisterFlagCompletionFunc("format", values("env-file", "compose", "build-args", "client-json"))
 			case "proxies export":
 				_ = cmd.RegisterFlagCompletionFunc("format", values("yaml", "json", "url"))
+			case "servers export":
+				_ = cmd.RegisterFlagCompletionFunc("format", values("uri", "qr", "mihomo", "starter", "client-bundle", "admin-bundle"))
 			}
 		}
 		if cmd.Flags().Lookup("scope") != nil && path == "proxy docker render" {
@@ -347,6 +384,9 @@ func (o *options) registerCompletions(root *cobra.Command) {
 		}
 		for name, items := range map[string][]string{"backend": {"native", "docker"}, "input-kind": {"links", "subscription", "yaml"}, "preset": {"auto", "cn-split", "simple", "preserve"}, "category": {"reject", "direct", "proxy", "ai", "apple", "media-global", "media-hkmt"}, "service-scope": {"user", "system"}} {
 			if cmd.Flags().Lookup(name) != nil {
+				if name == "backend" && path == "servers deploy" {
+					items = []string{"native", "compose"}
+				}
 				_ = cmd.RegisterFlagCompletionFunc(name, values(items...))
 			}
 		}

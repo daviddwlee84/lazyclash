@@ -58,15 +58,16 @@ type toolSettingsMsg struct {
 }
 
 func (m *Model) canRunTool() bool {
-	return m.options.RunCommand != nil && !m.toolPending && !m.opening && m.pending == "" && !m.authPending() && (m.work == nil || !m.work.pending)
+	return m.options.RunCommand != nil && !m.toolPending && (!m.opening || m.serverWork()) && m.pending == "" && !m.authPending() && (m.work == nil || !m.work.pending)
 }
 func (m *Model) runTool(label string, targeted bool, args ...string) tea.Cmd {
 	if !m.canRunTool() {
 		return nil
 	}
-	if m.overlay != "" && m.overlay != "palette" && m.overlay != "targets" {
+	if m.overlay != "" && m.overlay != "palette" && m.overlay != "targets" && !(m.overlay == "work" && m.serverWork()) {
 		return nil
 	}
+	m.toolReturnServers = m.overlay == "work" && m.serverWork()
 	if targeted {
 		if m.target.ID == "" || m.target.Transient || m.target.TransportOverride {
 			m.status = "Save this target before managing its persistent configuration"
@@ -116,6 +117,11 @@ func (m *Model) receiveTool(msg toolMsg) tea.Cmd {
 		m.status = msg.label + ": " + safeError(msg.err)
 	} else {
 		m.status = msg.label + " completed"
+	}
+	if m.toolReturnServers {
+		m.toolReturnServers = false
+		m.overlay = "work"
+		return tea.Batch(m.refreshServerWork(false), m.refresh(true))
 	}
 	if m.options.ReloadTargets == nil {
 		return m.refresh(true)
@@ -191,6 +197,8 @@ func (m *Model) toolAction(id string) tea.Cmd {
 	}
 	r, has := m.selectedRow()
 	switch id {
+	case "tool-servers":
+		return m.startServers()
 	case "tool-setup":
 		return m.runTool("Setup Mihomo", false, "setup", "--interactive")
 	case "tool-core":

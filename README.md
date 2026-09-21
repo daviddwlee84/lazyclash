@@ -1,8 +1,15 @@
 # lazyclash
 
-A keyboard-first terminal console for **Mihomo clients**, including existing cores managed by Clash Verge Rev and explicitly lazyclash-owned installations. Works locally, over HTTPS, through SSH, or over a local Unix socket. macOS and Linux are supported.
+A keyboard-first terminal console for **Mihomo clients and proxy servers**, including existing cores managed by Clash Verge Rev and explicitly lazyclash-owned installations. Works locally, over HTTPS, through SSH, or over a local Unix socket. macOS and Linux are supported.
 
 Manage runtime state, edit and share source-backed nodes/groups, use a selected proxy from your shell or Docker, compare targets, and diagnose routing. `setup` installs native or Docker clients with an offline regional starter and optional reviewed TUN/system-proxy configuration. Clash Verge companion edits require native profile reactivation. See the [knowledge and operating guide](docs/README.md), [reference index](docs/references.md), and [future milestones](TODO.md).
+
+`servers deploy` adds owned proxy servers on Ubuntu VPSs or SSH-accessible
+homelabs, with native systemd or Docker Compose: VLESS/REALITY/Vision,
+Hysteria2, and the historical VMess/WebSocket/TLS recipe. `vps` compares and
+manages hosts through Oracle, Vultr, Linode and DigitalOcean's official CLIs.
+Servers have a separate inventory, reviewed changes, recoverable operations and
+client exports. See [server deployment and VPS selection](docs/server-deployment.md).
 
 ## Prebuilt releases
 
@@ -112,6 +119,8 @@ New client and source workflows are available from `:` and the target picker:
 
 ```sh
 lazyclash setup                                      # client setup wizard
+lazyclash servers deploy                             # server / VPS deployment wizard
+lazyclash vps catalog                                # dated cost and sizing comparison
 lazyclash --target desktop configs source set --interactive
 lazyclash --target desktop proxies export 'My node' --interactive
 lazyclash --target desktop groups edit PROXY --interactive

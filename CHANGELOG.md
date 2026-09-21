@@ -6,6 +6,14 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 
 ## Unreleased
 
+- Added separate VPS/server inventory and a shared CLI/TUI deployment workflow
+  for existing SSH hosts/homelabs and Oracle, Vultr, Linode and DigitalOcean CLIs.
+- Added native/Compose server recipes for VLESS/REALITY/Vision, Hysteria2 and
+  VMess/WebSocket/TLS, immutable artifact verification, owned service lifecycle,
+  recovery journals and isolated authenticated client verification.
+- Added private client/admin bundles, URI/QR/starter exports and reviewed import
+  into existing client sources, plus source-backed protocol and cost guidance.
+
 ## 0.1.8 — 2026-09-21
 
 - Publish checksummed macOS/Linux amd64/arm64 archives with shell completions.

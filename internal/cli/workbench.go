@@ -14,6 +14,9 @@ import (
 
 func workJSON(v any) string { b, _ := json.MarshalIndent(v, "", "  "); return string(b) }
 func (o *options) runWorkbench(ctx context.Context, r tui.WorkRequest) (tui.WorkResult, error) {
+	if strings.HasPrefix(r.Kind, "servers-") {
+		return o.runServerWorkbench(ctx, r)
+	}
 	result := tui.WorkResult{}
 	cmp := compare.Options{Open: o.deps.Open, ReadOnly: o.readOnly}
 	rules := rulework.Options{Open: o.deps.Open, ReadOnly: o.readOnly}

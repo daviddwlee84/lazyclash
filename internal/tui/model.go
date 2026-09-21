@@ -122,6 +122,7 @@ func (s *targetState) snap(key string) *snapshot {
 
 type Model struct {
 	toolPending       bool
+	toolReturnServers bool
 	toolSerial        uint64
 	auth              *authState
 	authSerial        uint64

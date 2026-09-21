@@ -36,6 +36,7 @@ type workState struct {
 	index, offset, focus int
 	checked              map[string]bool
 	pending              bool
+	serverHelp           bool
 	serial               uint64
 	cancel               context.CancelFunc
 }
@@ -96,6 +97,9 @@ func (m *Model) receiveWork(msg workMsg) tea.Cmd {
 		return nil
 	}
 	w := m.work
+	if m.serverWork() {
+		return m.receiveServerWork(msg)
+	}
 	w.pending = false
 	w.cancel = nil
 	w.result = msg.result
@@ -132,6 +136,12 @@ func (m *Model) receiveWork(msg workMsg) tea.Cmd {
 func (m *Model) closeWork() tea.Cmd {
 	if m.work != nil && m.work.pending {
 		m.work.cancel()
+		if m.serverWork() {
+			m.workSerial++
+			m.work = nil
+			m.overlay = ""
+			return nil
+		}
 		m.work.result.Summary = "Cancellation requested; waiting for the operation result. Writes may already have applied."
 		return nil
 	}
@@ -172,6 +182,9 @@ func (m *Model) workButton(id string) tea.Cmd {
 	}
 	if id == "work-close" {
 		return m.closeWork()
+	}
+	if strings.HasPrefix(id, "server-") {
+		return m.serverButton(id)
 	}
 	if w.pending {
 		return nil
@@ -238,6 +251,11 @@ func (m *Model) workKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.overlay = ""
 		return nil
 	}
+	if m.serverWork() {
+		if handled, command := m.serverKey(msg); handled {
+			return command
+		}
+	}
 	switch msg.String() {
 	case "esc", "q":
 		return m.closeWork()
@@ -302,6 +320,9 @@ func (m *Model) workLayout(width, height int) ([]string, []hitRegion) {
 	if len(w.result.Rows) > 0 {
 		detail = w.result.Rows[min(w.index, len(w.result.Rows)-1)].Detail + "\n\n" + detail
 	}
+	if m.serverWork() && w.serverHelp {
+		detail = serverHelpText
+	}
 	listHeight := min(max(0, (height-4)/2), len(w.result.Rows))
 	start := max(0, w.index-listHeight+1)
 	if width < 65 && w.focus == 1 {
@@ -337,6 +358,9 @@ func (m *Model) workLayout(width, height int) ([]string, []hitRegion) {
 	offset := min(w.offset, maxOffset)
 	lines = append(lines, m.detailLines(detail, width, detailHeight, offset)...)
 	buttons := []button{}
+	if m.serverWork() {
+		buttons = append(buttons, m.serverButtons()...)
+	}
 	if w.phase != "result" {
 		buttons = append(buttons, button{"work-choose", "Enter Choose", len(w.result.Rows) > 0})
 	}

@@ -214,6 +214,9 @@ func (m *Model) overlayButton(id string) tea.Cmd {
 	if strings.HasPrefix(id, "work-") {
 		return m.workButton(id)
 	}
+	if strings.HasPrefix(id, "server-") {
+		return m.serverButton(id)
+	}
 	switch id {
 	case "ssh-authenticate":
 		return m.authenticateCurrent()

@@ -13,6 +13,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/core"
 	"github.com/daviddwlee84/lazyclash/internal/proxyenv"
+	"github.com/daviddwlee84/lazyclash/internal/serverstate"
 	"github.com/daviddwlee84/lazyclash/internal/wizard"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -76,7 +77,7 @@ func describeError(err error) errorDetails {
 		result.Code = "proxy-not-configured"
 	case errors.Is(err, proxyenv.ErrTemporaryProxy):
 		result.Code = "proxy-temporary"
-	case errors.Is(err, config.ErrConflict):
+	case errors.Is(err, config.ErrConflict), errors.Is(err, serverstate.ErrConflict):
 		result.Code = "config-conflict"
 	case errors.Is(err, context.Canceled), errors.Is(err, wizard.ErrCanceled):
 		result.Code = "canceled"

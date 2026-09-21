@@ -11,6 +11,7 @@ The [changelog](../CHANGELOG.md) identifies the version that introduced a featur
 | Choosing a shell/data proxy, owning SSH forwards or configuring Docker consumers | [代理環境](proxy-environment.md) |
 | Sharing a local proxy with a remote shell/command and checking endpoint lifetime | [雙向 SSH 代理](ssh-proxy-sharing.md) |
 | Installing an owned native/Docker client or using offline China-routing presets | [Client setup](managed-cores.md) |
+| Choosing protocols/VPSs, deploying a server or public-IP homelab, exporting client configs | [Server deployment and VPS selection](server-deployment.md) |
 | Inspecting Tailscale/other VPN conflicts, split DNS, service permissions or recovery | [VPN／TUN 共存](vpn-coexistence.md) |
 | Interpreting dashboard metrics or diagnosing a URL | [Diagnostics and routing](diagnostics-and-routing.md) |
 | Persisting a domain override, reloading or recovering a change | [Rules and ownership](rules-and-ownership.md) |
@@ -29,6 +30,7 @@ The [changelog](../CHANGELOG.md) identifies the version that introduced a featur
 | Rule source | An explicit binding to the persistent file/owner used by rule repair |
 | Node/group source | A separate explicit binding for raw definitions, editing, copying and sharing |
 | Managed core | An installation with a recorded service/project identity, version, digest and receipts |
+| VPS host / proxy server | Separate server inventory: cloud or SSH management host, deployment, public endpoint and recovery history |
 | Verge profile | GUI-owned source plus companion Rules/Merge/Script files and a generation pipeline |
 | Data proxy | HTTP(S)/SOCKS endpoint carrying requests; an API/SSH management tunnel does not supply one |
 | Receipt | A record of a specific persistent change; saving, loading, and observing route use are separate states |

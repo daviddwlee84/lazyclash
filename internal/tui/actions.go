@@ -31,6 +31,7 @@ func (m *Model) actions() []action {
 	a := []action{
 		{"tool-setup", "Setup Mihomo client", nil, m.canRunTool() && !m.options.ReadOnly},
 		{"tool-core", "Manage installed cores", nil, m.canRunTool()},
+		{"tool-servers", "Servers / VPS: deploy, manage and share", nil, m.options.Workbench != nil && !m.toolPending},
 		{"tool-network", "Diagnose VPN / TUN / DNS conflicts", nil, m.canRunTool()},
 		{"tool-source", "Bind node / group configuration source", nil, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride},
 		{"work-compare", "Compare targets / copy selected settings", nil, m.options.Workbench != nil && len(m.settings.Targets) > 1},

@@ -19,7 +19,10 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/managedcore"
 	"github.com/daviddwlee84/lazyclash/internal/proxyenv"
 	"github.com/daviddwlee84/lazyclash/internal/selfupdate"
+	"github.com/daviddwlee84/lazyclash/internal/serverdeploy"
+	"github.com/daviddwlee84/lazyclash/internal/serverstate"
 	"github.com/daviddwlee84/lazyclash/internal/tui"
+	"github.com/daviddwlee84/lazyclash/internal/vps"
 	"github.com/daviddwlee84/lazyclash/internal/wizard"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -55,6 +58,9 @@ func ExitCode(err error) int {
 
 type Dependencies struct {
 	Managed      managedcore.Options
+	Servers      serverdeploy.Options
+	VPS          vps.Options
+	ServerStore  serverstate.Store
 	Open         func(context.Context, config.Target, bool) (*core.Client, io.Closer, error)
 	Discover     func(context.Context, string) ([]config.Target, error)
 	Terminal     func(io.Reader, io.Writer) bool
@@ -67,6 +73,7 @@ type Dependencies struct {
 
 type options struct {
 	path, target, controller, ssh, secretFile, secretEnv, caFile string
+	serversPath                                                  string
 	json, readOnly                                               bool
 	page                                                         string
 	mouse                                                        bool
@@ -107,7 +114,7 @@ func New(deps Dependencies) *cobra.Command {
 	}
 	o := &options{deps: deps}
 	root := &cobra.Command{
-		Use: "lazyclash", Short: "A keyboard-first console for existing Mihomo cores",
+		Use: "lazyclash", Short: "A keyboard-first console for Mihomo clients and owned proxy servers",
 		Long:    "Control local or remote Mihomo cores from a terminal. Run without a subcommand to open the dashboard. Agents can read the bundled operating guide with --skill.",
 		Version: versionFromBuild(), SilenceErrors: true, SilenceUsage: true,
 		Args: argsExact(0),
@@ -153,6 +160,9 @@ func New(deps Dependencies) *cobra.Command {
 					}
 					if o.readOnly {
 						prefix = append(prefix, "--read-only")
+					}
+					if o.serversPath != "" {
+						prefix = append(prefix, "--servers-config", o.serversPath)
 					}
 					child := New(o.deps)
 					child.SetArgs(append(prefix, args...))
@@ -244,6 +254,7 @@ func New(deps Dependencies) *cobra.Command {
 	root.Flags().Bool("skill", false, "print the bundled agent operating guide without connecting")
 	f := root.PersistentFlags()
 	f.StringVar(&o.path, "config", "", "lazyclash TOML settings path")
+	f.StringVar(&o.serversPath, "servers-config", "", "separate VPS/server inventory TOML (default: beside settings)")
 	f.StringVar(&o.target, "target", "", "registered target ID")
 	f.StringVar(&o.controller, "controller", "", "temporary HTTP(S) URL or unix:///path controller")
 	f.StringVar(&o.ssh, "ssh", "", "SSH host alias (controller address is on that host)")
@@ -254,6 +265,7 @@ func New(deps Dependencies) *cobra.Command {
 	f.BoolVar(&o.readOnly, "read-only", false, "disable control actions, latency tests and healthchecks")
 	root.AddCommand(o.targetCommands(), o.configCommands(), o.statusCommand(), o.proxyCommands(), o.proxyCommand(), o.connectionCommands(), o.logsCommand(), o.rulesCommand(), o.providerCommands(), o.modeCommand(), o.tunCommand(), o.allowLANCommand(), o.settingsCommand())
 	root.AddCommand(o.skillCommand(), o.diagnosticsCommand(), o.upgradeCommand(), o.groupsCommand(), o.setupCommand(), o.coresCommand())
+	root.AddCommand(o.vpsCommand(), o.serversCommand())
 	root.AddCommand(o.completionCommand(root))
 	o.registerCompletions(root)
 	return root
@@ -288,7 +300,7 @@ func (o *options) validateSelection(cmd *cobra.Command) error {
 	if globalChanged(cmd, "secret-file") && globalChanged(cmd, "secret-env") {
 		return usage("--secret-file and --secret-env are mutually exclusive")
 	}
-	for _, name := range []string{"target", "controller", "ssh", "secret-file", "secret-env", "ca-cert", "config"} {
+	for _, name := range []string{"target", "controller", "ssh", "secret-file", "secret-env", "ca-cert", "config", "servers-config"} {
 		if globalChanged(cmd, name) {
 			v, _ := cmd.Root().PersistentFlags().GetString(name)
 			if strings.TrimSpace(v) == "" {

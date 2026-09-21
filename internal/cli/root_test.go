@@ -24,7 +24,7 @@ func isolated(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	for _, name := range []string{"LAZYCLASH_CONFIG", "LAZYCLASH_TARGET", "LAZYCLASH_CONTROLLER", "CLASH_CONTROLLER", "CLASH_SECRET"} {
+	for _, name := range []string{"LAZYCLASH_CONFIG", "LAZYCLASH_SERVERS_CONFIG", "LAZYCLASH_TARGET", "LAZYCLASH_CONTROLLER", "CLASH_CONTROLLER", "CLASH_SECRET"} {
 		t.Setenv(name, "")
 	}
 	return filepath.Join(dir, "lazyclash", "config.toml")

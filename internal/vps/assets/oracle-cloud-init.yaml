@@ -1,0 +1,39 @@
+#cloud-config
+# lazyclash owned OCI Ubuntu initializer v1.
+# OCI platform images enforce host INPUT rules in addition to VCN ingress.
+write_files:
+  - path: /usr/local/libexec/lazyclash-oci-ingress
+    owner: root:root
+    permissions: '0700'
+    content: |
+      #!/bin/sh
+      set -eu
+      # Keep the platform rules, including SSH and OCI service-network rules.
+      # Add only the proxy/ACME ports reviewed during creation of this VM.
+      for port in 80 443; do
+        if ! /usr/sbin/iptables --wait 10 --check INPUT -p tcp --dport "$port" -m comment --comment lazyclash-oci-ingress-v1 -j ACCEPT 2>/dev/null; then
+          /usr/sbin/iptables --wait 10 --insert INPUT 1 -p tcp --dport "$port" -m comment --comment lazyclash-oci-ingress-v1 -j ACCEPT
+        fi
+      done
+      if ! /usr/sbin/iptables --wait 10 --check INPUT -p udp --dport 443 -m comment --comment lazyclash-oci-ingress-v1 -j ACCEPT 2>/dev/null; then
+        /usr/sbin/iptables --wait 10 --insert INPUT 1 -p udp --dport 443 -m comment --comment lazyclash-oci-ingress-v1 -j ACCEPT
+      fi
+  - path: /etc/systemd/system/lazyclash-oci-ingress.service
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=lazyclash ingress for this owned OCI proxy VM
+      After=network-pre.target netfilter-persistent.service ufw.service firewalld.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/local/libexec/lazyclash-oci-ingress
+      TimeoutStartSec=90
+
+      [Install]
+      WantedBy=multi-user.target
+runcmd:
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, --now, lazyclash-oci-ingress.service]
