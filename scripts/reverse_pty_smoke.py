@@ -4,6 +4,7 @@
 Run after building bin/lazyclash: python3 scripts/reverse_pty_smoke.py
 No configured host, real user SSH config, or system service is modified. Missing
 local sshd/session capabilities skip by default; --require makes that a failure.
+LAZYCLASH_TEST_WRAPPER_SHELL=/bin/dash checks the outer test shell explicitly.
 """
 import argparse
 import fcntl
@@ -69,10 +70,14 @@ class Terminal:
             os.setsid()
             fcntl.ioctl(self.slave, termios.TIOCSCTTY, 0)
 
-        wrapper = ('"$@"; result=$?; printf "\\n__LC_EXIT_%s__\\n" "$result"; '
+        # Catch SIGINT only in the test wrapper: dash otherwise exits with the
+        # foreground child before we can observe its real status. A caught trap
+        # resets in the exec'd child; an ignored signal would change CLI behavior.
+        wrapper = ('trap ":" INT; "$@"; result=$?; trap - INT; '
+                   'printf "\\n__LC_EXIT_%s__\\n" "$result"; '
                    'IFS= read -r reply; printf "__LC_ECHO_%s__\\n" "$reply"; exit "$result"')
         self.process = subprocess.Popen(
-            ["/bin/sh", "-c", wrapper, "reverse-pty", *args], env=env,
+            [env.get("LAZYCLASH_TEST_WRAPPER_SHELL", "/bin/sh"), "-c", wrapper, "reverse-pty", *args], env=env,
             stdin=self.slave, stdout=self.slave, stderr=self.slave,
             preexec_fn=controlling_terminal, close_fds=True,
         )
