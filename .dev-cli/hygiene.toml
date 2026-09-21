@@ -1,0 +1,16 @@
+version = 1
+secrets = "block"
+known = "block"
+generic = "warn"
+
+[[exceptions]]
+rule = "generic-password-assignment"
+path = "internal/tailnetproxy/service.go"
+pattern = '^__LAZYCLASH_GENERATED_PROXY_PASSWORD__$'
+reason = "Placeholder in a reviewed deployment plan; execution replaces it with a cryptographically generated password."
+
+[[exceptions]]
+rule = "generic-password-assignment"
+path = "internal/tailnetproxy/service_test.go"
+pattern = '^private$'
+reason = "Synthetic in-memory gateway profile fixture; no external service authenticates with this value."

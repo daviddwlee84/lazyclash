@@ -73,3 +73,22 @@ jobs:
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_smoke.py
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/auth_pty_smoke.py
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/tools_pty_smoke.py
+          "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_servers_smoke.py
+          "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_tailnet_smoke.py
+          "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_cloud_vps_smoke.py
+  servers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Exercise official cores and authenticated tunnels in disposable containers
+        env:
+          LAZYCLASH_SERVER_INTEGRATION: "1"
+          LAZYCLASH_SERVER_E2E: "1"
+          LAZYCLASH_SERVER_NGINX: "1"
+        run: go test ./internal/serverdeploy -run '^TestIntegration' -count=1 -v -timeout=18m
