@@ -14,6 +14,8 @@ import (
 const MaxDocument = 8 << 20
 
 type Options struct {
+	// ActivateOwner is available only for an explicitly managed GUI installation.
+	ActivateOwner  func(context.Context, config.Target) error
 	ClientServices clientservice.Options
 	ReadOnly       bool
 	StateDir       string

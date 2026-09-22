@@ -194,7 +194,16 @@ func Apply(ctx context.Context, t config.Target, req Request, expected string, o
 		r.Status = "persisted_pending_owner_reload"
 		r.Message = "Reactivate this profile in Clash Verge, then verify. Local group overrides remain after subscription updates."
 		r.UpdatedAt = time.Now().UTC()
-		return r, saveReceipt(opts, r)
+		if e = saveReceipt(opts, r); e != nil {
+			return r, e
+		}
+		if t.ManagedCoreID != "" && opts.ActivateOwner != nil {
+			if e = opts.ActivateOwner(ctx, t); e != nil {
+				return r, e
+			}
+			return Verify(ctx, t, r.ID, opts)
+		}
+		return r, nil
 	}
 	r.Status = "persisted_pending_apply"
 	if e = saveReceipt(opts, r); e != nil {
@@ -534,6 +543,12 @@ func Restore(ctx context.Context, t config.Target, id string, opts Options) (Rec
 	r.Message = "Source backups restored; reactivate the owner and verify actual traffic."
 	if e = saveReceipt(opts, r); e != nil {
 		return r, e
+	}
+	if r.Owner == "verge" && t.ManagedCoreID != "" && opts.ActivateOwner != nil {
+		if e = opts.ActivateOwner(ctx, t); e != nil {
+			return r, e
+		}
+		return Verify(ctx, t, r.ID, opts)
 	}
 	if r.Owner != "verge" {
 		restarted := false

@@ -9,6 +9,7 @@ import (
 // Shared host primitives retain the rule workbench's bounded private file I/O
 // and OS-isolated validation; ownership is established by each caller separately.
 type HostFile = hostFile
+type HostRequest = hostRequest
 type FileGuard = fileGuard
 
 // SourceHostScript is fixed application code, never supplied by a user request.

@@ -10,13 +10,13 @@ import (
 	"io"
 	"net"
 	"net/netip"
-	"path/filepath"
 	"strings"
 	"unicode"
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/hostpath"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -102,6 +102,15 @@ func ipRuleKind(prefix string) string {
 // InspectSource reads only the explicit binding; it never infers write ownership
 // from credential SourceConfig or the controller's general runtime settings.
 func InspectSource(ctx context.Context, target config.Target) (Source, error) {
+	return inspectSource(ctx, target, Options{})
+}
+
+// InspectSourceWithOptions uses the same explicitly bound owner and guards as
+// preview/apply while allowing an OS-specific host protocol to be injected.
+func InspectSourceWithOptions(ctx context.Context, target config.Target, opts Options) (Source, error) {
+	return inspectSource(ctx, target, opts)
+}
+func inspectSource(ctx context.Context, target config.Target, opts Options) (Source, error) {
 	if target.TransportOverride {
 		return Source{}, errors.New("persistent rule repair requires a saved endpoint and SSH host; save the target and explicitly rebind its rule source first")
 	}
@@ -121,7 +130,7 @@ func InspectSource(ctx context.Context, target config.Target) (Source, error) {
 			}
 		}
 	} else {
-		manifest, err := readHost(ctx, target.SSHHost, filepath.Join(s.DataDir, "profiles.yaml"))
+		manifest, err := readSourceHost(ctx, target, hostpath.Join(target.HostOS, s.DataDir, "profiles.yaml"), opts)
 		if err != nil {
 			return source, err
 		}
@@ -168,15 +177,15 @@ func InspectSource(ctx context.Context, target config.Target) (Source, error) {
 			if item.UID != rulesUID && item.UID != mergeUID && item.UID != scriptUID && item.UID != "Merge" && item.UID != "Script" {
 				continue
 			}
-			path, err := companionPath(s.DataDir, item.File)
+			path, err := companionPathForOS(target.HostOS, s.DataDir, item.File)
 			if err != nil {
 				return source, err
 			}
-			f, err := readHost(ctx, target.SSHHost, path)
+			f, err := readSourceHost(ctx, target, path, opts)
 			if err != nil {
 				return source, err
 			}
-			if !within(filepath.Join(filepath.Dir(manifest.Resolved), "profiles"), f.Resolved) {
+			if !hostpath.Within(target.HostOS, hostpath.Join(target.HostOS, hostpath.Dir(target.HostOS, manifest.Resolved), "profiles"), f.Resolved) {
 				return source, errors.New("Verge companion resolves outside its profiles directory")
 			}
 			if item.UID == rulesUID {
@@ -203,7 +212,7 @@ func InspectSource(ctx context.Context, target config.Target) (Source, error) {
 			return source, errors.New("the current profile Rules companion is absent from the Verge index")
 		}
 	}
-	f, err := readHost(ctx, target.SSHHost, source.File)
+	f, err := readSourceHost(ctx, target, source.File, opts)
 	if err != nil {
 		return source, err
 	}
@@ -213,18 +222,25 @@ func InspectSource(ctx context.Context, target config.Target) (Source, error) {
 }
 
 func companionPath(dataDir, file string) (string, error) {
-	if file == "" || filepath.IsAbs(file) || strings.IndexFunc(file, unicode.IsControl) >= 0 {
+	return companionPathForOS("", dataDir, file)
+}
+
+func companionPathForOS(hostOS, dataDir, file string) (string, error) {
+	if file == "" || hostpath.IsAbs(hostOS, file) || strings.IndexFunc(file, unicode.IsControl) >= 0 {
 		return "", errors.New("invalid Verge companion filename")
 	}
-	path := filepath.Join(dataDir, "profiles", file)
-	if !within(filepath.Join(dataDir, "profiles"), path) {
+	if hostOS == "windows" && (strings.HasPrefix(strings.ReplaceAll(file, `\`, "/"), "/") || strings.Contains(file, ":")) {
+		return "", errors.New("Verge companion filename must be relative to its profiles directory")
+	}
+	root := hostpath.Join(hostOS, dataDir, "profiles")
+	path := hostpath.Join(hostOS, root, file)
+	if !hostpath.Within(hostOS, root, path) {
 		return "", errors.New("Verge companion escapes its profiles directory")
 	}
 	return path, nil
 }
 func within(root, path string) bool {
-	rel, err := filepath.Rel(root, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+	return hostpath.Within("", root, path)
 }
 
 func decodeYAML(data []byte) (*yaml.Node, error) {

@@ -11,7 +11,8 @@ type Config struct {
 }
 
 type Target struct {
-	TransportOverride bool              `toml:"-" json:"-"` // temporary endpoint/SSH rebinding; never a persistent rule owner
+	HostOS            string            `toml:"host_os,omitempty" json:"host_os,omitempty"` // platform of remote source paths; credentials remain controller-local
+	TransportOverride bool              `toml:"-" json:"-"`                                 // temporary endpoint/SSH rebinding; never a persistent rule owner
 	ID                string            `toml:"id" json:"id"`
 	Name              string            `toml:"name,omitempty" json:"name,omitempty"`
 	Controller        string            `toml:"controller" json:"controller"`

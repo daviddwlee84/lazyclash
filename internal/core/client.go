@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daviddwlee84/lazyclash/internal/hostpath"
 	"io"
 	"net"
 	"net/http"
@@ -463,7 +464,7 @@ func (c *Client) HealthcheckProvider(ctx context.Context, name string) error {
 
 func (c *Client) ApplyConfig(ctx context.Context, configPath string) (Object, error) {
 	const op = "apply YAML configuration"
-	if !path.IsAbs(configPath) || configPath == "/" || strings.ContainsAny(configPath, "\x00\r\n") {
+	if (!path.IsAbs(configPath) && !hostpath.IsAbs("windows", configPath)) || configPath == "/" || hostpath.IsRoot("windows", configPath) || strings.ContainsAny(configPath, "\x00\r\n") {
 		return nil, &Error{Kind: KindInvalid, Operation: op}
 	}
 	if _, err := c.object(ctx, http.MethodPut, []string{"configs"}, url.Values{"force": {"true"}}, Object{"path": configPath}, true, op); err != nil {

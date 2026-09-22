@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/configwork"
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/hostpath"
 )
 
 var ErrNoSource = errors.New("no complete YAML source: bind configs source or pass --source-path; --live can inspect an API-only target")
@@ -38,7 +38,7 @@ func SourceFor(t config.Target, explicit string) (Source, error) {
 	case "docker":
 		s.Path = c.HostPath
 	case "verge":
-		s.Path = filepath.Join(c.DataDir, "clash-verge.yaml")
+		s.Path = hostpath.Join(t.HostOS, c.DataDir, "clash-verge.yaml")
 		s.Generated = true
 	}
 	if s.Path == "" {

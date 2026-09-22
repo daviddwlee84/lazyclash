@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daviddwlee84/lazyclash/internal/hostpath"
 	"io"
-	"path/filepath"
 	"strings"
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
@@ -34,10 +34,11 @@ func hash(data []byte) string { v := sha256.Sum256(data); return hex.EncodeToStr
 func Binding(t config.Target) string {
 	v, _ := json.Marshal(struct {
 		ID, Controller, SSH, ManagedCoreID string
+		HostOS                             string `json:",omitempty"`
 		Source                             *config.ConfigSource
 		Configs                            []config.CoreConfig
 		Service                            *config.ClientService `json:",omitempty"`
-	}{t.ID, t.Controller, t.SSHHost, t.ManagedCoreID, t.ConfigSource, t.Configs, t.Service})
+	}{t.ID, t.Controller, t.SSHHost, t.ManagedCoreID, t.HostOS, t.ConfigSource, t.Configs, t.Service})
 	return hash(v)
 }
 func semantic(n *yaml.Node) string {
@@ -147,7 +148,7 @@ func inspectWithOptions(ctx context.Context, t config.Target, opts Options) (*so
 		s.dockerSourceSHA, s.dockerSingleFile = d.SourceSHA256, d.SingleFile
 		s.Warnings = append(s.Warnings, "The host source is edited through its verified container bind mount; reload uses the container path.")
 	case "verge":
-		manifest := filepath.Join(c.DataDir, "profiles.yaml")
+		manifest := hostpath.Join(t.HostOS, c.DataDir, "profiles.yaml")
 		n, e := s.read(ctx, t, manifest)
 		if e != nil {
 			return nil, e
@@ -173,12 +174,12 @@ func inspectWithOptions(ctx context.Context, t config.Target, opts Options) (*so
 		}
 		pathFor := func(item *yaml.Node) (string, error) {
 			file := scalar(item, "file")
-			if file == "" || filepath.IsAbs(file) {
+			if file == "" || hostpath.IsAbs(t.HostOS, file) || hostpath.IsAbs("windows", file) || strings.Contains(file, `\`) {
 				return "", errors.New("invalid Verge file binding")
 			}
-			p := filepath.Join(c.DataDir, "profiles", file)
-			rel, e := filepath.Rel(filepath.Join(c.DataDir, "profiles"), p)
-			if e != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			p := hostpath.Join(t.HostOS, c.DataDir, "profiles", file)
+			rel, e := hostpath.Rel(t.HostOS, hostpath.Join(t.HostOS, c.DataDir, "profiles"), p)
+			if e != nil || rel == ".." || strings.HasPrefix(rel, "../") {
 				return "", errors.New("Verge profile path escapes its directory")
 			}
 			return p, nil
@@ -261,7 +262,7 @@ func inspectWithOptions(ctx context.Context, t config.Target, opts Options) (*so
 				}
 			}
 		}
-		s.runtime = filepath.Join(c.DataDir, "clash-verge.yaml")
+		s.runtime = hostpath.Join(t.HostOS, c.DataDir, "clash-verge.yaml")
 		s.Warnings = append(s.Warnings, "Saves are persistent companions. Reactivate the profile in Clash Verge; later Merge/Script can override them.")
 	}
 	if s.base == "" {
@@ -271,13 +272,13 @@ func inspectWithOptions(ctx context.Context, t config.Target, opts Options) (*so
 		return nil, e
 	}
 	if c.Kind == "verge" {
-		root := filepath.Join(filepath.Dir(s.files[filepath.Join(c.DataDir, "profiles.yaml")].Resolved), "profiles")
+		root := hostpath.Join(t.HostOS, hostpath.Dir(t.HostOS, s.files[hostpath.Join(t.HostOS, c.DataDir, "profiles.yaml")].Resolved), "profiles")
 		for p, f := range s.files {
-			if p == filepath.Join(c.DataDir, "profiles.yaml") {
+			if p == hostpath.Join(t.HostOS, c.DataDir, "profiles.yaml") {
 				continue
 			}
-			rel, e := filepath.Rel(root, f.Resolved)
-			if e != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			rel, e := hostpath.Rel(t.HostOS, root, f.Resolved)
+			if e != nil || rel == ".." || strings.HasPrefix(rel, "../") {
 				return nil, errors.New("Verge companion symlink resolves outside profiles")
 			}
 		}

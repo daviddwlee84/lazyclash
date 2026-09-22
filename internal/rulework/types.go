@@ -14,6 +14,12 @@ type Options struct {
 	ReadOnly bool
 	StateDir string
 	Open     func(context.Context, config.Target, bool) (*core.Client, io.Closer, error)
+	// Host implements the closed source-file protocol for an explicitly bound
+	// owner, including OS-specific isolated validation. Nil keeps POSIX I/O.
+	Host func(context.Context, config.Target, HostRequest) (HostFile, error)
+	// ActivateOwner is supplied only for an explicitly managed GUI installation.
+	// A pending receipt is durable before this callback can reload its owner.
+	ActivateOwner func(context.Context, config.Target) error
 	// Validate is a narrow injection point for isolated fixtures. Production
 	// leaves it nil to enforce host sandboxing and exact core-version matching.
 	Validate func(context.Context, config.Target, []byte, string) error

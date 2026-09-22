@@ -237,7 +237,7 @@ func preserve(raw []byte, cfg Config) ([]byte, error) {
 			{"secret_env", t.SecretEnv}, {"ca_file", t.CAFile}, {"ssh_host", t.SSHHost}, {"source_config", t.SourceConfig},
 			{"probe_proxy", t.ProbeProxy}, {"probe_username", t.ProbeUsername}, {"probe_password_env", t.ProbePasswordEnv},
 			{"probe_password_file", t.ProbePasswordFile}, {"probe_ca_file", t.ProbeCAFile},
-			{"managed_core_id", t.ManagedCoreID},
+			{"managed_core_id", t.ManagedCoreID}, {"host_os", t.HostOS},
 		})
 		if err != nil {
 			return nil, err

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 )
 
@@ -55,6 +56,20 @@ func hostCall(ctx context.Context, host string, req hostRequest) (hostFile, erro
 		return hostFile{}, fmt.Errorf("rule source: %s", response.Error)
 	}
 	return response.File, nil
+}
+
+func sourceHostCall(ctx context.Context, target config.Target, req hostRequest, opts Options) (hostFile, error) {
+	if opts.Host != nil {
+		return opts.Host(ctx, target, req)
+	}
+	if target.HostOS == "windows" {
+		return hostFile{}, errors.New("Windows rule sources require an explicitly bound owner host adapter")
+	}
+	return hostCall(ctx, target.SSHHost, req)
+}
+
+func readSourceHost(ctx context.Context, target config.Target, path string, opts Options) (hostFile, error) {
+	return sourceHostCall(ctx, target, hostRequest{Op: "read", Path: path}, opts)
 }
 
 func readHost(ctx context.Context, host, path string) (hostFile, error) {

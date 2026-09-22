@@ -26,11 +26,17 @@ func binding(target config.Target) string {
 			}
 		}
 	}
+	windowsOwner := ""
+	if target.HostOS == "windows" {
+		windowsOwner = target.ManagedCoreID
+	}
 	data, _ := json.Marshal(struct {
 		ID, Controller, SSH string
+		HostOS              string `json:",omitempty"`
+		WindowsOwner        string `json:",omitempty"`
 		Source              *config.RuleSource
 		ConfigPath          string
-	}{target.ID, target.Controller, target.SSHHost, target.RuleSource, configPath})
+	}{target.ID, target.Controller, target.SSHHost, target.HostOS, windowsOwner, target.RuleSource, configPath})
 	return sha(data)
 }
 
@@ -55,7 +61,7 @@ func previewRule(ctx context.Context, target config.Target, domain, prefix, poli
 	if policy == "" || len(policy) > 4096 || strings.Contains(policy, ",") || strings.IndexFunc(policy, unicode.IsControl) >= 0 {
 		return plan, errors.New("policy must be an existing proxy or group name without commas or control characters")
 	}
-	source, err := InspectSource(ctx, target)
+	source, err := inspectSource(ctx, target, opts)
 	if err != nil {
 		return plan, err
 	}
@@ -139,7 +145,7 @@ func applyRule(ctx context.Context, target config.Target, value, policy, expecte
 			return Receipt{}, err
 		}
 	}
-	if _, err = hostCall(ctx, target.SSHHost, hostRequest{Op: "check", Guards: plan.Owner.guards}); err != nil {
+	if _, err = sourceHostCall(ctx, target, hostRequest{Op: "check", Guards: plan.Owner.guards}, opts); err != nil {
 		return Receipt{}, err
 	}
 	now := time.Now().UTC()
@@ -157,7 +163,7 @@ func applyRule(ctx context.Context, target config.Target, value, policy, expecte
 	}
 	if !plan.NoChange {
 		var written hostFile
-		written, err = hostCall(ctx, target.SSHHost, hostRequest{Op: "write", Path: plan.Owner.File, Data: plan.after, Guards: plan.Owner.guards})
+		written, err = sourceHostCall(ctx, target, hostRequest{Op: "write", Path: plan.Owner.File, Data: plan.after, Guards: plan.Owner.guards}, opts)
 		if err != nil {
 			receipt.Status = "write_result_unknown"
 			receipt.Message = "The file write was not confirmed. Verify this receipt before retrying."
@@ -169,8 +175,16 @@ func applyRule(ctx context.Context, target config.Target, value, policy, expecte
 	if receipt.Owner == "verge" {
 		receipt.Status = "persisted_pending_owner_reload"
 		receipt.Message = "Rule saved to the current profile Rules companion. Reactivate Profiles in Clash Verge, then verify this receipt. Later Merge or Script rules can override it."
-		err = saveReceipt(opts, receipt)
-		return receipt, err
+		if err = saveReceipt(opts, receipt); err != nil {
+			return receipt, err
+		}
+		if target.ManagedCoreID != "" && opts.ActivateOwner != nil {
+			if err = opts.ActivateOwner(ctx, target); err != nil {
+				return receipt, err
+			}
+			return Verify(ctx, target, receipt.ID, opts)
+		}
+		return receipt, nil
 	}
 	receipt.Status = "persisted_pending_apply"
 	if err = saveReceipt(opts, receipt); err != nil {
@@ -230,7 +244,7 @@ func Verify(ctx context.Context, target config.Target, id string, opts Options) 
 	if r.Binding != binding(target) {
 		return r, errors.New("receipt belongs to a different target or source binding")
 	}
-	source, err := InspectSource(ctx, target)
+	source, err := inspectSource(ctx, target, opts)
 	if err != nil {
 		return r, err
 	}
@@ -313,7 +327,7 @@ func Restore(ctx context.Context, target config.Target, id string, opts Options)
 	if r.Binding != binding(target) {
 		return r, errors.New("receipt belongs to a different target or source binding")
 	}
-	source, err := InspectSource(ctx, target)
+	source, err := inspectSource(ctx, target, opts)
 	if err != nil {
 		return r, err
 	}
@@ -353,7 +367,7 @@ func Restore(ctx context.Context, target config.Target, id string, opts Options)
 	if err = saveReceipt(opts, r); err != nil {
 		return r, err
 	}
-	written, err := hostCall(ctx, target.SSHHost, hostRequest{Op: "write", Path: r.File, Data: backup, Guards: source.guards})
+	written, err := sourceHostCall(ctx, target, hostRequest{Op: "write", Path: r.File, Data: backup, Guards: source.guards}, opts)
 	if err != nil {
 		r.Status = "restore_result_unknown"
 		_ = saveReceipt(opts, r)
@@ -377,6 +391,12 @@ func Restore(ctx context.Context, target config.Target, id string, opts Options)
 	}
 	if e := saveReceipt(opts, r); e != nil {
 		return r, e
+	}
+	if r.Owner == "verge" && target.ManagedCoreID != "" && opts.ActivateOwner != nil {
+		if e := opts.ActivateOwner(ctx, target); e != nil {
+			return r, e
+		}
+		return Verify(ctx, target, r.ID, opts)
 	}
 	if err == nil && r.Owner == "mihomo" {
 		return Verify(ctx, target, r.ID, opts)
@@ -426,13 +446,17 @@ func receiptCoreVersion(ctx context.Context, t config.Target, opts Options) (str
 }
 
 func validateCandidate(ctx context.Context, target config.Target, data []byte, version string, opts Options) error {
-	if opts.Validate != nil {
+	if opts.Host == nil && opts.Validate != nil {
 		return opts.Validate(ctx, target, data, version)
 	}
-	return validateCandidateWithSandbox(ctx, target, data, version, ValidationSandbox{})
+	return validateCandidateWithOptions(ctx, target, data, version, ValidationSandbox{}, opts)
 }
 
 func validateCandidateWithSandbox(ctx context.Context, target config.Target, data []byte, version string, sandbox ValidationSandbox) error {
+	return validateCandidateWithOptions(ctx, target, data, version, sandbox, Options{})
+}
+
+func validateCandidateWithOptions(ctx context.Context, target config.Target, data []byte, version string, sandbox ValidationSandbox, opts Options) error {
 	node, err := decodeYAML(data)
 	if err != nil {
 		return err
@@ -441,6 +465,6 @@ func validateCandidateWithSandbox(ctx context.Context, target config.Target, dat
 	if node.Decode(&document) != nil {
 		return errors.New("cannot prepare isolated validation document")
 	}
-	_, err = hostCall(ctx, target.SSHHost, hostRequest{Op: "validate", Binary: target.RuleSource.Binary, Home: target.RuleSource.Home, Version: version, Document: document, ValidationDockerHost: sandbox.DockerHost, ValidationImage: sandbox.Image})
+	_, err = sourceHostCall(ctx, target, hostRequest{Op: "validate", Binary: target.RuleSource.Binary, Home: target.RuleSource.Home, Version: version, Document: document, ValidationDockerHost: sandbox.DockerHost, ValidationImage: sandbox.Image}, opts)
 	return err
 }

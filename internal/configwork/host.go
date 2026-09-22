@@ -46,6 +46,9 @@ func hostOperation(ctx context.Context, t config.Target, req HostRequest, opts O
 	return DefaultHostOperation(ctx, t, req)
 }
 func DefaultHostOperation(ctx context.Context, t config.Target, req HostRequest) (HostResponse, error) {
+	if t.HostOS == "windows" {
+		return HostResponse{}, errors.New("Windows source access requires its explicitly managed host adapter")
+	}
 	var result HostResponse
 	var err error
 	switch req.Op {

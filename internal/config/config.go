@@ -13,6 +13,7 @@ import (
 	"sync"
 	"unicode"
 
+	"github.com/daviddwlee84/lazyclash/internal/hostpath"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -83,6 +84,9 @@ func Validate(cfg Config) error {
 
 // ValidateTarget also validates temporary targets, which need not have an ID.
 func ValidateTarget(t Target) error {
+	if t.HostOS != "" && t.HostOS != "windows" && t.HostOS != "linux" && t.HostOS != "darwin" {
+		return errors.New("host_os must be windows, linux or darwin")
+	}
 	for _, value := range []string{t.SourceConfig, t.SecretFile, t.CAFile, t.SSHHost, t.ProbePasswordFile, t.ProbeCAFile, t.ProbeUsername} {
 		if strings.IndexFunc(value, unicode.IsControl) >= 0 {
 			return errors.New("target paths and SSH host must not contain control characters")
@@ -103,7 +107,7 @@ func ValidateTarget(t Target) error {
 	if t.SecretEnv != "" && !envPattern.MatchString(t.SecretEnv) {
 		return errors.New("invalid secret environment variable name")
 	}
-	if t.SourceConfig != "" && !filepath.IsAbs(t.SourceConfig) {
+	if t.SourceConfig != "" && !hostpath.IsAbs(t.HostOS, t.SourceConfig) {
 		return errors.New("source_config must be an absolute path on the core host")
 	}
 	if t.SecretFile != "" && !filepath.IsAbs(t.SecretFile) {
@@ -124,7 +128,7 @@ func ValidateTarget(t Target) error {
 			return fmt.Errorf("duplicate config ID %q", c.ID)
 		}
 		ids[c.ID] = true
-		if !filepath.IsAbs(c.Path) || strings.ContainsAny(c.Path, "\r\n\x00") {
+		if !hostpath.IsAbs(t.HostOS, c.Path) || strings.ContainsAny(c.Path, "\r\n\x00") {
 			return errors.New("registered YAML paths must be absolute paths on the core host")
 		}
 	}
@@ -163,7 +167,7 @@ func ValidateConfigSource(t Target) error {
 	}
 	switch s.Kind {
 	case "native", "mihomo":
-		if s.ConfigID == "" || !filepath.IsAbs(s.Binary) || !filepath.IsAbs(s.Home) || s.Home == "/" || s.Container != "" || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" || s.HostPath != "" || s.CorePath != "" || s.DockerHost != "" {
+		if s.ConfigID == "" || !hostpath.IsAbs(t.HostOS, s.Binary) || !hostpath.IsAbs(t.HostOS, s.Home) || hostpath.IsRoot(t.HostOS, s.Home) || s.Container != "" || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" || s.HostPath != "" || s.CorePath != "" || s.DockerHost != "" {
 			return errors.New("native config source requires config_id, absolute binary/home, and no Docker/Verge fields")
 		}
 		for _, c := range t.Configs {
@@ -176,7 +180,7 @@ func ValidateConfigSource(t Target) error {
 		if s.DockerHost != "" && !ValidDockerHost(s.DockerHost) {
 			return errors.New("Docker host must be an absolute unix socket on the selected host")
 		}
-		if !idPattern.MatchString(s.Container) || !filepath.IsAbs(s.HostPath) || s.HostPath == "/" || !filepath.IsAbs(s.CorePath) || s.CorePath == "/" || !filepath.IsAbs(s.Binary) || !filepath.IsAbs(s.Home) || s.Home == "/" || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" {
+		if !idPattern.MatchString(s.Container) || !hostpath.IsAbs(t.HostOS, s.HostPath) || hostpath.IsRoot(t.HostOS, s.HostPath) || !filepath.IsAbs(s.CorePath) || s.CorePath == "/" || !hostpath.IsAbs(t.HostOS, s.Binary) || !hostpath.IsAbs(t.HostOS, s.Home) || hostpath.IsRoot(t.HostOS, s.Home) || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" {
 			return errors.New("Docker source requires container, host_path, core_path, binary and home; host/container paths are distinct")
 		}
 		if s.ConfigID != "" {
@@ -189,10 +193,10 @@ func ValidateConfigSource(t Target) error {
 		}
 		return nil
 	case "verge":
-		if s.Version != "2.5.2" || !filepath.IsAbs(s.DataDir) || s.DataDir == "/" || s.ProfileUID == "" || s.ConfigID != "" || s.HostPath != "" || s.CorePath != "" || s.Container != "" || s.DockerHost != "" {
+		if s.Version != "2.5.2" || !hostpath.IsAbs(t.HostOS, s.DataDir) || hostpath.IsRoot(t.HostOS, s.DataDir) || s.ProfileUID == "" || s.ConfigID != "" || s.HostPath != "" || s.CorePath != "" || s.Container != "" || s.DockerHost != "" {
 			return errors.New("Verge config source requires declared version 2.5.2, data_dir and profile_uid")
 		}
-		if (s.Binary == "") != (s.Home == "") || (s.Binary != "" && (!filepath.IsAbs(s.Binary) || !filepath.IsAbs(s.Home) || s.Home == "/")) {
+		if (s.Binary == "") != (s.Home == "") || (s.Binary != "" && (!hostpath.IsAbs(t.HostOS, s.Binary) || !hostpath.IsAbs(t.HostOS, s.Home) || hostpath.IsRoot(t.HostOS, s.Home))) {
 			return errors.New("optional Verge validator requires both absolute binary and home paths")
 		}
 		return nil
@@ -213,7 +217,7 @@ func ValidateRuleSource(t Target) error {
 	}
 	switch s.Kind {
 	case "mihomo":
-		if s.ConfigID == "" || !filepath.IsAbs(s.Binary) || !filepath.IsAbs(s.Home) || s.Home == "/" || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" {
+		if s.ConfigID == "" || !hostpath.IsAbs(t.HostOS, s.Binary) || !hostpath.IsAbs(t.HostOS, s.Home) || hostpath.IsRoot(t.HostOS, s.Home) || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" {
 			return errors.New("mihomo rule source requires a registered config_id, absolute binary and home, and no Verge fields")
 		}
 		for _, c := range t.Configs {
@@ -226,7 +230,7 @@ func ValidateRuleSource(t Target) error {
 		if s.Version != "2.5.2" {
 			return errors.New("Verge rule repair supports declared owner version 2.5.2; set --owner-version 2.5.2 only for that compatible owner")
 		}
-		if !filepath.IsAbs(s.DataDir) || s.DataDir == "/" || s.ProfileUID == "" || s.ConfigID != "" || s.Binary != "" || s.Home != "" {
+		if !hostpath.IsAbs(t.HostOS, s.DataDir) || hostpath.IsRoot(t.HostOS, s.DataDir) || s.ProfileUID == "" || s.ConfigID != "" || s.Binary != "" || s.Home != "" {
 			return errors.New("Verge rule source requires an absolute data_dir and profile_uid, and no standalone fields")
 		}
 		return nil
