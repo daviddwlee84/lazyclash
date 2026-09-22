@@ -250,6 +250,10 @@ func preserve(raw []byte, cfg Config) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		b, err = patchClientService(b, t.Service)
+		if err != nil {
+			return nil, err
+		}
 		bs, err := arrayBlocks(b, "targets.configs")
 		if err != nil {
 			return nil, err
@@ -307,7 +311,7 @@ func patchConfigSource(raw []byte, source *ConfigSource) ([]byte, error) {
 	if start >= 0 {
 		b = raw[start:end]
 	}
-	b, err = patchFields(b, "targets.config_source", []field{{"kind", source.Kind}, {"config_id", source.ConfigID}, {"host_path", source.HostPath}, {"core_path", source.CorePath}, {"binary", source.Binary}, {"home", source.Home}, {"container", source.Container}, {"version", source.Version}, {"data_dir", source.DataDir}, {"profile_uid", source.ProfileUID}})
+	b, err = patchFields(b, "targets.config_source", []field{{"kind", source.Kind}, {"config_id", source.ConfigID}, {"host_path", source.HostPath}, {"core_path", source.CorePath}, {"binary", source.Binary}, {"home", source.Home}, {"container", source.Container}, {"docker_host", source.DockerHost}, {"validation_docker_host", source.ValidationDockerHost}, {"validation_image", source.ValidationImage}, {"version", source.Version}, {"data_dir", source.DataDir}, {"profile_uid", source.ProfileUID}})
 	if err != nil {
 		return nil, err
 	}

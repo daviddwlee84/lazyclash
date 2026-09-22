@@ -1,12 +1,14 @@
-import json, os, subprocess, sys, tempfile
+import hashlib, json, os, subprocess, sys, tempfile
 def fail(s): raise ValueError(s)
 def run(args, **kwargs):
-    p=subprocess.run(['docker']+args,capture_output=True,timeout=35,**kwargs)
+    env=kwargs.pop('env',dict(os.environ))
+    env.pop('DOCKER_HOST',None); env.pop('DOCKER_CONTEXT',None)
+    p=subprocess.run(['docker']+(['--host',endpoint] if endpoint else [])+args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=35,env=env,**kwargs)
     if p.returncode: fail('Docker source operation failed; check local daemon, bound container, mounts and offline validation resources')
     return p.stdout
 try:
     r=json.load(sys.stdin)
-    endpoint=os.environ.get('DOCKER_HOST','')
+    endpoint=r.get('docker_host') or os.environ.get('DOCKER_HOST','')
     if not endpoint:
         contexts=json.loads(run(['context','inspect']))
         endpoint=contexts[0].get('Endpoints',{}).get('docker',{}).get('Host','') if len(contexts)==1 else ''
@@ -14,13 +16,13 @@ try:
     inspect=json.loads(run(['inspect',r['container']]))
     if len(inspect)!=1: fail('Docker container identity is ambiguous')
     item=inspect[0]; cid=item['Id']; image=item['Image']
-    matched=False
+    matched=False; single_file=False
     for mount in item.get('Mounts',[]):
         dest=mount.get('Destination','')
         rel=os.path.relpath(r['core_path'],dest)
         if mount.get('Type')=='bind' and rel!='..' and not rel.startswith('../'):
             candidate=os.path.normpath(os.path.join(mount['Source'],rel))
-            if os.path.realpath(candidate)==os.path.realpath(r['host_path']): matched=True
+            if os.path.realpath(candidate)==os.path.realpath(r['host_path']): matched=True; single_file=(rel=='.')
     if not matched: fail('host_path does not map to core_path through a container bind mount')
     if not item.get('State',{}).get('Running'): fail('bound Docker container is not running')
     if r['op']=='validate':
@@ -74,6 +76,8 @@ exec "$binary" -t -d /lazyclash-validation -f /lazyclash-validation/candidate.js
             for src,dst,required in copies: args += [src,dst,'yes' if required else 'no']
             run(args,env={k:v for k,v in os.environ.items() if not k.startswith('CLASH_') and k not in ('SAFE_PATHS','SKIP_SAFE_PATH_CHECK')})
     elif r['op']!='inspect': fail('invalid Docker operation')
-    print(json.dumps({'container_id':cid,'image':image}))
+    visible=run(['exec',cid,'cat',r['core_path']])
+    if len(visible)>8*1024*1024: fail('Container configuration exceeds the size limit')
+    print(json.dumps({'container_id':cid,'image':image,'source_sha256':hashlib.sha256(visible).hexdigest(),'single_file':single_file}))
 except ValueError as e: print(json.dumps({'error':str(e)}))
 except Exception: print(json.dumps({'error':'Docker source inspection or isolated validation failed; no credentials are shown'}))

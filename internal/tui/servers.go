@@ -8,7 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-const serverHelpText = "Servers / VPS\n↑↓ or j/k select · Tab switches list/details · Enter inspects selected remote status\nr reloads local inventory and refreshes selected row · a opens shared CLI actions\nn deploys to an existing SSH host or creates a cloud VPS · t registers a Tailnet device or sets up an exit · p deploys a Tailnet proxy\nCloud choices include Azure, AWS Lightsail / EC2, Oracle, Vultr, Linode and DigitalOcean.\nTailnet actions select/release exits or manage owned proxies without stopping Tailscale.\nProxy-service start/stop/remove and VPS power/delete are separate actions. Azure stop deallocates; retained disks / IPs still bill. Lightsail stop keeps the full bundle charge.\nExports contain credentials. Client import previews the selected persistent configuration source.\nEsc returns from help, then closes the view; pending reads are canceled and late results are discarded."
+const serverHelpText = "Servers / VPS\n↑↓ or j/k select · Tab switches list/details · Enter inspects selected remote status\nr reloads local inventory and refreshes selected row · u reads selected VM usage · a opens shared CLI actions\nn deploys to an existing SSH host or creates a cloud VPS · t registers a Tailnet device or sets up an exit · p deploys a Tailnet proxy\nCloud choices include Azure, AWS Lightsail / EC2, Oracle, Vultr, Linode and DigitalOcean.\nTailnet actions select/release exits or manage owned proxies without stopping Tailscale.\nProxy-service start/stop/remove and VPS power/delete are separate actions. Azure stop deallocates; retained disks / IPs still bill. Lightsail stop keeps the full bundle charge.\nExports contain credentials. Client import previews the selected persistent configuration source.\nEsc returns from help, then closes the view; pending reads are canceled and late results are discarded."
 
 func (m *Model) serverWork() bool {
 	return m.work != nil && strings.HasPrefix(m.work.request.Kind, "servers-")
@@ -37,16 +37,25 @@ func (m *Model) selectedServerRow() (WorkRow, bool) {
 // The inventory read is separate from remote observation: its result can render
 // before SSH or a cloud CLI responds, and navigation stays usable during I/O.
 func (m *Model) refreshServerWork(remote bool) tea.Cmd {
+	kind := "servers-list"
+	if remote {
+		kind = "servers-status"
+	}
+	return m.refreshServerRequest(kind)
+}
+
+func (m *Model) refreshServerRequest(kind string) tea.Cmd {
 	if !m.serverWork() || m.work.pending || m.options.Workbench == nil {
 		return nil
 	}
-	req := WorkRequest{Kind: "servers-list"}
+	req := WorkRequest{Kind: kind}
+	remote := kind != "servers-list"
 	if remote {
 		row, ok := m.selectedServerRow()
 		if !ok {
 			return nil
 		}
-		req.Kind, req.Receipt = "servers-status", row.ID
+		req.Receipt = row.ID
 	}
 	m.workSerial++
 	ctx, cancel := context.WithTimeout(m.ctx, 90*time.Second)
@@ -97,7 +106,9 @@ func (m *Model) receiveServerWork(msg workMsg) tea.Cmd {
 func (m *Model) serverButtons() []button {
 	_, has := m.selectedServerRow()
 	idle := !m.toolPending
-	return []button{{"server-deploy", "n Deploy", idle && !m.options.ReadOnly}, {"server-tailnet", "t Tailnet", idle && !m.options.ReadOnly}, {"server-tailnet-proxy", "p Proxy", idle && !m.options.ReadOnly}, {"server-actions", "a Actions", idle && has}, {"server-refresh", "r Refresh", idle}, {"server-help", "? Help", true}}
+	row, _ := m.selectedServerRow()
+	hasUsage := has && (strings.HasPrefix(row.ID, "host:") || strings.HasPrefix(row.ID, "server:"))
+	return []button{{"server-deploy", "n Deploy", idle && !m.options.ReadOnly}, {"server-usage", "u Usage", idle && hasUsage}, {"server-actions", "a Actions", idle && has}, {"server-tailnet", "t Tailnet", idle && !m.options.ReadOnly}, {"server-tailnet-proxy", "p Proxy", idle && !m.options.ReadOnly}, {"server-refresh", "r Refresh", idle}, {"server-help", "? Help", true}}
 }
 
 func (m *Model) serverButton(id string) tea.Cmd {
@@ -137,6 +148,11 @@ func (m *Model) serverButton(id string) tea.Cmd {
 		return m.refreshServerWork(false)
 	case "server-status":
 		return m.refreshServerWork(true)
+	case "server-usage":
+		row, ok := m.selectedServerRow()
+		if ok && (strings.HasPrefix(row.ID, "host:") || strings.HasPrefix(row.ID, "server:")) {
+			return m.refreshServerRequest("servers-usage")
+		}
 	case "server-actions":
 		row, ok := m.selectedServerRow()
 		if !ok {
@@ -185,7 +201,7 @@ func (m *Model) serverKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		m.work.focus = 1
 		return true, nil
 	}
-	for _, binding := range []struct{ key, id string }{{"n", "server-deploy"}, {"t", "server-tailnet"}, {"p", "server-tailnet-proxy"}, {"a", "server-actions"}, {"r", "server-refresh"}, {"enter", "server-status"}, {"?", "server-help"}} {
+	for _, binding := range []struct{ key, id string }{{"n", "server-deploy"}, {"u", "server-usage"}, {"t", "server-tailnet"}, {"p", "server-tailnet-proxy"}, {"a", "server-actions"}, {"r", "server-refresh"}, {"enter", "server-status"}, {"?", "server-help"}} {
 		if msg.String() == binding.key {
 			return true, m.serverButton(binding.id)
 		}

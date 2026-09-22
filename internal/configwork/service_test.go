@@ -484,9 +484,9 @@ func TestManagedHostHookOwnsEverySourceOperation(t *testing.T) {
 					if request.Document == nil || request.Version != "fixture-version" {
 						t.Fatal("validation payload missing")
 					}
-					return HostResponse{ContainerID: "owned-id", Image: "owned-image"}, nil
+					return HostResponse{ContainerID: "owned-id", Image: "owned-image", SourceSHA256: hash(current)}, nil
 				case "docker-inspect":
-					return HostResponse{ContainerID: "owned-id", Image: "owned-image"}, nil
+					return HostResponse{ContainerID: "owned-id", Image: "owned-image", SourceSHA256: hash(current)}, nil
 				default:
 					t.Fatalf("unknown hook op %q", request.Op)
 				}

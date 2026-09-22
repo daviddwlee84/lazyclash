@@ -100,8 +100,8 @@ func (o *options) definitionEditor(cmd *cobra.Command, data []byte) ([]byte, err
 }
 func (o *options) sourceMutationCommand(kind, action string) *cobra.Command {
 	var file, uri, newName, expected string
-	var groups []string
-	var yes, interactive, editor bool
+	var groups, createGroups []string
+	var yes, interactive, editor, adoptExisting bool
 	use := action + " [NAME]"
 	if action == "import" {
 		use = "import"
@@ -142,7 +142,7 @@ func (o *options) sourceMutationCommand(kind, action string) *cobra.Command {
 		if e != nil {
 			return e
 		}
-		req := configwork.Request{Kind: kind, Action: action, Input: input, NewName: newName, Groups: groups}
+		req := configwork.Request{Kind: kind, Action: action, Input: input, NewName: newName, Groups: groups, CreateGroups: createGroups, AdoptExisting: adoptExisting}
 		if len(args) > 0 {
 			req.Name = args[0]
 		}
@@ -151,13 +151,17 @@ func (o *options) sourceMutationCommand(kind, action string) *cobra.Command {
 			return e
 		}
 		var catalog configwork.Catalog
-		e = o.authenticatedDiagnostic(cmd, t, func() error {
-			var err error
-			catalog, err = configwork.Inspect(cmd.Context(), t, o.configWorkOptions(cmd))
-			return err
-		})
-		if e != nil {
-			return e
+		// Noninteractive input reaches Preview's capability gate before source
+		// discovery, so an incompatible classic core receives its real error.
+		if ui || editor {
+			e = o.authenticatedDiagnostic(cmd, t, func() error {
+				var err error
+				catalog, err = configwork.Inspect(cmd.Context(), t, o.configWorkOptions(cmd))
+				return err
+			})
+			if e != nil {
+				return e
+			}
 		}
 		if (action == "edit" || action == "duplicate") && req.Name == "" {
 			if !ui {
@@ -228,7 +232,7 @@ func (o *options) sourceMutationCommand(kind, action string) *cobra.Command {
 				}
 			}
 			if kind == "proxy" {
-				fields = append(fields, wizard.Field{Key: "groups", Label: "Destination groups (comma-separated, optional)", Value: strings.Join(req.Groups, ",")})
+				fields = append(fields, destinationGroupFields(catalog, req.Groups, req.CreateGroups, action != "edit")...)
 			}
 			description := "Unknown YAML fields are preserved. Review contains names and fingerprints, never credential values."
 			for {
@@ -247,7 +251,7 @@ func (o *options) sourceMutationCommand(kind, action string) *cobra.Command {
 						req.Name = values["name"]
 					}
 				}
-				req.Groups = splitNames(values["groups"])
+				req.Groups, req.CreateGroups = destinationGroupValues(catalog, values)
 				p, err := configwork.Preview(cmd.Context(), t, req, o.configWorkOptions(cmd))
 				if err != nil {
 					description = err.Error()
@@ -325,6 +329,12 @@ func (o *options) sourceMutationCommand(kind, action string) *cobra.Command {
 	if kind == "proxy" {
 		c.Flags().StringVar(&uri, "uri", "", "share link (prefer --file - to keep credentials out of shell history)")
 		c.Flags().StringSliceVar(&groups, "group", nil, "existing source group(s) to include the new node")
+		if action != "edit" {
+			c.Flags().StringArrayVar(&createGroups, "create-group", nil, "new select group containing the imported nodes (repeatable)")
+		}
+		if action == "import" {
+			c.Flags().BoolVar(&adoptExisting, "adopt-existing", false, "reuse identical existing nodes; differing definitions remain conflicts")
+		}
 	}
 	c.Flags().StringVar(&newName, "name", "", "explicit new name for duplicate or add")
 	c.Flags().BoolVar(&yes, "yes", false, "apply the reviewed digest")

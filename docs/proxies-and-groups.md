@@ -21,6 +21,12 @@ lazyclash --target server configs source set --kind native --config-id main \
   --binary /usr/local/bin/mihomo --home /srv/mihomo
 ```
 
+Linux native core 若無法使用 bubblewrap，可明確指定 Docker 作為驗證 sandbox：
+在 `configs source set --kind native` 加上 `--validation-docker-host unix:///...`
+與 `--validation-image sha256:...`（必須是已存在的完整 image digest）。它驗證相同
+core bytes、停用網路與 capabilities，保留 host 檔案權限；不拉取 image、不修改
+Docker context 或系統的 user-namespace 限制。這只是驗證 backend，實際 client 仍為 native service。
+
 Docker 必須分清 host source 與 container reload path；這些都是選定 SSH host／daemon
 上的位置。以下是結構範例，請使用實際 mount 與 binary：
 
@@ -34,6 +40,10 @@ lazyclash --target server configs source set --kind docker \
 綁定會核對 container、image、daemon locality 與 bind mount。Directory bind 可看見
 原子替換的新檔案；single-file bind 可能仍持有舊 inode，需要由 container owner
 重新掛載並驗證。缺少 Docker 權限或無法隔離驗證時，在寫入前回報。
+
+Rootless Docker 使用 `--docker-host unix:///run/user/UID/docker.sock`，固定選定主機上的
+daemon，不修改 Docker 的全域 context。若同時綁定 [既有 client service](client-services.md)，
+預覽會揭露 single-file bind 所需的精確容器重啟；寫入後先比對容器內外雜湊，再確認 runtime。
 
 Clash Verge Rev 2.5.2 使用目前 profile 的既有 Proxies／Groups companions：
 
@@ -75,6 +85,16 @@ lazyclash --target server configs verify RECEIPT_ID --json
 預覽列出遮蔽敏感欄位的實際變更；原始檔／上下文改動會使舊 digest 失效。保存、
 核心 reload 和網路可用性是不同結果。遇到 partial／unknown 結果先 inspect／verify；
 不要重送整個變更。`configs restore RECEIPT_ID --yes` 會檢查目前檔案仍符合操作紀錄。
+
+新增／匯入表單可逐一選取來源群組，不需要手打逗號分隔的名稱。`--create-group NAME`
+可在同一次預覽中建立包含新節點的 select 群組；routing rules 與父群組不會自動修改。
+其他群組類型沿用 `groups edit`。Preview 會先檢查協定與 core 相容性，再執行隔離驗證；
+Classic Clash 無法使用的 VLESS／REALITY 不會等到寫入後才回報。
+
+`proxies import --adopt-existing` 與 `servers connect --adopt-existing` 只沿用完整定義一致的
+同名節點，仍可加入選定群組。不同內容會拒絕覆蓋，需另取名稱。完全無配置變更時，
+只保存與驗證 receipt，不重新載入核心。Server connection 紀錄保留節點到 VPS 的關聯，
+供 [雲端用量](vps-usage.md) 查詢使用。
 
 Verge 保存後要在原生 UI 重新啟用 profile，再 Verify。修改其私人節點可以原位保存；
 覆寫完整訂閱 profile 的同名節點可能需要同時建立 group overrides 以保留成員，

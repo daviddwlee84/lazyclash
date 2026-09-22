@@ -92,7 +92,7 @@ func (o *options) serversCommand() *cobra.Command {
 		}
 		return o.output(cmd, inv.Deployments)
 	}})
-	group.AddCommand(o.serverDeployCommand(), o.serverStatusCommand(), o.serverExportCommand(), o.serverConnectCommand(), o.serverManageCommand())
+	group.AddCommand(o.serverDeployCommand(), o.serverStatusCommand(), o.serverExportCommand(), o.serverConnectCommand(), o.serverManageCommand(), o.serverUsageCommand(), o.serverConnectionsCommand())
 	for _, action := range []string{"start", "stop", "restart", "remove", "resume"} {
 		group.AddCommand(o.serverActionCommand(action))
 	}
@@ -515,7 +515,7 @@ func (o *options) serverManageCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		choices := []wizard.Choice{{Value: "status", Label: "Inspect remote service status"}, {Value: "export", Label: "Export client configuration / management backup"}}
+		choices := []wizard.Choice{{Value: "status", Label: "Inspect remote service status"}, {Value: "usage", Label: "Read VM traffic and provider billing usage"}, {Value: "export", Label: "Export client configuration / management backup"}}
 		if !o.readOnly {
 			choices = append(choices, wizard.Choice{Value: "connect", Label: "Add this server to a client"}, wizard.Choice{Value: "start", Label: "Start proxy service"}, wizard.Choice{Value: "stop", Label: "Stop proxy service (VM billing continues)"}, wizard.Choice{Value: "restart", Label: "Restart proxy service"}, wizard.Choice{Value: "resume", Label: "Resume incomplete deployment"}, wizard.Choice{Value: "remove", Label: "Remove service and owned files (keep VPS)"})
 		}
@@ -527,6 +527,8 @@ func (o *options) serverManageCommand() *cobra.Command {
 		switch action {
 		case "status":
 			child = o.serverStatusCommand()
+		case "usage":
+			child = o.serverUsageCommand()
 		case "export":
 			child = o.serverExportCommand()
 		case "connect":
@@ -556,16 +558,16 @@ func (o *options) clientNodeConnectCommand(kind string) *cobra.Command {
 	if kind == "tailnet-proxy" {
 		description = "Review importing a private proxy into a client with Tailnet access"
 	}
-	var interactive, yes, verify bool
+	var interactive, yes, verify, adoptExisting bool
 	var expected string
-	var groups []string
+	var groups, createGroups []string
 	cmd := &cobra.Command{Use: "connect [ID]", Short: description, Args: serverOptionalID, RunE: func(cmd *cobra.Command, args []string) error {
 		defer connection.CloseAuthentications()
 		if err := serverReviewFlags(yes, expected); err != nil {
 			return err
 		}
-		if verify && (yes || len(groups) > 0) {
-			return usage("--verify cannot be combined with --yes or --group")
+		if verify && (yes || len(groups) > 0 || len(createGroups) > 0 || adoptExisting) {
+			return usage("--verify cannot be combined with import or apply flags")
 		}
 		if yes {
 			if err := o.writable(); err != nil {
@@ -645,13 +647,20 @@ func (o *options) clientNodeConnectCommand(kind string) *cobra.Command {
 			return err
 		}
 		if ui {
-			values, e := wizard.Edit(cmd.Context(), wizard.Spec{Title: "Add server to client", Description: "Server: " + id + " · Client: " + target.ID, SubmitLabel: "Preview", Fields: []wizard.Field{{Key: "groups", Label: "Existing client groups (comma separated; optional)", Value: strings.Join(groups, ",")}}}, cmd.InOrStdin(), cmd.OutOrStdout())
+			catalog, e := configwork.Inspect(cmd.Context(), target, workOpts)
 			if e != nil {
 				return e
 			}
-			groups = splitNonempty(values["groups"])
+			fields := destinationGroupFields(catalog, groups, createGroups, true)
+			fields = append(fields, wizard.Field{Key: "adopt", Label: "Link an identical existing node", Kind: wizard.Toggle, Value: fmt.Sprint(adoptExisting), Help: "Different credentials or options remain a conflict; no existing node is overwritten."})
+			values, e := wizard.Edit(cmd.Context(), wizard.Spec{Title: "Add server to client", Description: "Server: " + id + " · Client: " + target.ID, SubmitLabel: "Preview", Fields: fields}, cmd.InOrStdin(), cmd.OutOrStdout())
+			if e != nil {
+				return e
+			}
+			groups, createGroups = destinationGroupValues(catalog, values)
+			adoptExisting = values["adopt"] == "true"
 		}
-		req := configwork.Request{Kind: "proxy", Action: "import", Input: node, Groups: groups}
+		req := configwork.Request{Kind: "proxy", Action: "import", Input: node, Groups: groups, CreateGroups: createGroups, AdoptExisting: adoptExisting}
 		var plan configwork.Plan
 		err = o.authenticatedDiagnostic(cmd, target, func() error {
 			var e error
@@ -690,6 +699,8 @@ func (o *options) clientNodeConnectCommand(kind string) *cobra.Command {
 	cmd.Flags().BoolVar(&verify, "verify", false, "verify/resume the saved import receipt without importing again")
 	cmd.Flags().StringVar(&expected, "expect", "", "reviewed client import digest")
 	cmd.Flags().StringSliceVar(&groups, "group", nil, "existing destination group(s)")
+	cmd.Flags().StringArrayVar(&createGroups, "create-group", nil, "new select group containing this node (repeatable)")
+	cmd.Flags().BoolVar(&adoptExisting, "adopt-existing", false, "link an identical existing node instead of inserting a duplicate")
 	return cmd
 }
 
@@ -920,6 +931,10 @@ func (o *options) runServerWorkbench(ctx context.Context, r tui.WorkRequest) (tu
 	}
 	if len(result.Rows) == 0 {
 		result.Summary = "No servers, VPS or Tailnet devices registered. Press t to set up a Tailnet device. Press n to deploy: create a VPS or register an existing SSH host."
+	}
+	o.appendRecordedServerConnections(ctx, store, inv, &result)
+	if r.Kind == "servers-usage" {
+		return o.serverUsageWorkbench(ctx, r, result)
 	}
 	if r.Kind == "servers-status" {
 		kind, id, _ := strings.Cut(r.Receipt, ":")

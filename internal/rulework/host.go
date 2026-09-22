@@ -15,18 +15,26 @@ import (
 var hostScript string
 
 type hostRequest struct {
-	Op       string      `json:"op"`
-	Path     string      `json:"path,omitempty"`
-	Data     []byte      `json:"data,omitempty"`
-	Guards   []fileGuard `json:"guards,omitempty"`
-	Binary   string      `json:"binary,omitempty"`
-	Home     string      `json:"home,omitempty"`
-	Version  string      `json:"version,omitempty"`
-	Document any         `json:"document,omitempty"`
+	Op                   string      `json:"op"`
+	Path                 string      `json:"path,omitempty"`
+	Data                 []byte      `json:"data,omitempty"`
+	Guards               []fileGuard `json:"guards,omitempty"`
+	Binary               string      `json:"binary,omitempty"`
+	Home                 string      `json:"home,omitempty"`
+	Version              string      `json:"version,omitempty"`
+	Document             any         `json:"document,omitempty"`
+	ValidationDockerHost string      `json:"validation_docker_host,omitempty"`
+	ValidationImage      string      `json:"validation_image,omitempty"`
 }
 
 func hostCall(ctx context.Context, host string, req hostRequest) (hostFile, error) {
-	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	timeout := 45 * time.Second
+	if req.Op == "validate" && (req.ValidationDockerHost != "" || req.ValidationImage != "") {
+		// Leave time for bounded image/daemon checks and container cleanup after
+		// the independent 30-second Mihomo validation deadline expires.
+		timeout = 90 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	body, err := json.Marshal(req)
 	if err != nil {

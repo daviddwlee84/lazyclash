@@ -31,7 +31,11 @@ func sourceCLIFixture(t *testing.T) (string, string) {
 	}))
 	t.Cleanup(server.Close)
 	settings := filepath.Join(dir, "settings.toml")
-	target := config.Target{ID: "saved", Controller: server.URL, Configs: []config.CoreConfig{{ID: "main", Path: source}}, ConfigSource: &config.ConfigSource{Kind: "native", ConfigID: "main", Binary: "/no-execute", Home: dir}}
+	validator := filepath.Join(dir, "validator")
+	if err := os.WriteFile(validator, []byte("#!/bin/sh\nif [ \"$1\" = \"-v\" ]; then printf 'Mihomo Meta fixture test\\n'; fi\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	target := config.Target{ID: "saved", Controller: server.URL, Configs: []config.CoreConfig{{ID: "main", Path: source}}, ConfigSource: &config.ConfigSource{Kind: "native", ConfigID: "main", Binary: validator, Home: dir}}
 	if e := config.Save(settings, config.Config{DefaultTarget: "saved", Targets: []config.Target{target}}); e != nil {
 		t.Fatal(e)
 	}

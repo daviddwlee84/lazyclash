@@ -5,6 +5,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/daviddwlee84/lazyclash/internal/clientservice"
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
 	"go.yaml.in/yaml/v3"
@@ -13,9 +14,10 @@ import (
 const MaxDocument = 8 << 20
 
 type Options struct {
-	ReadOnly bool
-	StateDir string
-	Open     func(context.Context, config.Target, bool) (*core.Client, io.Closer, error)
+	ClientServices clientservice.Options
+	ReadOnly       bool
+	StateDir       string
+	Open           func(context.Context, config.Target, bool) (*core.Client, io.Closer, error)
 	// Validate is only for isolated tests. Production uses the bound validator.
 	Validate func(context.Context, config.Target, []byte, string) error
 	// Host routes operations through an explicitly managed owner, including its
@@ -61,14 +63,16 @@ type Catalog struct {
 	Warnings   []string     `json:"warnings,omitempty"`
 }
 type Request struct {
-	Kind         string   `json:"kind"`   // proxy or group
-	Action       string   `json:"action"` // add, edit, duplicate
-	Name         string   `json:"name,omitempty"`
-	NewName      string   `json:"new_name,omitempty"`
-	Input        []byte   `json:"-"`
-	Groups       []string `json:"groups,omitempty"`
-	Replace      bool     `json:"replace,omitempty"`
-	OriginDigest string   `json:"origin_digest,omitempty"`
+	Kind          string   `json:"kind"`   // proxy or group
+	Action        string   `json:"action"` // add, edit, duplicate
+	Name          string   `json:"name,omitempty"`
+	NewName       string   `json:"new_name,omitempty"`
+	Input         []byte   `json:"-"`
+	Groups        []string `json:"groups,omitempty"`
+	CreateGroups  []string `json:"create_groups,omitempty"`
+	AdoptExisting bool     `json:"adopt_existing,omitempty"`
+	Replace       bool     `json:"replace,omitempty"`
+	OriginDigest  string   `json:"origin_digest,omitempty"`
 }
 type Change struct {
 	Path          string `json:"path"`

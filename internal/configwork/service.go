@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/daviddwlee84/lazyclash/internal/clientservice"
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/core"
@@ -39,10 +40,6 @@ func open(ctx context.Context, t config.Target, ro bool, opts Options) (*core.Cl
 	return c, cleanup, nil
 }
 func Preview(ctx context.Context, t config.Target, req Request, opts Options) (Plan, error) {
-	s, e := inspectWithOptions(ctx, t, opts)
-	if e != nil {
-		return Plan{}, e
-	}
 	c, close, e := open(ctx, t, true, opts)
 	if e != nil {
 		return Plan{}, e
@@ -56,7 +53,36 @@ func Preview(ctx context.Context, t config.Target, req Request, opts Options) (P
 	if v == "" {
 		return Plan{}, errors.New("core version unavailable")
 	}
-	return previewSource(t, s, req, v)
+	if e = checkRequestCompatibility(version, req); e != nil {
+		return Plan{}, e
+	}
+	s, e := inspectWithOptions(ctx, t, opts)
+	if e != nil {
+		return Plan{}, e
+	}
+	p, e := previewSource(t, s, req, v)
+	if e != nil {
+		return Plan{}, e
+	}
+	if e = checkCompatibility(version, p.expected); e != nil {
+		return Plan{}, e
+	}
+	if e = validate(ctx, t, p, opts); e != nil {
+		return Plan{}, e
+	}
+	if p.Owner == "docker" && t.Service != nil {
+		status, err := clientservice.VerifySource(ctx, t, p.source.files[p.source.base].SHA256, opts.ClientServices)
+		if err != nil {
+			return Plan{}, err
+		}
+		if !status.SourceMatches {
+			return Plan{}, errors.New("container source differs from host source; recover the existing import before another change")
+		}
+		if status.SourceSingleFile && len(p.Changes) > 0 {
+			p.Warnings = append(p.Warnings, "The bound Docker client will restart to remount its single-file configuration; active connections can close.")
+		}
+	}
+	return p, nil
 }
 func previewSource(t config.Target, s *source, req Request, version string) (Plan, error) {
 	if req.Kind != "proxy" && req.Kind != "group" {
@@ -66,6 +92,19 @@ func previewSource(t config.Target, s *source, req Request, version string) (Pla
 		return Plan{}, errors.New("a later Verge Merge replaces this section; edit that native owner instead of an ineffective companion")
 	}
 	beforeDefinitions := append(append([]Definition{}, s.Proxies...), s.Groups...)
+	if len(req.CreateGroups) > 0 && (req.Kind != "proxy" || (req.Action != "add" && req.Action != "import" && req.Action != "duplicate")) {
+		return Plan{}, errors.New("new destination groups require adding or importing nodes")
+	}
+	for _, name := range req.CreateGroups {
+		raw, e := encode(mapNode(map[string]any{"name": name, "type": "select", "proxies": []string{}}))
+		if e != nil {
+			return Plan{}, e
+		}
+		if _, e = s.mutate(Request{Kind: "group", Action: "add", Input: raw}); e != nil {
+			return Plan{}, e
+		}
+	}
+	req.Groups = append(append([]string{}, req.Groups...), req.CreateGroups...)
 	var expected []Definition
 	if req.Action == "import" {
 		if req.Kind != "proxy" {
@@ -88,6 +127,12 @@ func previewSource(t config.Target, s *source, req Request, version string) (Pla
 			sub.Action = "add"
 			sub.Input = raw
 			sub.Name = d.Name
+			if old, found := find(s.Proxies, d.Name); found && req.AdoptExisting {
+				if semantic(old.Node) != semantic(d.Node) {
+					return Plan{}, fmt.Errorf("existing node %q differs from the imported definition; choose a new name", d.Name)
+				}
+				sub.Action, sub.Replace = "adopt", true
+			}
 			item, e := s.mutate(sub)
 			if e != nil {
 				return Plan{}, e
@@ -105,6 +150,9 @@ func previewSource(t config.Target, s *source, req Request, version string) (Pla
 		return Plan{}, e
 	}
 	p := Plan{TargetID: t.ID, Owner: s.Kind, Action: req.Action, Kind: req.Kind, Name: expected[0].Name, Warnings: s.Warnings, CoreVersion: version, source: s, expected: expected}
+	if len(req.CreateGroups) > 0 {
+		p.Warnings = append(p.Warnings, "New groups contain the imported nodes; routing rules and parent-group membership are unchanged.")
+	}
 	if len(expected) > 1 {
 		p.Name = fmt.Sprintf("%d nodes", len(expected))
 	}
@@ -138,10 +186,10 @@ func previewSource(t config.Target, s *source, req Request, version string) (Pla
 		Binding, Version, Action, Kind, Name, Input, Origin, DockerID, DockerImage string
 		Changes                                                                    []Change
 		Guards                                                                     []rulework.FileGuard
-		Groups                                                                     []string
-		Replace                                                                    bool
+		Groups, CreateGroups                                                       []string
+		Replace, AdoptExisting                                                     bool
 	}{
-		Binding(t), version, req.Action, req.Kind, req.Name, hash(req.Input), req.OriginDigest, s.dockerID, s.dockerImage, p.Changes, s.guards, req.Groups, req.Replace}
+		Binding(t), version, req.Action, req.Kind, req.Name, hash(req.Input), req.OriginDigest, s.dockerID, s.dockerImage, p.Changes, s.guards, req.Groups, req.CreateGroups, req.Replace, req.AdoptExisting}
 	p.Digest = hashJSON(digest)
 	return p, nil
 }
@@ -161,7 +209,7 @@ func (s *source) mutate(req Request) (Definition, error) {
 	var e error
 	old, exists := find(items, req.Name)
 	switch req.Action {
-	case "edit", "duplicate":
+	case "edit", "duplicate", "adopt":
 		if !exists {
 			return Definition{}, errors.New("raw definition not found; provider/runtime-only nodes must be explicitly imported as a new private node")
 		}
@@ -219,44 +267,46 @@ func (s *source) mutate(req Request) (Definition, error) {
 		return d, e
 	}
 	all := append(append([]Definition{}, s.Proxies...), s.Groups...)
-	if req.Action != "edit" {
+	if req.Action != "edit" && req.Action != "adopt" {
 		if _, ok := find(all, d.Name); ok {
 			return d, errors.New("destination name already exists; choose an explicit new name")
 		}
 	}
 	baseline := append([]Definition{}, s.Groups...)
-	if s.Kind != "verge" {
-		key := "proxies"
-		if req.Kind == "group" {
-			key = "proxy-groups"
-		}
-		owner := s.docs[s.base]
-		if req.Action == "edit" && old.Provider != "" {
-			providerName := old.Provider
-			owner = get(get(owner, "proxy-providers"), providerName)
-			key = "payload"
-		}
-		selectedName := req.Name
-		if req.Action != "edit" {
-			selectedName = d.Name
-		}
-		if e = replaceSeq(owner, key, selectedName, node, req.Action != "edit"); e != nil {
-			return d, e
-		}
-	} else {
-		if req.Action == "edit" && old.Provider != "" {
-			return d, errors.New("provider-backed nodes need an explicit private duplicate; Proxies companion cannot replace a provider entry")
-		}
-		path := s.proxies
-		if req.Kind == "group" {
-			path = s.groups
-		}
-		if req.Action == "edit" {
-			if !editCompanion(s.docs[path], req.Name, node) {
-				overrideCompanion(s.docs[path], req.Name, node)
+	if req.Action != "adopt" {
+		if s.Kind != "verge" {
+			key := "proxies"
+			if req.Kind == "group" {
+				key = "proxy-groups"
+			}
+			owner := s.docs[s.base]
+			if req.Action == "edit" && old.Provider != "" {
+				providerName := old.Provider
+				owner = get(get(owner, "proxy-providers"), providerName)
+				key = "payload"
+			}
+			selectedName := req.Name
+			if req.Action != "edit" {
+				selectedName = d.Name
+			}
+			if e = replaceSeq(owner, key, selectedName, node, req.Action != "edit"); e != nil {
+				return d, e
 			}
 		} else {
-			sequence(s.docs[path], "prepend").Content = append(sequence(s.docs[path], "prepend").Content, clone(node))
+			if req.Action == "edit" && old.Provider != "" {
+				return d, errors.New("provider-backed nodes need an explicit private duplicate; Proxies companion cannot replace a provider entry")
+			}
+			path := s.proxies
+			if req.Kind == "group" {
+				path = s.groups
+			}
+			if req.Action == "edit" {
+				if !editCompanion(s.docs[path], req.Name, node) {
+					overrideCompanion(s.docs[path], req.Name, node)
+				}
+			} else {
+				sequence(s.docs[path], "prepend").Content = append(sequence(s.docs[path], "prepend").Content, clone(node))
+			}
 		}
 	}
 	if e = s.refresh(); e != nil {
@@ -421,10 +471,14 @@ func validateGraph(root *yaml.Node) error {
 	return nil
 }
 func validate(ctx context.Context, t config.Target, p Plan, opts Options) error {
-	if t.ConfigSource.Kind == "verge" {
+	if t.ConfigSource.Kind == "verge" && t.ConfigSource.Binary == "" {
 		return nil
 	}
-	raw, e := encode(p.source.docs[p.source.base])
+	documentNode := p.source.docs[p.source.base]
+	if t.ConfigSource.Kind == "verge" {
+		documentNode = p.source.effective()
+	}
+	raw, e := encode(documentNode)
 	if e != nil {
 		return e
 	}
@@ -447,7 +501,7 @@ func validate(ctx context.Context, t config.Target, p Plan, opts Options) error 
 	if err = node.Decode(&document); err != nil {
 		return errors.New("invalid validation document")
 	}
-	_, err = hostOperation(ctx, t, HostRequest{Op: "validate", Binary: t.ConfigSource.Binary, Home: t.ConfigSource.Home, Version: p.CoreVersion, Document: document}, opts)
+	_, err = hostOperation(ctx, t, HostRequest{Op: "validate", Binary: t.ConfigSource.Binary, Home: t.ConfigSource.Home, Version: p.CoreVersion, Document: document, ValidationDockerHost: t.ConfigSource.ValidationDockerHost, ValidationImage: t.ConfigSource.ValidationImage}, opts)
 	return err
 }
 func refreshGuard(guards []rulework.FileGuard, path, fingerprint string) []rulework.FileGuard {

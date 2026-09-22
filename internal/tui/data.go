@@ -279,6 +279,9 @@ func (m *Model) details(p page) string {
 		if !selectable(group) {
 			out += "\n\nThis group has no manual selection."
 		}
+		if detail := m.options.NodeProvenance[m.target.ID][p.Name]; detail != "" {
+			out += "\n\n" + core.Sanitize(detail)
+		}
 		return out
 	}
 	r, ok := m.selectedRow()

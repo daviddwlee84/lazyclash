@@ -39,6 +39,28 @@ OpenSSH jump hosts; it is independent of the public client endpoint. Router
 forwarding, cloud firewall and host firewall are separate. SSH-only hosts cannot
 be powered on remotely after shutdown without a provider management interface.
 
+Oracle/Azure `vps usage HOST` and `servers usage SERVER` query the current UTC
+month without writes; `--month YYYY-MM` selects a past UTC month and `--json`
+preserves structured observations. `--read-only` is supported. The full month
+must fit Monitoring retention (Oracle 90 days, Azure 93 days); future months and
+older incomplete windows fail before cloud queries. TUI Servers / VPS uses `u`
+for explicit current-month refresh; normal Overview does not poll cloud APIs.
+Registered hosts need `vps bind-cloud HOST --provider oracle|azure --region REGION
+--resource-id ID` plus Oracle `--tenancy`/optional `--profile`, or Azure explicit
+`--subscription`. Preview first, then repeat with the exact reviewed `--yes
+--expect DIGEST`. This only saves observation metadata; it never grants cloud
+ownership or changes VM lifecycle authority. Keep the same inventory scope.
+VM network bytes, provider billing meters and published shared allowances are
+separate. Missing/stale samples are unknown, not zero. Preserve native billing
+units, including `GB Months`, `10 GB` and `1 TB`; do not infer a byte conversion,
+remaining quota, percentage, trial-credit balance or overage. Oracle billing is
+tenancy-scoped; Azure Bandwidth billing is subscription-scoped and supports legacy
+Usage Details only (EA/MCA Cost Details remains unsupported). Billing failures
+do not erase readable VM observations; Disabled Azure subscriptions may retain
+readable history. Multiple target imports share the same VPS usage source.
+See the [VPS usage guide](https://github.com/daviddwlee84/lazyclash/blob/main/docs/vps-usage.md)
+for binding examples, data sources and reporting limitations.
+
 Azure/AWS creation defaults to Ubuntu 24.04 and at least 1 GiB RAM. `--architecture
 auto|amd64|arm64` controls plan compatibility; auto allows ARM. Omitted plans are
 resolved using available low fixed-cost plans in the requested region. Inspect

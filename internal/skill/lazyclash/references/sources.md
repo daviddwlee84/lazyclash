@@ -18,6 +18,14 @@ with `--yes --expect DIGEST`; read `configs verify RECEIPT --json` afterward.
 owner reload, runtime observation and network usability are separate outcomes.
 Inspect a partial/unknown receipt before any retry.
 
+Import/add forms offer one toggle per raw source group. `--create-group NAME`
+creates a select group containing the nodes in the same reviewed change; rules
+and parent groups remain unchanged. `--adopt-existing` on import/server connect
+reuses only a semantically identical node; conflicting credentials/options are
+refused. A no-change adoption saves a receipt without reloading the client.
+Preview checks protocol capabilities and validates with the bound actual core.
+Classic Clash cannot import VLESS/REALITY; do not force the candidate into it.
+
 `groups add/edit/duplicate` preserve ordered explicit members and provider `use`
 separately. An API group's expanded `all` cannot reconstruct filters or provider
 references. Names stay fixed during edit; duplicate under a new name. Check
@@ -34,6 +42,9 @@ Owner behavior:
 - Docker: verify daemon/container/image and host bind mapping. Host source path
   and container reload path differ. A single-file bind can retain old content;
   don't claim activation before the container sees the new source.
+  Use explicit `--docker-host unix:///...` for rootless daemons. A matching
+  `targets service bind` enables reviewed owner restart and byte verification
+  for single-file mounts, without recreating the container.
 - Verge Rev 2.5.2: existing Proxies/Groups companions, manual native reactivation,
   then generated-config/runtime verification. Same-name subscription replacements
   may require group overrides that mask later subscription group updates.

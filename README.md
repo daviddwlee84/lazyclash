@@ -124,6 +124,13 @@ If controller discovery requires authentication, configure a secret reference or
 
 New client and source workflows are available from `:` and the target picker:
 
+Imports offer existing group toggles and new select groups, with protocol/core
+checks before writing. Existing Docker/systemd clients can be explicitly bound
+for reviewed [service control](docs/client-services.md). Linked Oracle/Azure VMs
+have [monthly usage reports](docs/vps-usage.md): press **u Usage** in Servers / VPS,
+or use `servers usage ID`. VM network bytes and shared provider billing meters
+remain separate. Proxy details show recorded server/VPS provenance.
+
 ```sh
 lazyclash setup                                      # client setup wizard
 lazyclash servers deploy                             # server / VPS deployment wizard

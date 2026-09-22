@@ -60,7 +60,13 @@ func (s *Service) call(ctx context.Context, req CreateRequest, args ...string) (
 	default:
 		return nil, fmt.Errorf("provider %q does not expose managed cloud operations", req.Provider)
 	}
-	b, err := s.options.Run(ctx, executable, append(flags, args...))
+	command := append(flags, args...)
+	if req.Provider == "azure" {
+		// Azure CLI command discovery runs before command-scoped global flags;
+		// a leading --subscription makes its UUID look like a command name.
+		command = append(append([]string(nil), args...), flags...)
+	}
+	b, err := s.options.Run(ctx, executable, command)
 	if err != nil {
 		return nil, err
 	}

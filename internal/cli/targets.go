@@ -118,6 +118,7 @@ func (o *options) targetCommands() *cobra.Command {
 		}
 		return o.result(cmd, "Moved "+args[0])
 	}})
+	group.AddCommand(o.targetServiceCommand())
 	group.AddCommand(o.targetWriteCommand(false), o.targetWriteCommand(true), o.targetTestCommand(), o.targetDiffCommand(), o.targetCopySettingsCommand())
 	return group
 }
@@ -194,6 +195,7 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 			if previous.TransportOverride || previous.Controller != oldController || previous.SSHHost != oldSSH {
 				previous.RuleSource = nil
 				previous.ConfigSource = nil
+				previous.Service = nil
 				previous.ManagedCoreID = ""
 			}
 			previous.TransportOverride = false

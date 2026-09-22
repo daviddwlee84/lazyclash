@@ -14,22 +14,26 @@ type HostGuard = rulework.FileGuard
 // HostRequest is a closed operation protocol. It never carries executable code.
 // Docker path fields are copied from the bound source, not inferred from files.
 type HostRequest struct {
-	Op        string      `json:"op"`
-	Path      string      `json:"path,omitempty"`
-	Data      []byte      `json:"data,omitempty"`
-	Guards    []HostGuard `json:"guards,omitempty"`
-	Binary    string      `json:"binary,omitempty"`
-	Home      string      `json:"home,omitempty"`
-	Version   string      `json:"version,omitempty"`
-	Document  any         `json:"document,omitempty"`
-	Container string      `json:"container,omitempty"`
-	HostPath  string      `json:"host_path,omitempty"`
-	CorePath  string      `json:"core_path,omitempty"`
+	Op                   string      `json:"op"`
+	Path                 string      `json:"path,omitempty"`
+	Data                 []byte      `json:"data,omitempty"`
+	Guards               []HostGuard `json:"guards,omitempty"`
+	Binary               string      `json:"binary,omitempty"`
+	Home                 string      `json:"home,omitempty"`
+	Version              string      `json:"version,omitempty"`
+	Document             any         `json:"document,omitempty"`
+	Container            string      `json:"container,omitempty"`
+	HostPath             string      `json:"host_path,omitempty"`
+	CorePath             string      `json:"core_path,omitempty"`
+	ValidationDockerHost string      `json:"validation_docker_host,omitempty"`
+	ValidationImage      string      `json:"validation_image,omitempty"`
 }
 type HostResponse struct {
-	File        HostFile `json:"file"`
-	ContainerID string   `json:"container_id,omitempty"`
-	Image       string   `json:"image,omitempty"`
+	File         HostFile `json:"file"`
+	ContainerID  string   `json:"container_id,omitempty"`
+	Image        string   `json:"image,omitempty"`
+	SourceSHA256 string   `json:"source_sha256,omitempty"`
+	SingleFile   bool     `json:"single_file,omitempty"`
 }
 
 func SourceHostScript() string { return rulework.SourceHostScript() }
@@ -58,7 +62,7 @@ func DefaultHostOperation(ctx context.Context, t config.Target, req HostRequest)
 		if encodeErr != nil {
 			return result, encodeErr
 		}
-		err = rulework.ValidateSourceCandidate(ctx, candidate, raw, req.Version)
+		err = rulework.ValidateSourceCandidateWithSandbox(ctx, candidate, raw, req.Version, rulework.ValidationSandbox{DockerHost: req.ValidationDockerHost, Image: req.ValidationImage})
 	case "docker-inspect", "docker-validate":
 		op := "inspect"
 		var data []byte
@@ -71,6 +75,7 @@ func DefaultHostOperation(ctx context.Context, t config.Target, req HostRequest)
 		}
 		info, e := dockerCall(ctx, t, op, data, req.Version)
 		result.ContainerID, result.Image = info.ContainerID, info.Image
+		result.SourceSHA256, result.SingleFile = info.SourceSHA256, info.SingleFile
 		err = e
 	default:
 		err = errors.New("unknown configuration source operation")

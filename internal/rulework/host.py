@@ -1,4 +1,4 @@
-import base64, contextlib, fcntl, hashlib, json, os, platform, shutil, stat, subprocess, sys, tempfile
+import base64, contextlib, fcntl, hashlib, json, os, platform, re, shutil, stat, subprocess, sys, tempfile, urllib.parse, uuid
 
 LIMIT = 8 * 1024 * 1024
 
@@ -54,20 +54,100 @@ def write(request):
     finally:
         os.close(fd)
 
+def docker_validator(request, stage, env):
+    endpoint = request.get('validation_docker_host', '')
+    image = request.get('validation_image', '')
+    parsed = urllib.parse.urlsplit(endpoint)
+    if platform.system() != 'Linux': fail('native Docker validation requires a Linux core host')
+    if parsed.scheme != 'unix' or parsed.netloc or parsed.query or parsed.fragment or not os.path.isabs(parsed.path) or parsed.path == '/' or urllib.parse.unquote(parsed.path) != parsed.path or any(ord(c) < 32 for c in endpoint):
+        fail('native Docker validation requires an explicit local unix socket')
+    if not re.fullmatch(r'sha256:[a-f0-9]{64}', image): fail('native Docker validation requires a full sha256 ID of an existing image')
+    docker = shutil.which('docker')
+    if not docker: fail('native Docker validation requires Docker on the selected core host')
+    binary = request['binary']
+    if ',' in binary or ',' in stage: fail('native Docker validation paths cannot contain commas')
+    binary_info = os.stat(binary)
+    if not stat.S_ISREG(binary_info.st_mode) or not os.access(binary, os.X_OK): fail('bound validator binary is not an executable regular file')
+    docker_env = {k:v for k,v in env.items() if not k.startswith('DOCKER_')}
+    base = [docker, '--host', endpoint]
+    def inspect(args):
+        result = subprocess.run(base+args, capture_output=True, timeout=5, env=docker_env)
+        if result.returncode: fail('native Docker sandbox is unavailable; check bound socket and existing local image')
+        return json.loads(result.stdout)
+    images = inspect(['image', 'inspect', image])
+    if len(images) != 1 or images[0].get('Id') != image: fail('validation image identity changed')
+    image_config = images[0].get('Config') or {}
+    if image_config.get('Volumes'): fail('validation image declares writable volumes; select an image without VOLUME declarations')
+    info = inspect(['info', '--format', '{{json .}}'])
+    security = info.get('SecurityOptions') or []
+    rootless = 'name=rootless' in security
+    if not rootless and 'name=userns' in security:
+        fail('native Docker validation does not support rootful user namespace remapping')
+    # A rootless daemon maps namespace root to the invoking host user; passing
+    # the host numeric UID again would map to an unrelated subordinate UID.
+    user = '0:0' if rootless else str(os.getuid())+':'+str(os.getgid())
+    # Copy only executable bytes: a live TUN binary may have file capabilities
+    # that cannot execute under cap-drop=ALL. The copy has no inherited xattrs;
+    # the original binary and its capabilities are never changed.
+    binary_copy = os.path.join(stage, '.validator-binary')
+    fingerprint = lambda s: (s.st_dev, s.st_ino, s.st_mode, s.st_size, s.st_mtime_ns)
+    digest = hashlib.sha256()
+    with open(binary, 'rb') as source, open(binary_copy, 'xb') as destination:
+        before = os.fstat(source.fileno())
+        if before.st_size > 256*1024*1024: fail('validator binary exceeds 256 MiB')
+        copied = 0
+        while True:
+            chunk = source.read(1024*1024)
+            if not chunk: break
+            copied += len(chunk)
+            if copied > 256*1024*1024: fail('validator binary exceeds 256 MiB')
+            digest.update(chunk)
+            destination.write(chunk)
+        if fingerprint(before) != fingerprint(os.fstat(source.fileno())) or fingerprint(before) != fingerprint(os.stat(binary)):
+            fail('validator binary changed during isolation setup')
+    copy_digest = hashlib.sha256()
+    with open(binary_copy, 'rb') as copied_binary:
+        for chunk in iter(lambda: copied_binary.read(1024*1024), b''): copy_digest.update(chunk)
+    if copy_digest.digest() != digest.digest(): fail('validator binary copy verification failed')
+    os.chmod(binary_copy, 0o500)
+    args = ['run', '--rm', '--interactive', '--pull=never', '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=64', '--memory=512m', '--user', user, '--workdir', stage,
+            '--mount', 'type=bind,src='+binary_copy+',dst='+binary+',readonly',
+            '--mount', 'type=bind,src='+stage+',dst='+stage]
+    clear = {'CLASH_CONFIG_STRING', 'CLASH_CONFIG_FILE', 'CLASH_HOME_DIR', 'SAFE_PATHS', 'SKIP_SAFE_PATH_CHECK'}
+    for value in image_config.get('Env') or []:
+        key = value.split('=', 1)[0]
+        if key.startswith('CLASH_') or key in ('SAFE_PATHS', 'SKIP_SAFE_PATH_CHECK'): clear.add(key)
+    for key in sorted(clear): args += ['--env', key+'=']
+    def run(command, timeout, input=None):
+        name = 'lazyclash-validation-'+uuid.uuid4().hex
+        try:
+            return subprocess.run(base+args+['--name', name, '--entrypoint', command[0], image]+command[1:], input=input, capture_output=True, timeout=timeout, env=docker_env, cwd=stage)
+        finally:
+            # A killed Docker client does not stop its container. Remove only
+            # this invocation's random name, including on validation timeout.
+            cleanup = subprocess.run(base+['rm', '--force', name], capture_output=True, timeout=5, env=docker_env)
+            if cleanup.returncode and b'No such container' not in cleanup.stderr:
+                fail('could not confirm temporary validation container cleanup')
+    return run
+
 def validate(request):
     # The running core's home is never passed to -d. Mutable databases and
     # providers are copied, not linked, so validation cannot lock or repair them.
     source_home = request['home']
     if not os.path.isabs(source_home) or not os.path.isabs(request['binary']): fail('validator paths must be absolute')
     system = platform.system()
+    docker = bool(request.get('validation_docker_host') or request.get('validation_image'))
     sandbox = shutil.which('sandbox-exec' if system == 'Darwin' else 'bwrap')
-    if system not in ('Darwin','Linux') or not sandbox:
+    if not docker and (system not in ('Darwin','Linux') or not sandbox):
         fail('isolated validation requires sandbox-exec on macOS or bubblewrap (bwrap) on Linux; source was not modified')
-    env = {k:v for k,v in os.environ.items() if not k.startswith('CLASH_') and k != 'SAFE_PATHS'}
+    env = {k:v for k,v in os.environ.items() if not k.startswith('CLASH_') and k not in ('SAFE_PATHS','SKIP_SAFE_PATH_CHECK')}
     try:
         with tempfile.TemporaryDirectory(prefix='lazyclash-rule-check-') as stage:
             os.chmod(stage, 0o700)
-            if system == 'Darwin':
+            if docker:
+                execute = docker_validator(request, stage, env)
+                check = '/bin/true'
+            elif system == 'Darwin':
                 escaped = stage.replace('\\','\\\\').replace('"','\\"')
                 # Darwin reports /var/... aliases but sandbox paths are real.
                 escaped = os.path.realpath(stage).replace('\\','\\\\').replace('"','\\"')
@@ -77,9 +157,12 @@ def validate(request):
             else:
                 prefix = [sandbox,'--die-with-parent','--unshare-net','--unshare-pid','--ro-bind','/','/','--bind',stage,stage,'--dev','/dev','--proc','/proc','--']
                 check = '/bin/true'
-            probe = subprocess.run(prefix+[check],capture_output=True,timeout=5,env=env,cwd=stage)
-            if probe.returncode: fail('OS isolation is unavailable or denied; enable sandbox-exec/macOS or bubblewrap user namespaces/Linux before applying rules')
-            version = subprocess.run(prefix+[request['binary'], '-v'], capture_output=True, timeout=5, env=env,cwd=stage)
+            if not docker:
+                def execute(command, timeout, input=None):
+                    return subprocess.run(prefix+command, input=input, capture_output=True, timeout=timeout, env=env, cwd=stage)
+            probe = execute([check], timeout=5)
+            if probe.returncode: fail('OS isolation is unavailable or denied; use an available native sandbox or explicitly bind an existing Docker validation image')
+            version = execute([request['binary'], '-v'], timeout=5)
             if version.returncode or ('Mihomo Meta ' + request['version'] + ' ') not in version.stdout.decode(errors='replace'):
                 fail('validator binary does not match the connected Mihomo version')
             copied = 0
@@ -124,7 +207,7 @@ def validate(request):
                     for value in node: certificates(value)
             certificates(document)
             candidate = json.dumps(document).encode()
-            process = subprocess.run(prefix+[request['binary'],'-t','-d',stage,'-f','-'],input=candidate,capture_output=True,timeout=30,env=env,cwd=stage)
+            process = execute([request['binary'],'-t','-d',stage,'-f','-'], input=candidate, timeout=30)
             if process.returncode: fail('isolated Mihomo validation failed; source was not modified')
     except subprocess.TimeoutExpired: fail('Mihomo validation timed out; source was not modified')
     return {}

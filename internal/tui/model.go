@@ -21,24 +21,25 @@ import (
 )
 
 type Options struct {
-	RunCommand    func(context.Context, []string, io.Reader, io.Writer, io.Writer) error
-	ReloadTargets func() (config.Config, error)
-	Workbench     func(context.Context, WorkRequest) (WorkResult, error)
-	Config        config.Config
-	InitialTarget string
-	ReadOnly      bool
-	StartPage     string
-	Mouse         *bool
-	GraphStyle    string
-	HistoryWindow time.Duration
-	TestTarget    func(context.Context, config.Target) (string, error)
-	ProbeIP       func(context.Context, config.Target) (string, error)
-	ProbeLatency  func(context.Context, config.Target) (string, error)
-	Open          func(context.Context, config.Target) (*core.Client, io.Closer, error)
-	Discover      func(context.Context) ([]config.Target, error)
-	DiscoverHost  func(context.Context, string) ([]config.Target, error)
-	SaveTargets   func(config.Config) error
-	Authenticate  func(context.Context, string) (*exec.Cmd, error)
+	RunCommand     func(context.Context, []string, io.Reader, io.Writer, io.Writer) error
+	ReloadTargets  func() (config.Config, error)
+	Workbench      func(context.Context, WorkRequest) (WorkResult, error)
+	Config         config.Config
+	InitialTarget  string
+	ReadOnly       bool
+	StartPage      string
+	Mouse          *bool
+	GraphStyle     string
+	HistoryWindow  time.Duration
+	TestTarget     func(context.Context, config.Target) (string, error)
+	NodeProvenance map[string]map[string]string
+	ProbeIP        func(context.Context, config.Target) (string, error)
+	ProbeLatency   func(context.Context, config.Target) (string, error)
+	Open           func(context.Context, config.Target) (*core.Client, io.Closer, error)
+	Discover       func(context.Context) ([]config.Target, error)
+	DiscoverHost   func(context.Context, string) ([]config.Target, error)
+	SaveTargets    func(config.Config) error
+	Authenticate   func(context.Context, string) (*exec.Cmd, error)
 }
 
 type page int
@@ -258,6 +259,10 @@ func cloneSettings(c config.Config) config.Config {
 		if c.Targets[i].RuleSource != nil {
 			source := *c.Targets[i].RuleSource
 			c.Targets[i].RuleSource = &source
+		}
+		if c.Targets[i].Service != nil {
+			service := *c.Targets[i].Service
+			c.Targets[i].Service = &service
 		}
 		if c.Targets[i].ConfigSource != nil {
 			source := *c.Targets[i].ConfigSource

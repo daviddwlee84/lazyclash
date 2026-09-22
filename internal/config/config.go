@@ -128,6 +128,9 @@ func ValidateTarget(t Target) error {
 	if err := ValidateRuleSource(t); err != nil {
 		return err
 	}
+	if err := ValidateClientService(t.Service); err != nil {
+		return err
+	}
 	if err := ValidateConfigSource(t); err != nil {
 		return err
 	}
@@ -142,14 +145,22 @@ func ValidateConfigSource(t Target) error {
 	if s == nil {
 		return nil
 	}
-	for _, v := range []string{s.Kind, s.ConfigID, s.HostPath, s.CorePath, s.Binary, s.Home, s.Container, s.Version, s.DataDir, s.ProfileUID} {
+	for _, v := range []string{s.Kind, s.ConfigID, s.HostPath, s.CorePath, s.Binary, s.Home, s.Container, s.DockerHost, s.ValidationDockerHost, s.ValidationImage, s.Version, s.DataDir, s.ProfileUID} {
 		if len(v) > 4096 || strings.IndexFunc(v, unicode.IsControl) >= 0 {
 			return errors.New("config source fields contain invalid characters")
 		}
 	}
+	if s.ValidationDockerHost != "" || s.ValidationImage != "" {
+		if s.Kind != "native" && s.Kind != "mihomo" {
+			return errors.New("Docker validation sandbox is supported only for native Mihomo sources")
+		}
+		if !ValidDockerHost(s.ValidationDockerHost) || !regexp.MustCompile(`^sha256:[a-f0-9]{64}$`).MatchString(s.ValidationImage) {
+			return errors.New("Docker validation requires both an absolute unix socket and a full sha256 local image ID")
+		}
+	}
 	switch s.Kind {
 	case "native", "mihomo":
-		if s.ConfigID == "" || !filepath.IsAbs(s.Binary) || !filepath.IsAbs(s.Home) || s.Home == "/" || s.Container != "" || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" || s.HostPath != "" || s.CorePath != "" {
+		if s.ConfigID == "" || !filepath.IsAbs(s.Binary) || !filepath.IsAbs(s.Home) || s.Home == "/" || s.Container != "" || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" || s.HostPath != "" || s.CorePath != "" || s.DockerHost != "" {
 			return errors.New("native config source requires config_id, absolute binary/home, and no Docker/Verge fields")
 		}
 		for _, c := range t.Configs {
@@ -159,6 +170,9 @@ func ValidateConfigSource(t Target) error {
 		}
 		return errors.New("config source config_id is not registered")
 	case "docker":
+		if s.DockerHost != "" && !ValidDockerHost(s.DockerHost) {
+			return errors.New("Docker host must be an absolute unix socket on the selected host")
+		}
 		if !idPattern.MatchString(s.Container) || !filepath.IsAbs(s.HostPath) || s.HostPath == "/" || !filepath.IsAbs(s.CorePath) || s.CorePath == "/" || !filepath.IsAbs(s.Binary) || !filepath.IsAbs(s.Home) || s.Home == "/" || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" {
 			return errors.New("Docker source requires container, host_path, core_path, binary and home; host/container paths are distinct")
 		}
@@ -172,8 +186,11 @@ func ValidateConfigSource(t Target) error {
 		}
 		return nil
 	case "verge":
-		if s.Version != "2.5.2" || !filepath.IsAbs(s.DataDir) || s.DataDir == "/" || s.ProfileUID == "" || s.ConfigID != "" || s.HostPath != "" || s.CorePath != "" || s.Container != "" || s.Binary != "" || s.Home != "" {
-			return errors.New("Verge config source requires declared version 2.5.2, data_dir and profile_uid only")
+		if s.Version != "2.5.2" || !filepath.IsAbs(s.DataDir) || s.DataDir == "/" || s.ProfileUID == "" || s.ConfigID != "" || s.HostPath != "" || s.CorePath != "" || s.Container != "" || s.DockerHost != "" {
+			return errors.New("Verge config source requires declared version 2.5.2, data_dir and profile_uid")
+		}
+		if (s.Binary == "") != (s.Home == "") || (s.Binary != "" && (!filepath.IsAbs(s.Binary) || !filepath.IsAbs(s.Home) || s.Home == "/")) {
+			return errors.New("optional Verge validator requires both absolute binary and home paths")
 		}
 		return nil
 	default:

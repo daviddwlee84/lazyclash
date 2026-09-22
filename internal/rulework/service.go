@@ -389,6 +389,10 @@ func validateCandidate(ctx context.Context, target config.Target, data []byte, v
 	if opts.Validate != nil {
 		return opts.Validate(ctx, target, data, version)
 	}
+	return validateCandidateWithSandbox(ctx, target, data, version, ValidationSandbox{})
+}
+
+func validateCandidateWithSandbox(ctx context.Context, target config.Target, data []byte, version string, sandbox ValidationSandbox) error {
 	node, err := decodeYAML(data)
 	if err != nil {
 		return err
@@ -397,6 +401,6 @@ func validateCandidate(ctx context.Context, target config.Target, data []byte, v
 	if node.Decode(&document) != nil {
 		return errors.New("cannot prepare isolated validation document")
 	}
-	_, err = hostCall(ctx, target.SSHHost, hostRequest{Op: "validate", Binary: target.RuleSource.Binary, Home: target.RuleSource.Home, Version: version, Document: document})
+	_, err = hostCall(ctx, target.SSHHost, hostRequest{Op: "validate", Binary: target.RuleSource.Binary, Home: target.RuleSource.Home, Version: version, Document: document, ValidationDockerHost: sandbox.DockerHost, ValidationImage: sandbox.Image})
 	return err
 }

@@ -14,14 +14,16 @@ import (
 var dockerScript string
 
 type dockerInfo struct {
-	ContainerID string `json:"container_id"`
-	Image       string `json:"image"`
-	Error       string `json:"error"`
+	ContainerID  string `json:"container_id"`
+	Image        string `json:"image"`
+	Error        string `json:"error"`
+	SourceSHA256 string `json:"source_sha256"`
+	SingleFile   bool   `json:"single_file"`
 }
 
 func dockerCall(ctx context.Context, t config.Target, op string, data []byte, version string) (dockerInfo, error) {
 	s := t.ConfigSource
-	req := map[string]any{"op": op, "container": s.Container, "host_path": s.HostPath, "core_path": s.CorePath, "binary": s.Binary, "home": s.Home, "version": version}
+	req := map[string]any{"op": op, "docker_host": s.DockerHost, "container": s.Container, "host_path": s.HostPath, "core_path": s.CorePath, "binary": s.Binary, "home": s.Home, "version": version}
 	if data != nil {
 		n, e := decode(data)
 		if e != nil {

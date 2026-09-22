@@ -201,6 +201,11 @@ func (m *Model) toolAction(id string) tea.Cmd {
 		return m.startServers()
 	case "tool-setup":
 		return m.runTool("Setup Mihomo", false, "setup", "--interactive")
+	case "tool-client-service":
+		if m.options.ReadOnly {
+			return m.runTool("Existing service status", true, "targets", "service", "status")
+		}
+		return m.runTool("Existing target service", true, "targets", "service", "--interactive")
 	case "tool-core":
 		target := m.target
 		if m.overlay == "targets" && m.targetIndex >= 0 && m.targetIndex < len(m.settings.Targets) {

@@ -537,7 +537,9 @@ def source_operation(request):
             if source.get("container")!=expected:fail("Docker source container does not match managed instance")
             items=json.loads(run(docker_command(request)+["inspect",expected]));item=items[0]
             if item.get("Config",{}).get("Labels",{}).get("io.lazyclash.owner")!=request["owner_token"]:fail("Docker source owner label changed")
-            result.update(container_id=item["Id"],image=item["Image"])
+            visible=run(docker_command(request)+["exec",item["Id"],"sha256sum","/root/.config/mihomo/config.yaml"]).split()[0]
+            if not re.fullmatch(r"[a-f0-9]{64}",visible):fail("managed container source hash is invalid")
+            result.update(container_id=item["Id"],image=item["Image"],source_sha256=visible,single_file=False)
         if op!="docker-inspect":
             with tempfile.TemporaryDirectory(prefix=".source-check-",dir=root.parent) as temporary:
                 stage=pathlib.Path(temporary);shutil.copytree(root/"home",stage/"home");(stage/"bin").mkdir()

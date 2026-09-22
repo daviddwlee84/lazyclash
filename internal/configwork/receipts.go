@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daviddwlee84/lazyclash/internal/clientservice"
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
 	"go.yaml.in/yaml/v3"
@@ -130,9 +131,6 @@ func Apply(ctx context.Context, t config.Target, req Request, expected string, o
 	if p.Digest != expected {
 		return Receipt{}, errors.New("source/context changed; review a new preview")
 	}
-	if e = validate(ctx, t, p, opts); e != nil {
-		return Receipt{}, e
-	}
 	if e = checkSourceFiles(ctx, t, p.source.guards, opts); e != nil {
 		return Receipt{}, e
 	}
@@ -189,6 +187,9 @@ func Apply(ctx context.Context, t config.Target, req Request, expected string, o
 		}
 	}
 	r.SourceVerified = true
+	if len(p.Changes) == 0 {
+		return Verify(ctx, t, r.ID, opts)
+	}
 	if p.Owner == "verge" {
 		r.Status = "persisted_pending_owner_reload"
 		r.Message = "Reactivate this profile in Clash Verge, then verify. Local group overrides remain after subscription updates."
@@ -199,11 +200,28 @@ func Apply(ctx context.Context, t config.Target, req Request, expected string, o
 	if e = saveReceipt(opts, r); e != nil {
 		return r, e
 	}
-	c, close, e := open(ctx, t, false, opts)
-	if e == nil {
-		_, e = c.ApplyConfig(ctx, p.source.applyPath)
-		close()
+	restarted := false
+	if p.Owner == "docker" {
+		var sha string
+		for _, change := range p.Changes {
+			if change.Path == p.source.base {
+				sha = change.AfterSHA256
+			}
+		}
+		if sha != "" {
+			restarted, e = activateDockerSource(ctx, t, p.source, sha, opts)
+			if e != nil {
+				r.Status = "persisted_pending_owner_reload"
+				r.Message = "Source saved; container activation is pending or unconfirmed. Inspect the service and receipt before retrying."
+				_ = saveReceipt(opts, r)
+				if errors.Is(e, errDockerOwnerReload) {
+					return r, nil
+				}
+				return r, e
+			}
+		}
 	}
+	e = applySourceOnce(ctx, t, p.source.applyPath, restarted, opts)
 	if e != nil {
 		r.Status = "runtime_result_unknown"
 		r.Message = "Source saved; runtime apply is unknown. Do not retry before verification."
@@ -257,7 +275,32 @@ func Verify(ctx context.Context, t config.Target, id string, opts Options) (Rece
 		_ = saveReceipt(opts, r)
 		return r, nil
 	}
+	if r.Owner == "docker" && s.dockerSourceSHA != s.files[s.base].SHA256 {
+		r.GeneratedVerified = false
+		r.RuntimeObserved = false
+		r.Status = "persisted_pending_owner_reload"
+		r.Message = "Container-visible source differs from the saved host source; reactivate its owner before verification."
+		return r, saveReceipt(opts, r)
+	}
+	if r.Owner == "docker" && t.Service != nil {
+		status, err := clientservice.VerifySource(ctx, t, s.files[s.base].SHA256, opts.ClientServices)
+		if err != nil {
+			return r, err
+		}
+		if !status.SourceMatches {
+			r.SourceVerified = true
+			r.GeneratedVerified = false
+			r.RuntimeObserved = false
+			r.Status = "persisted_pending_owner_reload"
+			r.Message = "Host source and container-visible bytes differ; activate the bound owner before verification."
+			return r, saveReceipt(opts, r)
+		}
+	}
 	if r.Restored {
+		if len(r.Changes) == 0 {
+			markNoChangeRestore(&r)
+			return r, saveReceipt(opts, r)
+		}
 		r.Status = "restored_pending_verification"
 		r.Message = "Original source bytes restored. Check the owner/runtime and test traffic."
 		return r, saveReceipt(opts, r)
@@ -412,6 +455,11 @@ func Restore(ctx context.Context, t config.Target, id string, opts Options) (Rec
 	if r.OwnerIdentity != "" && r.OwnerIdentity != s.dockerID+":"+s.dockerImage {
 		return r, errors.New("Docker owner identity changed; receipt is not applicable")
 	}
+	if len(r.Changes) == 0 {
+		r.Restored = true
+		markNoChangeRestore(&r)
+		return r, saveReceipt(opts, r)
+	}
 	dir, e := receiptDir(opts, id, false)
 	if e != nil {
 		return r, e
@@ -484,18 +532,100 @@ func Restore(ctx context.Context, t config.Target, id string, opts Options) (Rec
 	r.UpdatedAt = time.Now().UTC()
 	r.Status = "restored_pending_owner_reload"
 	r.Message = "Source backups restored; reactivate the owner and verify actual traffic."
+	if e = saveReceipt(opts, r); e != nil {
+		return r, e
+	}
 	if r.Owner != "verge" {
-		c, close, err := open(ctx, t, false, opts)
-		if err == nil {
-			_, err = c.ApplyConfig(ctx, s.applyPath)
-			close()
+		restarted := false
+		if r.Owner == "docker" {
+			sha := s.files[s.base].SHA256
+			for _, change := range r.Changes {
+				if change.Path == s.base {
+					sha = change.BeforeSHA256
+				}
+			}
+			restarted, e = activateDockerSource(ctx, t, s, sha, opts)
+			if e != nil {
+				_ = saveReceipt(opts, r)
+				if errors.Is(e, errDockerOwnerReload) {
+					return r, nil
+				}
+				return r, e
+			}
 		}
-		if err != nil {
+		if e = applySourceOnce(ctx, t, s.applyPath, restarted, opts); e != nil {
 			r.Status = "restore_runtime_result_unknown"
 			_ = saveReceipt(opts, r)
-			return r, err
+			return r, e
 		}
 		r.Status = "restored_runtime_apply_confirmed"
 	}
 	return r, saveReceipt(opts, r)
+}
+
+var errDockerOwnerReload = errors.New("container-visible configuration needs owner reactivation")
+
+// activateDockerSource never sends an API reload against a stale single-file
+// mount. Without a separately bound service, it leaves activation to the owner.
+func activateDockerSource(ctx context.Context, t config.Target, s *source, sha string, opts Options) (bool, error) {
+	if opts.ReadOnly {
+		return false, errors.New("owner activation is disabled in read-only mode")
+	}
+	if t.Service != nil {
+		receipt, err := clientservice.RestartForSource(ctx, t, sha, opts.ClientServices)
+		return receipt.ID != "", err
+	}
+	visible, err := dockerSourceOperation(ctx, t, "inspect", nil, "", opts)
+	if err != nil {
+		return false, err
+	}
+	if visible.ContainerID != s.dockerID || visible.Image != s.dockerImage {
+		return false, errors.New("Docker owner changed before runtime activation")
+	}
+	if visible.SourceSHA256 != sha {
+		return false, errDockerOwnerReload
+	}
+	return false, nil
+}
+
+// Readiness is retried only for a service that was just restarted. The PUT is
+// issued once: a failed or timed-out write has an unknown result, never a retry.
+func applySourceOnce(ctx context.Context, t config.Target, path string, waitReady bool, opts Options) error {
+	if waitReady {
+		readyCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		for {
+			c, close, err := open(readyCtx, t, true, opts)
+			if err == nil {
+				_, err = c.Version(readyCtx)
+				close()
+			}
+			if err == nil {
+				break
+			}
+			select {
+			case <-readyCtx.Done():
+				return fmt.Errorf("restarted controller readiness was not observed: %w", readyCtx.Err())
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
+	}
+	c, close, err := open(ctx, t, false, opts)
+	if err != nil {
+		return err
+	}
+	defer close()
+	_, err = c.ApplyConfig(ctx, path)
+	return err
+}
+
+// Adoption receipts establish provenance without owning a source edit. Undoing
+// that bookkeeping must not reload startup settings or remove an existing node.
+func markNoChangeRestore(r *Receipt) {
+	r.SourceVerified = false
+	r.GeneratedVerified = false
+	r.RuntimeObserved = false
+	r.Status = "restored_no_changes"
+	r.Message = "This receipt only linked existing definitions; no source bytes or runtime settings were changed."
+	r.UpdatedAt = time.Now().UTC()
 }

@@ -28,7 +28,7 @@ func (o *options) vpsService(cmd *cobra.Command) (*vps.Service, error) {
 
 func (o *options) vpsCommand() *cobra.Command {
 	group := &cobra.Command{Use: "vps", Short: "Compare, create and manage proxy-server VPS hosts through official cloud CLIs"}
-	group.AddCommand(o.vpsEstimateCommand(), o.vpsGuideCommand())
+	group.AddCommand(o.vpsEstimateCommand(), o.vpsGuideCommand(), o.vpsBindCloudCommand(), o.vpsUsageCommand())
 	group.AddCommand(&cobra.Command{Use: "catalog", Short: "Show dated price snapshots and recommended VPS starting sizes", Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error { return o.output(cmd, vps.Catalog()) }})
 	group.AddCommand(&cobra.Command{Use: "list", Short: "List remembered cloud and existing SSH hosts without connecting", Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error {
 		s, e := o.vpsService(cmd)

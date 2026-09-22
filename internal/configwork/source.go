@@ -1,12 +1,14 @@
 package configwork
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 
@@ -24,6 +26,8 @@ type source struct {
 	base, proxies, groups, runtime, applyPath string
 	blockedProxies, blockedGroups             bool
 	dockerID, dockerImage                     string
+	dockerSourceSHA                           string
+	dockerSingleFile                          bool
 }
 
 func hash(data []byte) string { v := sha256.Sum256(data); return hex.EncodeToString(v[:]) }
@@ -32,7 +36,8 @@ func Binding(t config.Target) string {
 		ID, Controller, SSH, ManagedCoreID string
 		Source                             *config.ConfigSource
 		Configs                            []config.CoreConfig
-	}{t.ID, t.Controller, t.SSHHost, t.ManagedCoreID, t.ConfigSource, t.Configs})
+		Service                            *config.ClientService `json:",omitempty"`
+	}{t.ID, t.Controller, t.SSHHost, t.ManagedCoreID, t.ConfigSource, t.Configs, t.Service})
 	return hash(v)
 }
 func semantic(n *yaml.Node) string {
@@ -61,6 +66,33 @@ func (s *source) read(ctx context.Context, t config.Target, path string) (*yaml.
 	if n.Kind != yaml.MappingNode {
 		return nil, errors.New("source must be a YAML mapping")
 	}
+	s.files[path] = f
+	s.docs[path] = n
+	s.guards = append(s.guards, rulework.FileGuard{Path: path, Fingerprint: f.Fingerprint})
+	s.Files = append(s.Files, path)
+	return n, nil
+}
+
+// Verge's native empty Merge template contains comments only. It is a valid
+// no-op context, unlike an empty proxy/group source. Preserve its byte guard.
+func (s *source) readMerge(ctx context.Context, t config.Target, path string) (*yaml.Node, error) {
+	f, e := readSourceFile(ctx, t, path, s.opts)
+	if e != nil {
+		return nil, e
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(f.Data))
+	var doc yaml.Node
+	e = dec.Decode(&doc)
+	empty := e == io.EOF
+	if e == nil && len(doc.Content) == 1 && doc.Content[0].Tag == "!!null" {
+		var value any
+		var next yaml.Node
+		empty = doc.Decode(&value) == nil && value == nil && dec.Decode(&next) == io.EOF
+	}
+	if !empty {
+		return s.read(ctx, t, path)
+	}
+	n := mapNode(map[string]any{})
 	s.files[path] = f
 	s.docs[path] = n
 	s.guards = append(s.guards, rulework.FileGuard{Path: path, Fingerprint: f.Fingerprint})
@@ -112,6 +144,7 @@ func inspectWithOptions(ctx context.Context, t config.Target, opts Options) (*so
 		}
 		s.dockerID = d.ContainerID
 		s.dockerImage = d.Image
+		s.dockerSourceSHA, s.dockerSingleFile = d.SourceSHA256, d.SingleFile
 		s.Warnings = append(s.Warnings, "The host source is edited through its verified container bind mount; reload uses the container path.")
 	case "verge":
 		manifest := filepath.Join(c.DataDir, "profiles.yaml")
@@ -209,7 +242,12 @@ func inspectWithOptions(ctx context.Context, t config.Target, opts Options) (*so
 				s.guards = append(s.guards, rulework.FileGuard{Path: p, Fingerprint: f.Fingerprint})
 				s.Warnings = append(s.Warnings, "Verge Scripts can transform this source; native reactivation and generated-config verification are required.")
 			} else {
-				d, e := s.read(ctx, t, p)
+				var d *yaml.Node
+				if scalar(item, "type") == "merge" {
+					d, e = s.readMerge(ctx, t, p)
+				} else {
+					d, e = s.read(ctx, t, p)
+				}
 				if e != nil {
 					return nil, e
 				}

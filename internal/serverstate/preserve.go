@@ -133,7 +133,7 @@ func fields(v any) map[string]any {
 	out := map[string]any{}
 	for i := 0; i < t.NumField(); i++ {
 		name := strings.Split(t.Field(i).Tag.Get("toml"), ",")[0]
-		if name == "" || name == "-" || name == "resources" {
+		if name == "" || name == "-" || name == "resources" || name == "observation" {
 			continue
 		}
 		out[name] = r.Field(i).Interface()
@@ -239,6 +239,10 @@ func reconcile(raw []byte, scope string, values any) ([]byte, error) {
 		}
 		if h, ok := v.(Host); ok {
 			data, err = reconcile(data, scope+".resources", h.Resources)
+			if err != nil {
+				return nil, err
+			}
+			data, err = patchObservation(data, scope+".observation", h.Observation)
 			if err != nil {
 				return nil, err
 			}

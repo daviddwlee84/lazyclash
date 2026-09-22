@@ -242,6 +242,7 @@ func (m *Model) draftTarget() config.Target {
 	if f.target.TransportOverride || t.Controller != f.target.Controller || t.SSHHost != f.target.SSHHost {
 		t.RuleSource = nil
 		t.ConfigSource = nil
+		t.Service = nil
 		t.ManagedCoreID = ""
 	}
 	t.Transient = false

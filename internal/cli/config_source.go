@@ -15,7 +15,7 @@ import (
 )
 
 func (o *options) configWorkOptions(cmd *cobra.Command) configwork.Options {
-	return configwork.Options{ReadOnly: o.readOnly, Open: o.deps.Open, Host: func(ctx context.Context, t config.Target, req configwork.HostRequest) (configwork.HostResponse, error) {
+	return configwork.Options{ReadOnly: o.readOnly, ClientServices: o.clientServiceOptions(), Open: o.deps.Open, Host: func(ctx context.Context, t config.Target, req configwork.HostRequest) (configwork.HostResponse, error) {
 		if t.ManagedCoreID != "" {
 			return managedcore.SourceOperation(ctx, t, req, o.managedOptions(cmd))
 		}
@@ -103,11 +103,11 @@ func (o *options) configSourceCommand() *cobra.Command {
 			fields := []wizard.Field{}
 			switch kind {
 			case "native", "mihomo":
-				fields = []wizard.Field{{Key: "config_id", Label: "Registered config ID", Value: s.ConfigID, Required: true}, {Key: "binary", Label: "Core-host validator binary", Value: s.Binary, Required: true}, {Key: "home", Label: "Core-host Mihomo home", Value: s.Home, Required: true}}
+				fields = []wizard.Field{{Key: "config_id", Label: "Registered config ID", Value: s.ConfigID, Required: true}, {Key: "binary", Label: "Core-host validator binary", Value: s.Binary, Required: true}, {Key: "home", Label: "Core-host Mihomo home", Value: s.Home, Required: true}, {Key: "validation_docker_host", Label: "Optional validation Docker unix socket", Value: s.ValidationDockerHost}, {Key: "validation_image", Label: "Validation local image SHA256 (required with socket)", Value: s.ValidationImage}}
 			case "docker":
-				fields = []wizard.Field{{Key: "container", Label: "Container ID or name", Value: s.Container, Required: true}, {Key: "host_path", Label: "Host-side bound YAML path", Value: s.HostPath, Required: true}, {Key: "core_path", Label: "Container-side YAML path", Value: s.CorePath, Required: true}, {Key: "binary", Label: "Binary inside container", Value: s.Binary, Required: true}, {Key: "home", Label: "Mihomo home inside container", Value: s.Home, Required: true}}
+				fields = []wizard.Field{{Key: "docker_host", Label: "Docker daemon unix socket (on selected host)", Value: s.DockerHost}, {Key: "container", Label: "Container ID or name", Value: s.Container, Required: true}, {Key: "host_path", Label: "Host-side bound YAML path", Value: s.HostPath, Required: true}, {Key: "core_path", Label: "Container-side YAML path", Value: s.CorePath, Required: true}, {Key: "binary", Label: "Binary inside container", Value: s.Binary, Required: true}, {Key: "home", Label: "Mihomo home inside container", Value: s.Home, Required: true}}
 			case "verge":
-				fields = []wizard.Field{{Key: "data_dir", Label: "Verge data directory", Value: s.DataDir, Required: true}, {Key: "profile", Label: "Current profile UID", Value: s.ProfileUID, Required: true}, {Key: "version", Label: "Declared owner version", Value: "2.5.2", Required: true}}
+				fields = []wizard.Field{{Key: "data_dir", Label: "Verge data directory", Value: s.DataDir, Required: true}, {Key: "profile", Label: "Current profile UID", Value: s.ProfileUID, Required: true}, {Key: "version", Label: "Declared owner version", Value: "2.5.2", Required: true}, {Key: "binary", Label: "Optional actual Mihomo validator binary", Value: s.Binary}, {Key: "home", Label: "Validator resources home (required with binary)", Value: s.Home}}
 			default:
 				return usage("invalid source kind")
 			}
@@ -126,6 +126,9 @@ func (o *options) configSourceCommand() *cobra.Command {
 				s.Binary = values["binary"]
 				s.Home = values["home"]
 				s.Container = values["container"]
+				s.DockerHost = values["docker_host"]
+				s.ValidationDockerHost = values["validation_docker_host"]
+				s.ValidationImage = values["validation_image"]
 				s.DataDir = values["data_dir"]
 				s.ProfileUID = values["profile"]
 				s.Version = values["version"]
@@ -177,6 +180,9 @@ func (o *options) configSourceCommand() *cobra.Command {
 	set.Flags().StringVar(&s.ConfigID, "config-id", "", "registered complete YAML ID (native)")
 	set.Flags().StringVar(&s.HostPath, "host-path", "", "host path corresponding to a Docker bind mount")
 	set.Flags().StringVar(&s.CorePath, "core-path", "", "container config path used for API reload")
+	set.Flags().StringVar(&s.DockerHost, "docker-host", "", "explicit unix:///path Docker socket on the selected host")
+	set.Flags().StringVar(&s.ValidationDockerHost, "validation-docker-host", "", "explicit local unix socket for isolated native core validation")
+	set.Flags().StringVar(&s.ValidationImage, "validation-image", "", "full sha256 ID of an already present validation image (native only; no pulls)")
 	set.Flags().StringVar(&s.Container, "container", "", "explicit Docker container ID/name")
 	set.Flags().StringVar(&s.Binary, "binary", "", "absolute validator binary (inside container for Docker)")
 	set.Flags().StringVar(&s.Home, "home", "", "absolute core home (inside container for Docker)")

@@ -32,6 +32,7 @@ func (m *Model) actions() []action {
 	a := []action{
 		{"tool-setup", "Setup Mihomo client", nil, m.canRunTool() && !m.options.ReadOnly},
 		{"tool-core", "Manage installed cores", nil, m.canRunTool()},
+		{"tool-client-service", "Existing target service: status / start / stop / autostart", nil, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride && m.target.ManagedCoreID == ""},
 		{"tool-servers", "Servers / VPS / Tailnet: deploy, manage and share", nil, m.options.Workbench != nil && !m.toolPending},
 		{"tool-network", "Diagnose VPN / TUN / DNS conflicts", nil, m.canRunTool()},
 		{"tool-source", "Bind node / group configuration source", nil, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride},

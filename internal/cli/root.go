@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/daviddwlee84/lazyclash/internal/clientservice"
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/core"
@@ -59,20 +60,21 @@ func ExitCode(err error) int {
 }
 
 type Dependencies struct {
-	Managed      managedcore.Options
-	Servers      serverdeploy.Options
-	Tailnet      tailnet.Options
-	TailnetProxy tailnetproxy.Options
-	VPS          vps.Options
-	ServerStore  serverstate.Store
-	Open         func(context.Context, config.Target, bool) (*core.Client, io.Closer, error)
-	Discover     func(context.Context, string) ([]config.Target, error)
-	Terminal     func(io.Reader, io.Writer) bool
-	RunTUI       func(context.Context, tui.Options, io.Reader, io.Writer) error
-	Authenticate func(context.Context, string) (*exec.Cmd, error)
-	RunEditor    func(*exec.Cmd) error
-	Diagnostics  diagnostics.Options
-	Upgrade      func(context.Context, selfupdate.Request, io.Writer) (selfupdate.Result, error)
+	ClientServices clientservice.Options
+	Managed        managedcore.Options
+	Servers        serverdeploy.Options
+	Tailnet        tailnet.Options
+	TailnetProxy   tailnetproxy.Options
+	VPS            vps.Options
+	ServerStore    serverstate.Store
+	Open           func(context.Context, config.Target, bool) (*core.Client, io.Closer, error)
+	Discover       func(context.Context, string) ([]config.Target, error)
+	Terminal       func(io.Reader, io.Writer) bool
+	RunTUI         func(context.Context, tui.Options, io.Reader, io.Writer) error
+	Authenticate   func(context.Context, string) (*exec.Cmd, error)
+	RunEditor      func(*exec.Cmd) error
+	Diagnostics    diagnostics.Options
+	Upgrade        func(context.Context, selfupdate.Request, io.Writer) (selfupdate.Result, error)
 }
 
 type options struct {
@@ -150,7 +152,8 @@ func New(deps Dependencies) *cobra.Command {
 			}
 			initial := target.ID
 			opts := tui.Options{
-				Config: cfg, InitialTarget: initial, ReadOnly: o.readOnly, Workbench: o.runWorkbench,
+				NodeProvenance: o.nodeProvenance(cmd, cfg),
+				Config:         cfg, InitialTarget: initial, ReadOnly: o.readOnly, Workbench: o.runWorkbench,
 				StartPage: o.page, TestTarget: o.testTargetText, ProbeIP: o.probeIPText, ProbeLatency: o.probeLatencyText,
 				Open: func(ctx context.Context, t config.Target) (*core.Client, io.Closer, error) {
 					return o.deps.Open(ctx, t, o.readOnly)

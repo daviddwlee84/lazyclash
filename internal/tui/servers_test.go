@@ -122,6 +122,37 @@ func TestServersEmptyReadOnlyAndResize(t *testing.T) {
 	}
 }
 
+func TestServerUsageIsExplicitReadOnlyAndKeepsResourceIdentity(t *testing.T) {
+	m := testModel(t)
+	m.options.ReadOnly = true
+	var calls []WorkRequest
+	m.options.Workbench = func(_ context.Context, r WorkRequest) (WorkResult, error) {
+		calls = append(calls, r)
+		return serverInventory(), nil
+	}
+	initial := m.startServers()
+	_, status := m.Update(initial())
+	m.Update(status())
+	for _, r := range calls {
+		if r.Kind == "servers-usage" {
+			t.Fatal("cloud usage polled automatically")
+		}
+	}
+	m.work.index = 2
+	cmd := m.serverButton("server-usage")
+	if cmd == nil {
+		t.Fatal("read-only usage unavailable")
+	}
+	m.Update(cmd())
+	last := calls[len(calls)-1]
+	if last.Kind != "servers-usage" || last.Receipt != "host:vm" {
+		t.Fatal(last)
+	}
+	if row, _ := m.selectedServerRow(); row.ID != "host:vm" {
+		t.Fatal("usage changed selection")
+	}
+}
+
 func TestTailnetRowsUseSharedCLIAndReadOnlySetupDisabled(t *testing.T) {
 	m := testModel(t)
 	m.options.Workbench = func(context.Context, WorkRequest) (WorkResult, error) { return WorkResult{}, nil }

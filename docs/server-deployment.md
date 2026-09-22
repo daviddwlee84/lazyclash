@@ -14,6 +14,11 @@ lazyclash vps list --json
 lazyclash servers list --json
 ```
 
+Oracle／Azure 主機的月流量可用 `vps usage ID` 或 `servers usage ID` 查詢，支援
+`--month YYYY-MM`、`--json` 與 `--read-only`。TUI **Servers / VPS** 按 `u` 更新本月
+用量；既有主機可先以 `vps bind-cloud` 建立觀測連結。VM bytes、provider 帳務與
+共享免費額度會分開呈現，詳見[流量與帳務用量指南](vps-usage.md)。
+
 ## 可複製 CLI 指令與 agent handoff
 
 不想使用 wizard，或遇到登入／方案篩選問題時，可以產生逐步指令指南：
