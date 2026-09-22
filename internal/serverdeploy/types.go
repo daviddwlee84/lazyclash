@@ -77,6 +77,13 @@ type Result struct {
 }
 
 type Status struct {
+	// Service is a live observation only. Journal phase/verification remain dated
+	// historical evidence when SSH or the remote helper cannot be inspected.
+	ServiceObserved       bool      `json:"service_observed"`
+	CheckedAt             time.Time `json:"checked_at"`
+	LastKnownStatus       string    `json:"last_known_status,omitempty"`
+	LastKnownAt           time.Time `json:"last_known_at,omitempty"`
+	FailureKind           string    `json:"failure_kind,omitempty"`
 	ID                    string    `json:"id"`
 	HostID                string    `json:"host_id"`
 	Service               string    `json:"service"`

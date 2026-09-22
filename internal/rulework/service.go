@@ -35,11 +35,23 @@ func binding(target config.Target) string {
 }
 
 func Preview(ctx context.Context, target config.Target, domain, policy string, opts Options) (Plan, error) {
-	var plan Plan
 	domain, err := NormalizeDomain(domain)
 	if err != nil {
-		return plan, err
+		return Plan{}, err
 	}
+	return previewRule(ctx, target, domain, "", policy, opts)
+}
+
+func PreviewIP(ctx context.Context, target config.Target, address, policy string, opts Options) (Plan, error) {
+	prefix, err := NormalizeIPPrefix(address)
+	if err != nil {
+		return Plan{}, err
+	}
+	return previewRule(ctx, target, "", prefix, policy, opts)
+}
+
+func previewRule(ctx context.Context, target config.Target, domain, prefix, policy string, opts Options) (Plan, error) {
+	var plan Plan
 	if policy == "" || len(policy) > 4096 || strings.Contains(policy, ",") || strings.IndexFunc(policy, unicode.IsControl) >= 0 {
 		return plan, errors.New("policy must be an existing proxy or group name without commas or control characters")
 	}
@@ -72,7 +84,12 @@ func Preview(ctx context.Context, target config.Target, domain, policy string, o
 	if err != nil {
 		return plan, err
 	}
+	payload := domain
 	rule := "DOMAIN," + domain + "," + policy
+	if prefix != "" {
+		payload = prefix
+		rule = ipRuleKind(prefix) + "," + prefix + "," + policy + ",no-resolve"
+	}
 	after, noChange, err := addRule(source.file.Data, source.Kind, rule)
 	if err != nil {
 		return plan, err
@@ -80,11 +97,11 @@ func Preview(ctx context.Context, target config.Target, domain, policy string, o
 	if len(after) > 8<<20 {
 		return plan, errors.New("candidate exceeds 8 MiB")
 	}
-	plan = Plan{TargetID: target.ID, Owner: source, Domain: domain, Policy: policy, Rule: rule, NoChange: noChange, CoreVersion: coreVersion, after: after, beforeRuntimeDigest: beforeRuntimeDigest, Diff: ruleDiff(source.file.Data, source.Kind, rule, domain, noChange)}
+	plan = Plan{TargetID: target.ID, Owner: source, Domain: domain, Prefix: prefix, Policy: policy, Rule: rule, NoChange: noChange, CoreVersion: coreVersion, after: after, beforeRuntimeDigest: beforeRuntimeDigest, Diff: ruleDiff(source.file.Data, source.Kind, rule, payload, noChange)}
 	data, _ := json.Marshal(struct {
-		Binding, Domain, Policy, Version, After, Runtime string
-		Guards                                           []fileGuard
-	}{binding(target), domain, policy, coreVersion, sha(after), beforeRuntimeDigest, source.guards})
+		Binding, Rule, Version, After, Runtime string
+		Guards                                 []fileGuard
+	}{binding(target), rule, coreVersion, sha(after), beforeRuntimeDigest, source.guards})
 	plan.Digest = sha(data)
 	return plan, nil
 }
@@ -92,13 +109,25 @@ func Preview(ctx context.Context, target config.Target, domain, policy string, o
 // Apply recomputes the preview and requires its digest. No write is retried;
 // an uncertain SSH/API result always has a durable receipt for verification.
 func Apply(ctx context.Context, target config.Target, domain, policy, expected string, opts Options) (Receipt, error) {
+	return applyRule(ctx, target, domain, policy, expected, opts, false)
+}
+
+func ApplyIP(ctx context.Context, target config.Target, address, policy, expected string, opts Options) (Receipt, error) {
+	return applyRule(ctx, target, address, policy, expected, opts, true)
+}
+
+func applyRule(ctx context.Context, target config.Target, value, policy, expected string, opts Options, ip bool) (Receipt, error) {
 	if opts.ReadOnly {
 		return Receipt{}, errors.New("rule repair is disabled in read-only mode")
 	}
 	if len(expected) != 64 {
 		return Receipt{}, errors.New("apply requires the digest from a fresh preview")
 	}
-	plan, err := Preview(ctx, target, domain, policy, opts)
+	preview := Preview
+	if ip {
+		preview = PreviewIP
+	}
+	plan, err := preview(ctx, target, value, policy, opts)
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -118,7 +147,7 @@ func Apply(ctx context.Context, target config.Target, domain, policy, expected s
 	if _, err = rand.Read(idBytes); err != nil {
 		return Receipt{}, err
 	}
-	receipt := Receipt{ID: hex.EncodeToString(idBytes), TargetID: target.ID, Owner: plan.Owner.Kind, File: plan.Owner.File, Rule: plan.Rule, Domain: plan.Domain, Policy: plan.Policy, Status: "prepared", CreatedAt: now, UpdatedAt: now, Digest: plan.Digest, BeforeSHA256: plan.Owner.file.SHA256, AfterSHA256: sha(plan.after), Binding: binding(target), ProfileUID: plan.Owner.ProfileUID}
+	receipt := Receipt{ID: hex.EncodeToString(idBytes), TargetID: target.ID, Owner: plan.Owner.Kind, File: plan.Owner.File, Rule: plan.Rule, Domain: plan.Domain, Prefix: plan.Prefix, Policy: plan.Policy, Status: "prepared", CreatedAt: now, UpdatedAt: now, Digest: plan.Digest, BeforeSHA256: plan.Owner.file.SHA256, AfterSHA256: sha(plan.after), Binding: binding(target), ProfileUID: plan.Owner.ProfileUID}
 	receipt.BeforeRuntimeDigest = plan.beforeRuntimeDigest
 	if plan.NoChange {
 		receipt.AfterFingerprint = plan.Owner.file.Fingerprint
@@ -161,7 +190,7 @@ func Apply(ctx context.Context, target config.Target, domain, policy, expected s
 	return Verify(ctx, target, receipt.ID, opts)
 }
 
-func runtimeFirstRule(ctx context.Context, target config.Target, domain, policy string, opts Options) (bool, error) {
+func runtimeFirstRule(ctx context.Context, target config.Target, domain, prefix, policy string, opts Options) (bool, error) {
 	client, cleanup, err := openCore(ctx, target, true, opts)
 	if err != nil {
 		return false, err
@@ -178,6 +207,17 @@ func runtimeFirstRule(ctx context.Context, target config.Target, domain, policy 
 	first, ok := rules[0].(map[string]any)
 	if !ok {
 		return false, nil
+	}
+	if extra, ok := first["extra"].(map[string]any); ok {
+		if disabled, present := extra["disabled"]; present && disabled != false {
+			return false, nil
+		}
+	}
+	if prefix != "" {
+		// Mihomo reports both IP-CIDR and IP-CIDR6 as IPCIDR. The canonical
+		// payload still pins the exact prefix and address family.
+		actual, err := NormalizeIPPrefix(fmt.Sprint(first["payload"]))
+		return err == nil && strings.EqualFold(fmt.Sprint(first["type"]), "IPCIDR") && actual == prefix && first["proxy"] == policy, nil
 	}
 	return strings.EqualFold(fmt.Sprint(first["type"]), "Domain") && strings.EqualFold(fmt.Sprint(first["payload"]), domain) && first["proxy"] == policy, nil
 }
@@ -241,12 +281,12 @@ func Verify(ctx context.Context, target config.Target, id string, opts Options) 
 		}
 		return r, e
 	}
-	verified, err := runtimeFirstRule(ctx, target, r.Domain, r.Policy, opts)
+	verified, err := runtimeFirstRule(ctx, target, r.Domain, r.Prefix, r.Policy, opts)
 	r.RuntimeVerified = verified
 	r.UpdatedAt = time.Now().UTC()
 	if verified {
 		r.Status = "applied_verified"
-		r.Message = "Persistent source matches; the exact DOMAIN rule is first in the current runtime rules."
+		r.Message = "Persistent source matches; the exact " + strings.Split(r.Rule, ",")[0] + " rule is first in the current runtime rules."
 	} else if r.Owner == "verge" {
 		r.Status = "persisted_pending_owner_reload"
 		r.Message = "Reactivate Profiles in Clash Verge, then verify. The rule may also be overridden by a later Merge or Script."

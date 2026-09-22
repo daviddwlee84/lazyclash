@@ -52,6 +52,34 @@ or the result is uncertain, inspect the receipt and runtime before retrying.
 `rules restore RECEIPT --yes` checks that the current file still matches the
 recorded change before restoring its backup.
 
+## Preview an IP address or network rule
+
+```sh
+lazyclash --target desktop rules add-ip 203.0.113.10 --policy DIRECT
+lazyclash --target desktop rules add-ip 203.0.113.10 --policy DIRECT \
+  --yes --expect DIGEST
+lazyclash --target desktop rules verify RECEIPT
+```
+
+A bare IPv4 address becomes `/32`; a bare IPv6 address becomes `/128`. Explicit
+CIDRs are masked to their canonical network in the preview. The generated rule
+is `IP-CIDR` or `IP-CIDR6` with `no-resolve`, so checking the rule does not request
+DNS resolution. URLs, DNS names, interface zones and IPv4-mapped IPv6 inputs are
+rejected. The policy must already exist on the selected target.
+
+Choose the smallest intended destination prefix. For example, a host rule can
+keep administration traffic to a known proxy VPS direct when sending SSH through
+that proxy would conflict with the VPS's source-IP restriction. An IP rule applies
+to that destination prefix across ports; it is not an SSH-only exception.
+
+Only rules with the same type and canonical prefix are replaced/deduplicated;
+broader overlapping networks and unrelated rules retain their order. The same
+preview digest, private backup, receipt, owner activation, verification and
+restore workflow applies. IP receipts expose `prefix`, without labeling it as a
+DNS domain. Verification requires the exact prefix and policy in the first
+runtime rule. Mihomo reports both source rule families as runtime `IPCIDR`.
+See its [rule implementation](https://github.com/MetaCubeX/mihomo/blob/v1.19.29/rules/common/ipcidr.go).
+
 ## Standalone Mihomo validation
 
 Validation uses the bound binary and an isolated temporary home, with needed
@@ -80,7 +108,9 @@ Only the existing active profile's **Rules companion** is edited, using
 
 The pipeline is profile source → Rules/Proxies/Groups → app defaults →
 global Merge → global Script → profile Merge → profile Script → restored
-GUI-owned control settings. A later Merge.rules or Script can replace earlier
+GUI-owned control settings. Comment-only or valid YAML-null Merge templates are
+accepted as empty context; native YAML and Rules companions still require their
+normal mapping schemas. A later Merge.rules or Script can replace earlier
 rules. Arrays in a Merge are replacements, not implicit append operations.
 
 Saving reports `persisted_pending_owner_reload`. Reactivate the profile in

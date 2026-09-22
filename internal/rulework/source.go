@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"path/filepath"
 	"strings"
 	"unicode"
@@ -64,6 +65,38 @@ func NormalizeDomain(value string) (string, error) {
 		}
 	}
 	return value, nil
+}
+
+// NormalizeIPPrefix uses a host prefix for a bare address and canonicalizes
+// explicit networks. Mapped IPv4 and interface-scoped IPv6 are rejected so the
+// rule family cannot silently differ from the address supplied by the caller.
+func NormalizeIPPrefix(value string) (string, error) {
+	var prefix netip.Prefix
+	var err error
+	if strings.Contains(value, "/") {
+		prefix, err = netip.ParsePrefix(value)
+	} else {
+		var address netip.Addr
+		address, err = netip.ParseAddr(value)
+		if err == nil {
+			prefix = netip.PrefixFrom(address, address.BitLen())
+			if address.Zone() != "" {
+				return "", errors.New("IPv6 interface zones are not supported in IP rules")
+			}
+		}
+	}
+	if err != nil || !prefix.IsValid() || prefix.Addr().Is4In6() || prefix.Addr().Zone() != "" {
+		return "", errors.New("supply an IPv4/IPv6 address or CIDR, without a URL, DNS name, zone or mapped address family")
+	}
+	return prefix.Masked().String(), nil
+}
+
+func ipRuleKind(prefix string) string {
+	parsed, err := netip.ParsePrefix(prefix)
+	if err == nil && parsed.Addr().Is4() {
+		return "IP-CIDR"
+	}
+	return "IP-CIDR6"
 }
 
 // InspectSource reads only the explicit binding; it never infers write ownership
@@ -154,7 +187,7 @@ func InspectSource(ctx context.Context, target config.Target) (Source, error) {
 			}
 			source.guards = append(source.guards, fileGuard{path, f.Fingerprint})
 			if item.Type == "merge" {
-				doc, e := decodeYAML(f.Data)
+				doc, e := decodeMergeContext(f.Data)
 				if e != nil {
 					return source, errors.New("Verge Merge companion is invalid")
 				}
@@ -213,6 +246,25 @@ func decodeYAML(data []byte) (*yaml.Node, error) {
 	}
 	return &node, nil
 }
+
+// Only an inspected Verge Merge companion may be empty/null. Other source
+// documents still require a mapping, and malformed tagged nulls must fail.
+func decodeMergeContext(data []byte) (*yaml.Node, error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	var document yaml.Node
+	err := decoder.Decode(&document)
+	empty := err == io.EOF
+	if err == nil && len(document.Content) == 1 && document.Content[0].Tag == "!!null" {
+		var value any
+		var next yaml.Node
+		empty = document.Decode(&value) == nil && value == nil && decoder.Decode(&next) == io.EOF
+	}
+	if empty {
+		return &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}, nil
+	}
+	return decodeYAML(data)
+}
+
 func mappingValue(node *yaml.Node, key string) *yaml.Node {
 	for i := 0; i+1 < len(node.Content); i += 2 {
 		if node.Content[i].Value == key {
@@ -240,10 +292,17 @@ func addRule(data []byte, kind, rule string) ([]byte, bool, error) {
 	if sequence.Kind != yaml.SequenceNode {
 		return nil, false, fmt.Errorf("%s must be a YAML sequence", key)
 	}
-	domain := strings.Split(rule, ",")[1]
+	parts := strings.Split(rule, ",")
+	if len(parts) < 3 || (parts[0] != "DOMAIN" && parts[0] != "IP-CIDR" && parts[0] != "IP-CIDR6") {
+		return nil, false, errors.New("unsupported rule repair type")
+	}
+	ruleKind, payload := parts[0], parts[1]
 	matching := 0
 	for _, item := range sequence.Content {
-		if sameDomainRule(item.Value, domain) {
+		if item.Kind != yaml.ScalarNode || item.Tag != "!!str" {
+			return nil, false, errors.New("rule sequence must contain strings")
+		}
+		if sameRuleTarget(item.Value, ruleKind, payload) {
 			matching++
 		}
 	}
@@ -256,7 +315,7 @@ func addRule(data []byte, kind, rule string) ([]byte, bool, error) {
 		if item.Kind != yaml.ScalarNode || item.Tag != "!!str" {
 			return nil, false, errors.New("rule sequence must contain strings")
 		}
-		if !sameDomainRule(item.Value, domain) {
+		if !sameRuleTarget(item.Value, ruleKind, payload) {
 			items = append(items, item)
 		} else {
 			for _, comment := range []string{item.HeadComment, item.LineComment, item.FootComment} {
@@ -282,17 +341,26 @@ func addRule(data []byte, kind, rule string) ([]byte, bool, error) {
 }
 
 func sameDomainRule(rule, domain string) bool {
-	parts := strings.Split(rule, ",")
-	if len(parts) < 3 || !strings.EqualFold(strings.TrimSpace(parts[0]), "DOMAIN") {
-		return false
-	}
-	host, err := NormalizeDomain(strings.TrimSpace(parts[1]))
-	return err == nil && host == domain
+	return sameRuleTarget(rule, "DOMAIN", domain)
 }
 
-func ruleDiff(before []byte, kind, rule, domain string, noChange bool) string {
+func sameRuleTarget(rule, kind, payload string) bool {
+	parts := strings.Split(rule, ",")
+	if len(parts) < 3 || !strings.EqualFold(strings.TrimSpace(parts[0]), kind) {
+		return false
+	}
+	if kind == "DOMAIN" {
+		host, err := NormalizeDomain(strings.TrimSpace(parts[1]))
+		return err == nil && host == payload
+	}
+	prefix, err := NormalizeIPPrefix(strings.TrimSpace(parts[1]))
+	return err == nil && ipRuleKind(prefix) == kind && prefix == payload
+}
+
+func ruleDiff(before []byte, kind, rule, payload string, noChange bool) string {
+	ruleKind := strings.Split(rule, ",")[0]
 	if noChange {
-		return "No file change: this exact DOMAIN rule is already first and has no duplicate entries."
+		return "No file change: this exact " + ruleKind + " rule is already first and has no duplicate entries."
 	}
 	key := "rules"
 	if kind == "verge" {
@@ -303,7 +371,7 @@ func ruleDiff(before []byte, kind, rule, domain string, noChange bool) string {
 	if doc, err := decodeYAML(before); err == nil {
 		if seq := mappingValue(doc.Content[0], key); seq != nil {
 			for index, node := range seq.Content {
-				if sameDomainRule(node.Value, domain) {
+				if sameRuleTarget(node.Value, ruleKind, payload) {
 					lines = append(lines, fmt.Sprintf("- [%d] %s", index, core.Sanitize(node.Value)))
 				}
 			}

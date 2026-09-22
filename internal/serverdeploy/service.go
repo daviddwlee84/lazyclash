@@ -319,21 +319,51 @@ func GetStatus(ctx context.Context, id string, o Options) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	s := Status{ID: id, HostID: h.ID, PublicHost: j.Plan.PublicHost, PublicPort: j.Plan.PublicPort, SSH: "unknown", Service: j.Phase, ObservedExitIP: j.ObservedExitIP, VerifiedAt: j.VerifiedAt, VerificationInterface: j.VerificationInterface, ClientUpdateRequired: h.PublicHost != "" && h.PublicHost != j.Host.PublicHost}
+	s := Status{ID: id, HostID: h.ID, PublicHost: j.Plan.PublicHost, PublicPort: j.Plan.PublicPort, SSH: "unknown", Service: "unknown", CheckedAt: time.Now().UTC(), LastKnownStatus: j.Phase, LastKnownAt: j.UpdatedAt, ObservedExitIP: j.ObservedExitIP, VerifiedAt: j.VerifiedAt, VerificationInterface: j.VerificationInterface, ClientUpdateRequired: h.PublicHost != "" && h.PublicHost != j.Host.PublicHost}
 	if !sameManagementHost(j.Host, h) {
-		s.Message = "Host binding changed; review the new host before further service operations"
+		s.FailureKind = "host-binding-changed"
+		s.Message = "Live service state is unknown because the host binding changed. Review the new host; saved deployment state and proxy verification are historical."
 		return s, nil
 	}
 	r, err := execute(ctx, h.SSHHost, remote(j, "status"), o)
 	if err != nil {
-		s.SSH = "unreachable"
-		s.Message = "Cannot read service status over the recorded SSH host"
+		s.SSH, s.FailureKind, s.Message = statusFailure(err, r)
 		return s, err
 	}
 	s.SSH = "reachable"
-	s.Service = r.Service
-	s.Message = "Service state and the last authenticated proxy verification are reported separately"
+	if strings.TrimSpace(r.Service) != "" && r.Service != "unknown" {
+		s.Service = r.Service
+		s.ServiceObserved = true
+		s.Message = "Live service state was read over SSH. Saved deployment state, exit IP and authenticated proxy verification remain dated historical evidence."
+	} else {
+		s.FailureKind = "service-state-unavailable"
+		s.Message = "SSH is reachable, but the helper could not determine the live service state. Saved deployment state and proxy verification are historical."
+	}
 	return s, nil
+}
+
+func statusFailure(err error, response RemoteResponse) (string, string, string) {
+	prefix := "Live service state is unknown; saved deployment state and proxy verification are historical. "
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "unconfirmed", "canceled", prefix + "The status read was canceled."
+	case errors.Is(err, context.DeadlineExceeded):
+		return "unconfirmed", "deadline", prefix + "The status read timed out; inspect SSH connectivity and the remote helper before retrying."
+	case connection.IsAuthRequired(err):
+		return "authentication-required", "ssh-authentication", prefix + "SSH authentication or host-key approval is required on the recorded host."
+	case errors.Is(err, connection.ErrHelperOutputLimit):
+		return "unconfirmed", "helper-output-limit", prefix + "The helper exceeded its output limit; inspect helper output locally without sharing credentials."
+	case errors.Is(err, connection.ErrPythonUnavailable):
+		return "reachable", "python-unavailable", prefix + "Python 3 is unavailable on the recorded SSH host."
+	}
+	var transport *connection.SSHTransportError
+	if errors.As(err, &transport) {
+		return "unreachable", "ssh-" + transport.Kind, prefix + transport.Error()
+	}
+	if response.Error != "" || response.OK {
+		return "reachable", "remote-helper", prefix + "SSH responded, but service inspection failed; check Python, non-interactive sudo and the owned service files."
+	}
+	return "unconfirmed", "helper-failed", prefix + "The SSH/helper result was not confirmed. Check the recorded SSH host, route (including proxy/TUN routing), ingress firewall, authentication and remote helper prerequisites."
 }
 
 func PreviewAction(ctx context.Context, id, action string, o Options) (Plan, error) {

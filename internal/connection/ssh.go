@@ -177,15 +177,17 @@ func remoteRead(ctx context.Context, host, path string) ([]byte, error) {
 }
 
 type limitedBuffer struct {
-	mu     sync.Mutex
-	buffer bytes.Buffer
-	limit  int
+	mu       sync.Mutex
+	buffer   bytes.Buffer
+	limit    int
+	exceeded bool
 }
 
 func (b *limitedBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.buffer.Len()+len(p) > b.limit {
+		b.exceeded = true
 		return 0, errors.New("subprocess output exceeds size limit")
 	}
 	return b.buffer.Write(p)
@@ -196,6 +198,7 @@ func (b *limitedBuffer) Bytes() []byte {
 	return append([]byte(nil), b.buffer.Bytes()...)
 }
 func (b *limitedBuffer) String() string { return string(b.Bytes()) }
+func (b *limitedBuffer) Exceeded() bool { b.mu.Lock(); defer b.mu.Unlock(); return b.exceeded }
 
 func needsAuthentication(stderr string) bool {
 	s := strings.ToLower(stderr)

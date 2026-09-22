@@ -70,6 +70,11 @@ func newFixture(t *testing.T, verge bool) *fixture {
 						entry["type"] = "Domain"
 						entry["payload"] = parts[1]
 					}
+					if parts[0] == "IP-CIDR" || parts[0] == "IP-CIDR6" {
+						entry["type"] = "IPCIDR"
+						entry["payload"] = parts[1]
+						entry["proxy"] = parts[2]
+					}
 					f.rules = append(f.rules, entry)
 				}
 			}

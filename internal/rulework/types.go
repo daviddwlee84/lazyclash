@@ -31,7 +31,8 @@ type Source struct {
 type Plan struct {
 	TargetID            string `json:"target_id"`
 	Owner               Source `json:"owner"`
-	Domain              string `json:"domain"`
+	Domain              string `json:"domain,omitempty"`
+	Prefix              string `json:"prefix,omitempty"`
 	Policy              string `json:"policy"`
 	Rule                string `json:"rule"`
 	Digest              string `json:"digest"`
@@ -48,7 +49,8 @@ type Receipt struct {
 	Owner               string    `json:"owner"`
 	File                string    `json:"file"`
 	Rule                string    `json:"rule"`
-	Domain              string    `json:"domain"`
+	Domain              string    `json:"domain,omitempty"`
+	Prefix              string    `json:"prefix,omitempty"`
 	Policy              string    `json:"policy"`
 	Status              string    `json:"status"`
 	CreatedAt           time.Time `json:"created_at"`

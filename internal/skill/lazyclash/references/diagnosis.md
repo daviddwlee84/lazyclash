@@ -57,3 +57,13 @@ Separate transport reachability, expected HTTP status, application access
 (not tested), and observed rule/chain. A possible SSH connection is a candidate,
 not confirmation that this check followed that route. Optional `--via POLICY`
 adds a separate core URLTest comparison; it does not reroute the HTTP request.
+
+## Narrow destination-IP repairs
+
+When evidence shows a specific destination must use another existing policy,
+preview `rules add-ip IP_OR_CIDR --policy POLICY`, then apply the exact digest
+with `--yes --expect DIGEST`. A bare IPv4/IPv6 address becomes /32 or /128; CIDRs
+canonicalize. The generated IP-CIDR/IP-CIDR6 rule includes no-resolve and applies
+across ports for that prefix. Prefer a host prefix for a single VPS; do not infer
+a subnet-wide exception from one failed SSH session. Existing source ownership,
+Verge native activation, receipt verification and guarded restore still apply.

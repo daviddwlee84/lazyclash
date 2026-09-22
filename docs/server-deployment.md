@@ -276,6 +276,16 @@ VM 關機通常仍收費；BYO SSH 主機沒有 provider 電源 API，不能在�
 狀態分開呈現 SSH、服務程序、上次代理驗證及出口 IP。驗證使用臨時 Mihomo
 進行真實 HTTPS 請求，不改動既有 client；代理失敗不改走直連。
 出口 IP 可能不同於入站 IP。公開位址變更會標記 client 配置需要更新。
+`servers status` 的 `service`／`service_observed`／`checked_at` 是本次 SSH 觀測。
+SSH 或 helper 失敗時服務狀態為 `unknown`，不會把先前 `ready` 當成即時狀態；
+`last_known_status`／`last_known_at` 保留部署紀錄，`verified_at` 與出口 IP 仍是上次
+完整代理驗證的時間與結果。`servers usage` 使用雲商 API，與 SSH 可達性分開。
+
+若這台 VPS 同時是本機的代理出口，TUN 可能把管理 SSH 也送經該代理，使受來源 IP
+限制的 SSH ingress 拒絕連線。先確認實際路徑與防火牆；在 Rule 模式可用
+`rules add-ip IP --policy DIRECT` 預覽該 VM 的單一位址直連規則，依 digest 套用並
+完成 owner 重載／驗證。不要為此直接放寬 SSH 防火牆。Global 模式不套用這條 routing rule。
+
 若本機已有 TUN 且啟用 TLS SNI 目的地改寫，獨立驗證 client 的 REALITY 連線可能
 被既有 client 攔截。先診斷路徑，再明確指定暫時驗證 client 的本機網卡：
 
