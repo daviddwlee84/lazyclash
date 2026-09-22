@@ -18,13 +18,30 @@ with `--yes --expect DIGEST`; read `configs verify RECEIPT --json` afterward.
 owner reload, runtime observation and network usability are separate outcomes.
 Inspect a partial/unknown receipt before any retry.
 
-Import/add forms offer one toggle per raw source group. `--create-group NAME`
+Import/add forms offer searchable target and per-target group multi-selection. `--create-group NAME`
 creates a select group containing the nodes in the same reviewed change; rules
 and parent groups remain unchanged. `--adopt-existing` on import/server connect
 reuses only a semantically identical node; conflicting credentials/options are
 refused. A no-change adoption saves a receipt without reloading the client.
 Preview checks protocol capabilities and validates with the bound actual core.
 Classic Clash cannot import VLESS/REALITY; do not force the candidate into it.
+
+For multiple targets, use `proxies import --file FILE --destinations FILE --json`.
+The destinations file is an array of `{ "target": "ID", "groups": ["NAME"],
+"create_groups": [] }`, without credentials. Apply with that batch's exact
+`--yes --expect DIGEST`. All destinations are preflighted, then applied in target
+ID order; failure or unverified results stop later targets. Inspect each returned
+receipt; do not assume a batch is atomic or retry an unknown result. Each target
+resolves its own credentials. URI `remarks` is a fallback name after `#fragment`;
+legacy VMess JSON keeps `ps`. Unsupported parameters still require raw YAML.
+
+`topology --file YAML --json` reads a local file offline without settings/core
+access. `--target ID topology` reads the bound complete source; `--source-path`
+selects a target-host file without granting write ownership. `--live` adds
+timestamped group/provider observations, or a labeled API-only graph if no
+complete source exists. Mermaid export is `--format mermaid`; relations support
+`--view relations --focus NAME`. Graphs exclude credential values and do not
+execute rules, download providers, probe traffic or claim a physical route.
 
 `groups add/edit/duplicate` preserve ordered explicit members and provider `use`
 separately. An API group's expanded `all` cannot reconstruct filters or provider

@@ -102,6 +102,46 @@ Verge 保存後要在原生 UI 重新啟用 profile，再 Verify。修改其私�
 動態 provider 的節點則應 Duplicate 成私人節點，不直接改下載快取。
 後續 Merge／Script 仍可能覆蓋結果，因此驗證包含生成設定與 runtime 結構。
 
+## 多個 targets 匯入
+
+`proxies add/import --interactive` 使用可搜尋的多選列表：輸入 → targets → 各 target
+自己的群組／新群組 → 全部預覽 → 一次套用。Space 勾選，`/` 搜尋，Enter 下一步；
+Esc 回上一步保留草稿，Ctrl+C 取消。最後 review 的 Back 回到編輯，Apply 才開始寫入。
+明確 `--target` 或 TUI 當前 target 會預先勾選，仍可調整；未指定則不預勾。
+缺少來源時可進入既有 binding wizard，返回後繼續匯入。
+
+TTY 中新增／匯入未指定 target 時會自動引導選擇。完整的指定 target 指令保持既有
+preview 行為；`--yes --expect`、非 TTY 與 JSON 不自動開 wizard。
+Target 名稱也可以用 `--target <Tab>` 補全，補全只讀本機註冊資料。
+
+腳本用 `--destinations` 指定每個 target 的群組；此旗標與 `--target`、`--group`、
+`--create-group` 互斥。目的地檔案不放節點憑證：
+
+```json
+[
+  {"target": "desktop", "groups": ["PROXY", "Auto Select"]},
+  {"target": "server", "groups": ["Outbound"], "create_groups": ["Private, 東京"]}
+]
+```
+
+```sh
+lazyclash proxies import --file /absolute/private/nodes.yaml \
+  --destinations destinations.json --json
+lazyclash proxies import --file /absolute/private/nodes.yaml \
+  --destinations destinations.json --yes --expect BATCH_DIGEST --json
+```
+
+批次 digest 綁定所有目的地與輸入。套用前重新檢查全部來源，再依 target ID 順序
+逐一套用。每個 target 使用自己的認證；互動模式指定的 credential override 只影響
+明確 `--target` 的那一個。單一 target 失敗或結果不明時停止後續寫入，輸出各自的
+receipt 與未執行項目；已完成的變更保留，不會自動重試或回滾。
+
+`remarks` query 可作為節點名稱的相容欄位，例如 `vless://…?remarks=台北`。
+`#名稱` 優先於 `remarks`；VMess JSON 仍使用 `ps`。匯出維持既有標準形式，未知
+連線參數仍會報錯；這不是對所有 Shadowrocket URL 變體的相容承諾。
+
+群組的上下游與反向引用可用 [配置拓樸](routing-topology.md) 檢查。
+
 ## 複製與分享
 
 ```sh

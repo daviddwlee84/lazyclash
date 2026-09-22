@@ -43,6 +43,32 @@ func TestShareCodecsRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+func TestRemarksCompatibilityAndCanonicalExport(t *testing.T) {
+	legacy := "ss://" + base64.RawStdEncoding.EncodeToString([]byte("aes-128-gcm:private@example.test:443")) + "?remarks=台北"
+	if n, err := ParseURI(legacy); err != nil || scalar(n, "name") != "台北" {
+		t.Fatalf("legacy SS remarks: %v", err)
+	}
+	for _, scheme := range []string{"vless://UUID", "trojan://private", "hy2://private", "ss://YWVzLTEyOC1nY206cGFzcw"} {
+		for _, suffix := range []string{"?remarks=%E5%8F%B0%E5%8C%97%20%2B%20A", "?remarks=ignored#台北%20%2B%20A"} {
+			n, err := ParseURI(scheme + "@example.test:443" + suffix)
+			if err != nil || scalar(n, "name") != "台北 + A" {
+				t.Fatalf("%s: %v", scheme, err)
+			}
+			d, _ := definition(n, "proxy", "test")
+			uri, err := EncodeURI(d)
+			if err != nil || strings.Contains(uri, "remarks=") {
+				t.Fatalf("canonical export: %v", err)
+			}
+		}
+	}
+	for _, suffix := range []string{"?remarks=a&remarks=b", "?remarks=a&unknown=NEVER_SECRET", "?remarks=%zz"} {
+		_, err := ParseURI("vless://UUID@example.test:443" + suffix)
+		if err == nil || strings.Contains(err.Error(), "NEVER_SECRET") {
+			t.Fatal("invalid/unknown query accepted or leaked")
+		}
+	}
+}
 func TestImportDiagnosticsAndUnknownFields(t *testing.T) {
 	valid := "trojan://password@example.test:443#test"
 	defs, diags, e := ParseImport([]byte(valid + "\n" + valid + "?not-a-query"))

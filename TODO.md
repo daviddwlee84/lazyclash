@@ -2,6 +2,8 @@
 
 The current release supports existing-core observation, runtime comparison/control, URL diagnosis and exact-domain repairs for explicitly bound owners. Remaining milestones:
 
+- **SVG topology export (P?, M)**: optional local Mermaid CLI rendering when needed; terminal/Mermaid/JSON output ships first, without Node or Chromium. → [research](backlog/topology-svg-export.md)
+
 - **Extended rules workbench**: edit general staged personal overrides with `$VISUAL`/`$EDITOR`; keep baseline, overrides and generated configuration separate; validate with the target core version in isolated storage; show diff, detect conflicting edits and retain previous revisions.
 - **Offline rule evaluation**: preview supported deterministic rules while preserving unknown outcomes; extend the shipped active URL evidence without pretending offline estimates are observations.
 - **Managed core upgrades/migration**: update/rollback core binaries and images; migrate backend/service identity/ports with complete resource and service recovery. v0.1.6 adds installation, profile configuration, lifecycle and guarded network setup.

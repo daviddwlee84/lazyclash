@@ -6,6 +6,12 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 
 ## Unreleased
 
+- Added offline YAML routing topology, terminal/Mermaid/JSON output, searchable
+  CLI/TUI graph browsing and optional current-selection/provider overlays.
+- Added searchable per-target proxy import wizards, per-target destination
+  files and reviewed batch application with individual receipts and stop-on-failure
+  behavior. URI imports accept `remarks` as a fallback display name.
+
 - Added Azure, AWS Lightsail and EC2 providers to VPS discovery, reviewed
   provisioning, recovery and lifecycle management through official CLIs.
   Previews pin architecture, Ubuntu image and availability zone; quotes separate

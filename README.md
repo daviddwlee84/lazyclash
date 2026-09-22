@@ -231,6 +231,8 @@ Every core action uses the same API client as the dashboard. Read commands suppo
 ```sh
 lazyclash status --json
 lazyclash proxies list --filter jp
+lazyclash topology --file config.yaml
+lazyclash --target server topology --live --interactive
 lazyclash proxies delay 'Japan / 東京 🇯🇵'
 lazyclash proxies select PROXY 'Japan / 東京 🇯🇵'
 lazyclash mode rule

@@ -116,12 +116,16 @@ func ParseURI(raw string) (*yaml.Node, error) {
 	}
 	if scheme == "ss" {
 		beforeFragment, fragment, _ := strings.Cut(strings.TrimPrefix(raw, "ss://"), "#")
-		if !strings.Contains(beforeFragment, "@") {
-			decoded, e := b64(beforeFragment)
+		encoded, query, hasQuery := strings.Cut(beforeFragment, "?")
+		if !strings.Contains(encoded, "@") {
+			decoded, e := b64(encoded)
 			if e != nil {
 				return nil, e
 			}
 			raw = "ss://" + string(decoded)
+			if hasQuery {
+				raw += "?" + query
+			}
 			if fragment != "" {
 				raw += "#" + fragment
 			}
@@ -150,10 +154,13 @@ func ParseURI(raw string) (*yaml.Node, error) {
 	}
 	name := u.Fragment
 	if name == "" {
+		name = q.Get("remarks")
+	}
+	if name == "" {
 		name = scheme + "-" + net.JoinHostPort(u.Hostname(), port)
 	}
 	node := map[string]any{"name": name, "server": u.Hostname(), "port": p}
-	allowed := map[string]bool{}
+	allowed := map[string]bool{"remarks": true}
 	allow := func(keys ...string) {
 		for _, k := range keys {
 			allowed[k] = true

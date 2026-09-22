@@ -10,7 +10,16 @@ require (
 	golang.org/x/term v0.41.0
 )
 
-require github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+require (
+	github.com/AlexanderGrooff/mermaid-ascii v0.0.0-20260908213847-5f00e3d9ac9f
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+)
+
+require (
+	github.com/elliotchance/orderedmap/v2 v2.2.0 // indirect
+	github.com/gookit/color v1.5.4 // indirect
+	github.com/sirupsen/logrus v1.9.0 // indirect
+)
 
 require (
 	charm.land/lipgloss/v2 v2.0.6

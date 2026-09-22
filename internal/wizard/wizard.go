@@ -36,11 +36,23 @@ type Field struct {
 type Spec struct {
 	Title, Description, SubmitLabel string
 	Fields                          []Field
+	Back                            bool
 }
 
 var ErrCanceled = errors.New("wizard canceled")
+var ErrBack = errors.New("wizard back")
 
 func Edit(ctx context.Context, spec Spec, in io.Reader, out io.Writer) (map[string]string, error) {
+	values, err := EditDraft(ctx, spec, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return values, nil
+}
+
+// EditDraft retains the current answers when Back is requested. Existing Edit
+// callers keep their cancellation contract and never receive a canceled draft.
+func EditDraft(ctx context.Context, spec Spec, in io.Reader, out io.Writer) (map[string]string, error) {
 	if len(spec.Fields) == 0 {
 		return nil, errors.New("wizard has no fields")
 	}
@@ -63,8 +75,11 @@ func Edit(ctx context.Context, spec Spec, in io.Reader, out io.Writer) (map[stri
 		return nil, err
 	}
 	form := result.(*form)
+	if form.back {
+		return form.values(), ErrBack
+	}
 	if !form.submitted {
-		return nil, ErrCanceled
+		return form.values(), ErrCanceled
 	}
 	return form.values(), nil
 }
@@ -75,7 +90,15 @@ func Choose(ctx context.Context, title string, choices []Choice, in io.Reader, o
 }
 
 func Confirm(ctx context.Context, title, body string, in io.Reader, out io.Writer) (bool, error) {
-	m := &review{title: title, body: body, width: 80, height: 24}
+	return confirm(ctx, title, body, false, in, out)
+}
+
+// ConfirmBack labels the negative review action as Back for staged wizards.
+func ConfirmBack(ctx context.Context, title, body string, in io.Reader, out io.Writer) (bool, error) {
+	return confirm(ctx, title, body, true, in, out)
+}
+func confirm(ctx context.Context, title, body string, back bool, in io.Reader, out io.Writer) (bool, error) {
+	m := &review{title: title, body: body, width: 80, height: 24, back: back}
 	result, err := tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(in), tea.WithOutput(out)).Run()
 	if ctx.Err() != nil {
 		return false, ctx.Err()
@@ -83,7 +106,11 @@ func Confirm(ctx context.Context, title, body string, in io.Reader, out io.Write
 	if err != nil {
 		return false, err
 	}
-	return result.(*review).accepted, nil
+	review := result.(*review)
+	if review.interrupted {
+		return false, ErrCanceled
+	}
+	return review.accepted, nil
 }
 
 // Pause keeps a terminal handoff's printed result visible before the dashboard
@@ -120,6 +147,7 @@ type form struct {
 	width, height int
 	err           string
 	submitted     bool
+	back          bool
 	searching     bool
 	search        textinput.Model
 	pressed       int
@@ -282,6 +310,7 @@ func (m *form) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.submit()
 		}
 		if i == -3 {
+			m.back = m.spec.Back
 			return m, tea.Quit
 		}
 		if i >= 100000 {
@@ -304,6 +333,7 @@ func (m *form) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.search.SetValue("")
 				return m, nil
 			}
+			m.back = m.spec.Back
 			return m, tea.Quit
 		case "ctrl+s":
 			return m, m.submit()
@@ -460,7 +490,11 @@ func (m *form) layout() ([]string, []hit) {
 	}
 	button := "[Ctrl+S " + clean(label) + "]"
 	hits = append(hits, hit{0, len(lines), ansi.StringWidth(button), -1}, hit{ansi.StringWidth(button) + 2, len(lines), 12, -3})
-	lines = append(lines, button+"  [Esc Cancel]")
+	back := "Cancel"
+	if m.spec.Back {
+		back = "Back"
+	}
+	lines = append(lines, button+"  [Esc "+back+"]")
 	lines = append(lines, fmt.Sprintf("Field %d/%d · Tab/Shift+Tab · Select: arrows/j/k, / search", min(m.index+1, len(m.spec.Fields)), len(m.spec.Fields)))
 	return lines, hits
 }
@@ -486,6 +520,8 @@ type review struct {
 	title, body           string
 	width, height, offset int
 	acceptFocus, accepted bool
+	interrupted           bool
+	back                  bool
 	pressed               int
 }
 
@@ -498,7 +534,10 @@ func (m *review) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		m.pressed = -1
 		switch msg.String() {
-		case "esc", "ctrl+c":
+		case "ctrl+c":
+			m.interrupted = true
+			return m, tea.Quit
+		case "esc":
 			return m, tea.Quit
 		case "tab", "shift+tab", "left", "right", "h", "l":
 			m.acceptFocus = !m.acceptFocus
@@ -552,13 +591,17 @@ func (m *review) View() tea.View {
 	for len(lines) < max(0, m.height-2) {
 		lines = append(lines, "")
 	}
-	buttons := "[ Cancel ]  [ Apply ]"
-	if m.acceptFocus {
-		buttons = "  Cancel    [ Apply ]"
-	} else {
-		buttons = "[ Cancel ]    Apply"
+	negative := "Cancel"
+	if m.back {
+		negative = "Back"
 	}
-	lines = append(lines, buttons, "Tab/Left/Right choose · Enter confirm · Up/Down scroll · Esc cancel")
+	buttons := ""
+	if m.acceptFocus {
+		buttons = fmt.Sprintf("  %-6s    [ Apply ]", negative)
+	} else {
+		buttons = fmt.Sprintf("[ %-6s ]    Apply", negative)
+	}
+	lines = append(lines, buttons, "Tab/Left/Right choose · Enter confirm · Up/Down scroll · Esc "+strings.ToLower(negative))
 	return terminalView(lines, m.width, m.height)
 }
 func terminalView(lines []string, width, height int) tea.View {

@@ -8,6 +8,7 @@ The [changelog](../CHANGELOG.md) identifies the version that introduced a featur
 |---|---|
 | Connecting a local/remote core, comparing servers or copying runtime choices | [Targets and configuration](targets-and-config.md) |
 | Adding/editing nodes, configuring groups, copying credentials or sharing QR | [節點與群組](proxies-and-groups.md) |
+| Drawing a YAML routing graph, inspecting group relationships or current selections | [配置拓樸](routing-topology.md) |
 | Choosing a shell/data proxy, owning SSH forwards or configuring Docker consumers | [代理環境](proxy-environment.md) |
 | Sharing a local proxy with a remote shell/command and checking endpoint lifetime | [雙向 SSH 代理](ssh-proxy-sharing.md) |
 | Installing an owned native/Docker client or using offline China-routing presets | [Client setup](managed-cores.md) |

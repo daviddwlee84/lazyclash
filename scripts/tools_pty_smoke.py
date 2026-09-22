@@ -126,6 +126,49 @@ home = {json.dumps(scratch)}
             assert "fixture-export-secret" in terminal.text().replace("\n", ""), "intentional export disappeared before result pause\n" + terminal.text()
             terminal.send("\r")
             terminal.wait(lambda: "[2 Proxies]" in terminal.text(), "result acknowledgement resumes dashboard")
+
+            terminal.send(":Routing topology\r")
+            terminal.wait(lambda: "Routing topology" in terminal.text() and "Snapshot ready" in terminal.text(), "topology browser")
+            terminal.send("/Proxy\r\r")
+            terminal.wait(lambda: "focus:" in terminal.text(), "focus selected topology node")
+            terminal.send("v\tjjll")
+            terminal.resize(36, 12)
+            assert terminal.process.poll() is None, "narrow topology exited"
+            terminal.resize(120, 32)
+            terminal.send("s")
+            terminal.wait(lambda: "config + live" in terminal.text() and "loading" not in terminal.text(), "passive live overlay")
+            terminal.send("?")
+            terminal.wait(lambda: "Current selection is not proof" in terminal.text(), "topology help")
+            terminal.send("\x1b")
+            terminal.wait(lambda: "Nodes:" in terminal.text(), "close topology help")
+            terminal.send("\x1b")
+            terminal.wait(lambda: "[2 Proxies]" in terminal.text(), "topology returns without result pause")
+
+            terminal.send(":Import proxy links\r")
+            terminal.wait(lambda: "Import proxies" in terminal.text() and "input" in terminal.text(), "import input")
+            terminal.send(b"\x1b[200~trojan://fixture-import-secret@import.example:443?remarks=New%20qjkh\x1b[201~")
+            terminal.send(b"\x13")
+            terminal.wait(lambda: "targets" in terminal.text() and "1 selected" in terminal.text(), "current target preselected")
+            terminal.send("/second\r \r")
+            terminal.wait(lambda: "first" in terminal.text() and "groups" in terminal.text(), "first target groups")
+            terminal.send(" \r")
+            terminal.wait(lambda: "new groups" in terminal.text(), "first optional new groups")
+            terminal.send(b"\x13")
+            terminal.wait(lambda: "second" in terminal.text() and "groups" in terminal.text(), "second target groups")
+            terminal.send("j \r")
+            terminal.wait(lambda: "new groups" in terminal.text(), "second optional new groups")
+            terminal.send(b"\x1b[200~Private, Tokyo\x1b[201~")
+            terminal.send("\x1b")
+            terminal.wait(lambda: "second" in terminal.text() and "1 selected" in terminal.text(), "Back keeps second target group")
+            terminal.send("\r")
+            terminal.wait(lambda: "Private, Tokyo" in terminal.text(), "Back keeps new group draft")
+            terminal.send(b"\x13")
+            terminal.wait(lambda: "Apply proxy import to selected targets" in terminal.text(), "all-target import review")
+            assert "fixture-import-secret" not in terminal.text(), "review leaked input credential"
+            terminal.send("\r")  # default is Back, never Apply.
+            terminal.wait(lambda: "second" in terminal.text() and "groups" in terminal.text(), "review Back retains draft")
+            terminal.send(b"\x03")
+            terminal.wait(lambda: "canceled" in terminal.text() and "[2 Proxies]" in terminal.text(), "batch import cancel restores dashboard")
             assert settings.read_bytes() == before_settings
             assert [path.read_bytes() for path in files] == snapshots
             assert all(request(url, "/configs")["mode"] == "rule" for url in urls)
@@ -135,7 +178,7 @@ home = {json.dumps(scratch)}
             assert current == terminal.original, "terminal flags not restored"
             terminal.send("handoff-restored\n")
             terminal.wait(lambda: "__ECHO_handoff-restored__" in terminal.text(), "outer shell input restored")
-            print("TOOLS PTY PASS: edit/paste/resize cancel, common group form cancel, duplicate Ctrl+S/default cancel, cross-target copy preview cancel, intentional export/result pause, source/settings unchanged, terminal restored")
+            print("TOOLS PTY PASS: source editor, duplicate/copy review, intentional export, topology search/focus/resize/live/back, per-target batch groups and retained drafts, canceled review, source/settings unchanged, terminal restored")
     finally:
         try:
             if terminal is not None:

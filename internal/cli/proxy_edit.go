@@ -99,7 +99,7 @@ func (o *options) definitionEditor(cmd *cobra.Command, data []byte) ([]byte, err
 	return raw, nil
 }
 func (o *options) sourceMutationCommand(kind, action string) *cobra.Command {
-	var file, uri, newName, expected string
+	var file, uri, newName, expected, destinations string
 	var groups, createGroups []string
 	var yes, interactive, editor, adoptExisting bool
 	use := action + " [NAME]"
@@ -119,6 +119,9 @@ func (o *options) sourceMutationCommand(kind, action string) *cobra.Command {
 	}
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		defer connection.CloseAuthentications()
+		if destinations != "" && (globalChanged(cmd, "target") || cmd.Flags().Changed("group") || cmd.Flags().Changed("create-group")) {
+			return usage("--destinations supplies each target and its groups; it cannot be combined with --target, --group or --create-group")
+		}
 		if yes && expected == "" {
 			return usage("--yes requires --expect DIGEST")
 		}
@@ -134,7 +137,9 @@ func (o *options) sourceMutationCommand(kind, action string) *cobra.Command {
 				business = true
 			}
 		})
-		ui, e := o.sourceInteractive(cmd, interactive, !business)
+		multi := kind == "proxy" && (action == "add" || action == "import")
+		autoTargets := multi && destinations == "" && !globalChanged(cmd, "target") && !yes && expected == ""
+		ui, e := o.sourceInteractive(cmd, interactive, !business || autoTargets)
 		if e != nil {
 			return e
 		}
@@ -145,6 +150,9 @@ func (o *options) sourceMutationCommand(kind, action string) *cobra.Command {
 		req := configwork.Request{Kind: kind, Action: action, Input: input, NewName: newName, Groups: groups, CreateGroups: createGroups, AdoptExisting: adoptExisting}
 		if len(args) > 0 {
 			req.Name = args[0]
+		}
+		if multi && (ui || destinations != "") {
+			return o.proxyBatchCommand(cmd, req, destinations, ui, yes, expected)
 		}
 		t, e := o.configWorkTarget(cmd)
 		if e != nil {
@@ -334,6 +342,9 @@ func (o *options) sourceMutationCommand(kind, action string) *cobra.Command {
 		}
 		if action == "import" {
 			c.Flags().BoolVar(&adoptExisting, "adopt-existing", false, "reuse identical existing nodes; differing definitions remain conflicts")
+		}
+		if action == "add" || action == "import" {
+			c.Flags().StringVar(&destinations, "destinations", "", "JSON file of per-target groups for a reviewed batch import")
 		}
 	}
 	c.Flags().StringVar(&newName, "name", "", "explicit new name for duplicate or add")

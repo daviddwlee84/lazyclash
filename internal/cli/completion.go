@@ -429,6 +429,8 @@ func (o *options) registerCompletions(root *cobra.Command) {
 		}
 		if cmd.Flags().Lookup("format") != nil {
 			switch path {
+			case "topology":
+				_ = cmd.RegisterFlagCompletionFunc("format", values("ascii", "mermaid"))
 			case "vps guide":
 				_ = cmd.RegisterFlagCompletionFunc("format", values("markdown", "agent"))
 			case "proxy docker render":
@@ -476,12 +478,15 @@ func (o *options) registerCompletions(root *cobra.Command) {
 				_ = cmd.MarkFlagDirname(name)
 			}
 		}
-		for _, name := range []string{"secret-file", "ca-cert", "probe-password-file", "probe-ca-cert", "file", "output", "input", "artifact"} {
+		if path == "topology" {
+			_ = cmd.RegisterFlagCompletionFunc("view", values("graph", "relations"))
+		}
+		for _, name := range []string{"secret-file", "ca-cert", "probe-password-file", "probe-ca-cert", "file", "output", "input", "artifact", "destinations"} {
 			if cmd.Flags().Lookup(name) != nil {
 				_ = cmd.MarkFlagFilename(name)
 			}
 		}
-		for _, name := range []string{"via", "group", "probe-proxy", "probe-username", "probe-password-env", "source-config", "path", "binary", "home", "profile"} {
+		for _, name := range []string{"via", "group", "probe-proxy", "probe-username", "probe-password-env", "source-config", "source-path", "focus", "path", "binary", "home", "profile"} {
 			if cmd.Flags().Lookup(name) != nil {
 				_ = cmd.RegisterFlagCompletionFunc(name, values())
 			}

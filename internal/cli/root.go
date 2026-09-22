@@ -273,7 +273,7 @@ func New(deps Dependencies) *cobra.Command {
 	root.AddCommand(o.targetCommands(), o.configCommands(), o.statusCommand(), o.proxyCommands(), o.proxyCommand(), o.connectionCommands(), o.logsCommand(), o.rulesCommand(), o.providerCommands(), o.modeCommand(), o.tunCommand(), o.allowLANCommand(), o.settingsCommand())
 	root.AddCommand(o.skillCommand(), o.diagnosticsCommand(), o.upgradeCommand(), o.groupsCommand(), o.setupCommand(), o.coresCommand())
 	root.AddCommand(o.vpsCommand(), o.serversCommand(), o.tailnetCommand())
-	root.AddCommand(o.completionCommand(root))
+	root.AddCommand(o.topologyCommand(), o.completionCommand(root))
 	o.registerCompletions(root)
 	return root
 }

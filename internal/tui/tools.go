@@ -21,6 +21,7 @@ type terminalTask struct {
 	pause       func(context.Context, string, io.Reader, io.Writer) error
 	in          io.Reader
 	out, errOut io.Writer
+	viewOnly    bool
 }
 
 func (t *terminalTask) SetStdin(in io.Reader)   { t.in = in }
@@ -30,6 +31,9 @@ func (t *terminalTask) Run() error {
 	err := t.run(t.ctx, t.args, t.in, t.out, t.errOut)
 	if errors.Is(err, wizard.ErrCanceled) || errors.Is(err, context.Canceled) {
 		return err
+	}
+	if t.viewOnly && err == nil {
+		return nil
 	}
 	label := "Operation finished"
 	if err != nil {
@@ -83,7 +87,7 @@ func (m *Model) runTool(label string, targeted bool, args ...string) tea.Cmd {
 	m.overlay = "external-tool"
 	m.status = label
 	request := toolMsg{generation: m.generation, serial: m.toolSerial, label: label}
-	task := &terminalTask{ctx: m.ctx, args: append([]string(nil), args...), run: m.options.RunCommand}
+	task := &terminalTask{ctx: m.ctx, args: append([]string(nil), args...), run: m.options.RunCommand, viewOnly: label == "Routing topology"}
 	return tea.Exec(task, func(err error) tea.Msg { request.err = err; return request })
 }
 
@@ -111,6 +115,18 @@ func (m *Model) receiveTool(msg toolMsg) tea.Cmd {
 	m.toolPending = false
 	m.overlay = ""
 	m.pressed = nil
+	if msg.label == "Import proxies" || msg.label == "Add proxy" {
+		// The shared wizard may write several targets. Invalidate cached data
+		// even after a partial result, then refresh the visible target normally.
+		for _, state := range m.states {
+			for _, key := range []string{"config", "proxies", "rules", "proxyProviders", "ruleProviders"} {
+				snap := state.snap(key)
+				snap.err = errors.New("import finished; awaiting refresh")
+				snap.loading = false
+				snap.serial++
+			}
+		}
+	}
 	if errors.Is(msg.err, wizard.ErrCanceled) {
 		m.status = msg.label + " canceled"
 	} else if msg.err != nil {
@@ -224,6 +240,8 @@ func (m *Model) toolAction(id string) tea.Cmd {
 		return m.runTool("Network diagnosis", false, "diagnostics", "network")
 	case "tool-source":
 		return m.runTool("Bind configuration source", true, "configs", "source", "set", "--interactive")
+	case "tool-topology":
+		return m.runTool("Routing topology", true, "topology", "--interactive")
 	case "tool-proxy-add":
 		return m.runTool("Add proxy", true, "proxies", "add", "--interactive")
 	case "tool-proxy-import":
