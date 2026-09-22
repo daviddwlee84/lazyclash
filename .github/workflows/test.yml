@@ -78,6 +78,7 @@ jobs:
         run: |
           python3 -m venv "$RUNNER_TEMP/pty-venv"
           "$RUNNER_TEMP/pty-venv/bin/pip" install pyte==0.8.2
+          if [ -f scripts/test_pty_emulator.py ]; then "$RUNNER_TEMP/pty-venv/bin/python" -m unittest discover -s scripts -p test_pty_emulator.py; fi
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_smoke.py
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/auth_pty_smoke.py
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/tools_pty_smoke.py

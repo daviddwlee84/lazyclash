@@ -37,6 +37,26 @@ func toolModel(t *testing.T) *Model {
 	return m
 }
 
+func TestAnalyticsPaletteQueryAndVisibleActionStayConsistent(t *testing.T) {
+	m := toolModel(t)
+	m.page = overview
+	sendKey(m, ":")
+	for _, letter := range "Historical analytics" {
+		sendKey(m, string(letter))
+	}
+	actions := m.paletteActions()
+	if m.input.Value() != "Historical analytics" || len(actions) != 2 || actions[0].id != "tool-analytics" {
+		t.Fatalf("wrong filtered action for query %q: %+v", m.input.Value(), actions)
+	}
+	view := m.overlayView(120, 25)
+	if !strings.Contains(view, "Historical analytics: sources") || strings.Contains(view, "Setup Mihomo client") {
+		t.Fatalf("palette rendered unrelated action rows: %s", view)
+	}
+	if cmd := sendKey(m, "enter"); cmd == nil || m.overlay != "external-tool" || m.status != "Historical analytics" {
+		t.Fatalf("filtered Enter did not hand off analytics: overlay=%s status=%s", m.overlay, m.status)
+	}
+}
+
 func TestToolHandoffSingleOwnerAndStaleReturn(t *testing.T) {
 	m := toolModel(t)
 	cmd := m.runTool("Edit source", true, "proxies", "edit", "Alpha", "--interactive")

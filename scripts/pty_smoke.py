@@ -24,7 +24,7 @@ import termios
 import time
 import urllib.request
 
-import pyte
+from pty_emulator import Screen, Stream
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,8 +52,8 @@ class Terminal:
         self.master, self.slave = pty.openpty()
         self.original = termios.tcgetattr(self.slave)
         self.raw = bytearray()
-        self.screen = pyte.Screen(120, 32)
-        self.stream = pyte.Stream(self.screen)
+        self.screen = Screen(120, 32)
+        self.stream = Stream(self.screen)
         self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", 32, 120, 0, 0))
 
