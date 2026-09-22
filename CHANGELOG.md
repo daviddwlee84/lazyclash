@@ -1,10 +1,12 @@
 # Changelog
 
 User-facing changes are recorded here for every published version. Install a
-fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.8`,
+fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.10`,
 or use `@latest` to upgrade. Check the installed binary with `lazyclash --version`.
 
 ## Unreleased
+
+## 0.1.10 — 2026-09-22
 
 - Added opt-in historical analytics with private SQLite, configurable retention
   and storage budgets, Mihomo/interface/access-log/user-stats collectors, vnStat
@@ -18,6 +20,16 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 - Added searchable per-target proxy import wizards, per-target destination
   files and reviewed batch application with individual receipts and stop-on-failure
   behavior. URI imports accept `remarks` as a fallback display name.
+- Added saved connectivity checks with HTTP expectations and observed routing,
+  explicit existing-client service bindings, linked Oracle/Azure VPS usage and
+  client-node/server provenance. Cloud billing and measured traffic remain separate.
+- Added visible controller/mode state and explicit Rule/Global/Direct controls,
+  offline cloud-CLI setup guides and agent handoffs, and narrow destination-IP repairs.
+- Fixed Oracle/Lightsail CLI compatibility, live server status interpretation,
+  and SSH setup time accounting in saved checks. Public module verification runs
+  fixed-version and latest installs in disposable runner state.
+
+## 0.1.9 — 2026-09-21
 
 - Added Azure, AWS Lightsail and EC2 providers to VPS discovery, reviewed
   provisioning, recovery and lifecycle management through official CLIs.
@@ -36,6 +48,8 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
   recovery journals and isolated authenticated client verification.
 - Added private client/admin bundles, URI/QR/starter exports and reviewed import
   into existing client sources, plus source-backed protocol and cost guidance.
+- Added filtered source archives and Go module packaging guards; release
+  publication verifies immutable assets before publishing or resuming a draft.
 
 ## 0.1.8 — 2026-09-21
 

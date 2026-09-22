@@ -4,6 +4,8 @@
   "required": [
     "cmd/lazyclash/main.go",
     "internal/skill/lazyclash/SKILL.md",
+    "internal/skill/lazyclash/references/analytics.md",
+    "internal/analyticsservice/host.py",
     "internal/vps/assets/oracle-cloud-init.yaml",
     "internal/tailnet/host.py",
     "internal/tailnetproxy/helper.py",
@@ -13,6 +15,11 @@
   "smoke": [
     [
       "--skill"
+    ],
+    [
+      "analytics",
+      "report",
+      "--json"
     ]
   ]
 }

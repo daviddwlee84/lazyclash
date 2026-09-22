@@ -81,6 +81,8 @@ jobs:
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_smoke.py
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/auth_pty_smoke.py
           "$RUNNER_TEMP/pty-venv/bin/python" scripts/tools_pty_smoke.py
+          if [ -f scripts/connectivity_checks_pty_smoke.py ]; then "$RUNNER_TEMP/pty-venv/bin/python" scripts/connectivity_checks_pty_smoke.py; fi
+          if [ -f scripts/analytics_pty_smoke.py ]; then "$RUNNER_TEMP/pty-venv/bin/python" scripts/analytics_pty_smoke.py; fi
           if [ -f scripts/pty_servers_smoke.py ]; then "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_servers_smoke.py; fi
           if [ -f scripts/pty_tailnet_smoke.py ]; then "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_tailnet_smoke.py; fi
           if [ -f scripts/pty_cloud_vps_smoke.py ]; then "$RUNNER_TEMP/pty-venv/bin/python" scripts/pty_cloud_vps_smoke.py; fi
