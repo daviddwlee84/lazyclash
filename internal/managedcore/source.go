@@ -14,6 +14,9 @@ import (
 // SourceOperation grants source access only through the recorded managed owner.
 // It never turns an arbitrary registered endpoint into a privileged file editor.
 func SourceOperation(ctx context.Context, target config.Target, operation configwork.HostRequest, opts Options) (configwork.HostResponse, error) {
+	if target.HostOS == "windows" {
+		return WindowsSourceOperation(ctx, target, operation, opts)
+	}
 	if operation.Op == "write" {
 		if opts.ReadOnly {
 			return configwork.HostResponse{}, errors.New("managed source writes are disabled in read-only mode")

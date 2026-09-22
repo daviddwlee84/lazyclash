@@ -25,6 +25,12 @@ import (
 var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,47}$`)
 
 func normalize(request Request) (Request, error) {
+	if request.Client != "" && request.Client != "mihomo" && request.Client != "verge" {
+		return request, errors.New("client must be mihomo or verge")
+	}
+	if request.HostOS != "" && request.HostOS != "windows" && request.HostOS != "linux" && request.HostOS != "darwin" {
+		return request, errors.New("host OS must be windows, linux or darwin")
+	}
 	if !idPattern.MatchString(request.ID) {
 		return request, errors.New("core ID must be 1..48 lowercase letters, numbers, '-' or '_', starting with a letter or number")
 	}
@@ -87,6 +93,12 @@ func normalize(request Request) (Request, error) {
 }
 
 func Preview(ctx context.Context, request Request, opts Options) (Plan, error) {
+	if request.HostOS == "windows" {
+		return PreviewWindows(ctx, request, opts)
+	}
+	if request.Client == "verge" {
+		return Plan{}, errors.New("managed Verge deployment requires a Windows host")
+	}
 	return preview(ctx, request, opts, nil)
 }
 
@@ -312,6 +324,9 @@ func preview(ctx context.Context, request Request, opts Options, current *Instan
 }
 
 func Apply(ctx context.Context, request Request, expected string, opts Options) (Receipt, error) {
+	if request.HostOS == "windows" {
+		return ApplyWindows(ctx, request, expected, opts)
+	}
 	if opts.ReadOnly {
 		return Receipt{}, errors.New("managed installation is disabled in read-only mode")
 	}
@@ -439,7 +454,7 @@ func Apply(ctx context.Context, request Request, expected string, opts Options) 
 }
 
 func targetForInstance(instance Instance, plan Plan, secretPath string) config.Target {
-	target := config.Target{ID: instance.ID, Name: instance.Name, SSHHost: instance.SSHHost, Controller: plan.Controller, ProbeProxy: plan.ProbeProxy, SecretFile: secretPath, ManagedCoreID: instance.ID}
+	target := config.Target{Checks: plan.Request.CloneChecks, ID: instance.ID, Name: instance.Name, SSHHost: instance.SSHHost, Controller: plan.Controller, ProbeProxy: plan.ProbeProxy, SecretFile: secretPath, ManagedCoreID: instance.ID}
 	corePath := filepath.Join(instance.Root, "home", "config.yaml")
 	binary := filepath.Join(instance.Root, "bin", "mihomo")
 	home := filepath.Join(instance.Root, "home")
@@ -502,6 +517,14 @@ func finishActivation(ctx context.Context, instance Instance, request Request, r
 		receipt.Message = "Management verification failed; any armed host rollback remains active."
 		_ = saveReceipt(receipt, opts)
 		return receipt, healthErr
+	}
+	if receipt.Operation == "install" && len(request.CloneSelections) > 0 {
+		if err := applyCloneSelections(healthCtx, instance.Target, request.CloneSelections, opts); err != nil {
+			receipt.Status = "running_clone_selections_unverified"
+			receipt.Message = "The client started, but the reviewed manual selections could not be verified."
+			_ = saveReceipt(receipt, opts)
+			return receipt, err
+		}
 	}
 	probe := opts.Probe
 	if probe == nil {

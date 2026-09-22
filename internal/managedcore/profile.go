@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/daviddwlee84/lazyclash/internal/configwork"
+	"github.com/daviddwlee84/lazyclash/internal/hostpath"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -28,6 +29,9 @@ func buildProfile(ctx context.Context, request Request) ([]byte, map[string][]by
 	document := map[string]any{}
 	resources := map[string][]byte{}
 	warnings := []string{}
+	if cloneWarnings, ok := ctx.Value(cloneContextKey{}).([]string); ok {
+		warnings = append(warnings, cloneWarnings...)
+	}
 	if request.InputKind == "yaml" {
 		warnings = append(warnings, "The imported DNS configuration is preserved; scoped VPN nameserver policies and fake-IP exceptions are merged explicitly.")
 	} else {
@@ -351,6 +355,9 @@ func profileResources(ctx context.Context, document map[string]any, base string,
 				data = cached
 				sourceOrigin = "current owned resource " + path
 			}
+			if data == nil && ctx.Value(cloneContextKey{}) != nil {
+				return errors.New("clone provider cache is missing from the reviewed snapshot; no replacement is downloaded")
+			}
 			if data == nil && path != "" && base != "" {
 				source := path
 				if !filepath.IsAbs(source) {
@@ -389,6 +396,9 @@ func profileResources(ctx context.Context, document map[string]any, base string,
 				if text, ok := item.(string); ok && fileKey && text != "" && !strings.Contains(text, "-----BEGIN") {
 					path := text
 					data, cached := snapshotResource(ctx, text)
+					if !cached && ctx.Value(cloneContextKey{}) != nil {
+						return errors.New("clone certificate/key is missing from the reviewed snapshot")
+					}
 					if !cached {
 						if !filepath.IsAbs(path) {
 							path = filepath.Join(base, path)
@@ -406,6 +416,12 @@ func profileResources(ctx context.Context, document map[string]any, base string,
 						}
 					}
 					name := "certificates/" + hashBytes([]byte(path))[:16] + ".pem"
+					if ctx.Value(cloneContextKey{}) != nil {
+						canonical := filepath.ToSlash(filepath.Clean(text))
+						if strings.HasPrefix(canonical, "certificates/") && !strings.Contains(canonical, "../") {
+							name = canonical
+						}
+					}
 					resources[name] = data
 					recordResourceOrigin(ctx, name, "local certificate/key "+path)
 					v[key] = "./" + name
@@ -464,6 +480,9 @@ func profileResources(ctx context.Context, document map[string]any, base string,
 	for name := range required {
 		path := filepath.Join(base, name)
 		data, cached := snapshotResource(ctx, name)
+		if !cached && ctx.Value(cloneContextKey{}) != nil {
+			return errors.New("clone geodata is missing from the reviewed snapshot")
+		}
 		if !cached {
 			info, e := os.Stat(path)
 			if base == "" || e != nil || !info.Mode().IsRegular() || info.Size() > 24<<20 {
@@ -512,6 +531,7 @@ func recordResourceOrigin(ctx context.Context, name, origin string) {
 
 type profileSnapshotKey struct{}
 type profileSnapshot struct {
+	OS    string
 	Home  string
 	Files map[string][]byte
 }
@@ -521,14 +541,14 @@ func snapshotResource(ctx context.Context, path string) ([]byte, bool) {
 	if !ok {
 		return nil, false
 	}
-	if filepath.IsAbs(path) {
-		relative, e := filepath.Rel(snapshot.Home, path)
+	if hostpath.IsAbs(snapshot.OS, path) {
+		relative, e := hostpath.Rel(snapshot.OS, snapshot.Home, path)
 		if e != nil {
 			return nil, false
 		}
 		path = relative
 	}
-	path = filepath.ToSlash(filepath.Clean(path))
+	path = filepath.ToSlash(hostpath.Clean(snapshot.OS, path))
 	data, ok := snapshot.Files[path]
 	return data, ok
 }

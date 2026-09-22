@@ -60,3 +60,5 @@ checks opt-in collection and the historical report browser against a disposable 
 Tests use disposable state and controllers.
 Keep actual OS execution, cross-builds, fixture checks and real-host observations
 distinct in verification reports.
+
+- [Client deployment and portable target cloning](client-deployment.md)

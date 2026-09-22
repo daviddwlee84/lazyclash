@@ -171,8 +171,8 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 				return usage("supply at least one field to edit, such as --name or --controller")
 			}
 			previous := cfg.Targets[index]
-			oldController, oldSSH := previous.Controller, previous.SSHHost
-			for name, dst := range map[string]*string{"name": &previous.Name, "controller": &previous.Controller, "ssh": &previous.SSHHost, "secret-file": &previous.SecretFile, "secret-env": &previous.SecretEnv, "ca-cert": &previous.CAFile, "source-config": &previous.SourceConfig, "probe-proxy": &previous.ProbeProxy, "probe-username": &previous.ProbeUsername, "probe-password-env": &previous.ProbePasswordEnv, "probe-password-file": &previous.ProbePasswordFile, "probe-ca-cert": &previous.ProbeCAFile} {
+			oldController, oldSSH, oldOS := previous.Controller, previous.SSHHost, previous.HostOS
+			for name, dst := range map[string]*string{"host-os": &previous.HostOS, "name": &previous.Name, "controller": &previous.Controller, "ssh": &previous.SSHHost, "secret-file": &previous.SecretFile, "secret-env": &previous.SecretEnv, "ca-cert": &previous.CAFile, "source-config": &previous.SourceConfig, "probe-proxy": &previous.ProbeProxy, "probe-username": &previous.ProbeUsername, "probe-password-env": &previous.ProbePasswordEnv, "probe-password-file": &previous.ProbePasswordFile, "probe-ca-cert": &previous.ProbeCAFile} {
 				if cmd.Flags().Changed(name) {
 					*dst, _ = cmd.Flags().GetString(name)
 				}
@@ -192,7 +192,7 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 			if !strings.Contains(previous.Controller, "://") {
 				previous.Controller = "http://" + previous.Controller
 			}
-			if previous.TransportOverride || previous.Controller != oldController || previous.SSHHost != oldSSH {
+			if previous.TransportOverride || previous.Controller != oldController || previous.SSHHost != oldSSH || previous.HostOS != oldOS {
 				previous.RuleSource = nil
 				previous.ConfigSource = nil
 				previous.Service = nil
@@ -230,6 +230,7 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 	f.StringVar(&draft.Name, "name", "", "display name")
 	f.StringVar(&draft.Controller, "controller", "", "controller URL (host:port implies HTTP)")
 	f.StringVar(&draft.SSHHost, "ssh", "", "SSH host alias")
+	f.StringVar(&draft.HostOS, "host-os", "", "core host platform for source paths: windows, linux or darwin")
 	f.StringVar(&draft.SecretFile, "secret-file", "", "secret file path")
 	f.StringVar(&draft.SecretEnv, "secret-env", "", "secret environment variable name")
 	f.StringVar(&draft.CAFile, "ca-cert", "", "HTTPS CA file")

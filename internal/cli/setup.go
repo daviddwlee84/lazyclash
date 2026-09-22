@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -59,6 +61,9 @@ func (o *options) managedOptions(cmd *cobra.Command) managedcore.Options {
 			if found < 0 {
 				cfg.Targets = append(cfg.Targets, target)
 			} else {
+				// Checks become destination-owned preferences after initial clone.
+				// Lifecycle registration must not replay the saved source snapshot.
+				target.Checks = cfg.Targets[found].Checks
 				cfg.Targets[found] = target
 			}
 			if cfg.DefaultTarget == "" {
@@ -96,6 +101,10 @@ func (o *options) managedOptions(cmd *cobra.Command) managedcore.Options {
 func addSetupFlags(cmd *cobra.Command, flags *setupFlags) {
 	f := cmd.Flags()
 	r := &flags.request
+	f.StringVar(&r.CloneSourceID, "from-target", "", "clone the active portable configuration of a registered target")
+	f.StringVar(&r.Client, "client", "mihomo", "mihomo or verge (Windows desktop client)")
+	f.StringVar(&r.ClientVersion, "client-version", "", "exact supported desktop client version (Verge: 2.5.2)")
+	f.StringVar(&r.HostOS, "host-os", "", "optional host platform: windows, linux or darwin; normally detected")
 	f.StringVar(&r.Backend, "backend", "native", "native service or existing Docker daemon")
 	f.StringVar(&r.InputKind, "input-kind", "links", "links, node subscription URL, or complete yaml")
 	f.StringVar(&flags.input, "input", "", "local private input file; '-' reads stdin")
@@ -116,7 +125,7 @@ func addSetupFlags(cmd *cobra.Command, flags *setupFlags) {
 	f.StringVar(&r.DockerArchive, "docker-archive", "", "absolute Docker save archive path already on the selected host")
 	f.StringVar(&r.DockerArchiveSHA256, "docker-archive-sha256", "", "reviewed SHA-256 of the host-side Docker archive")
 	f.StringVar(&r.BootstrapTarget, "bootstrap-target", "", "existing explicit proxy target for downloads; no automatic environment fallback")
-	f.StringVar(&r.ArtifactFile, "artifact", "", "verified local compressed native artifact for offline transfer")
+	f.StringVar(&r.ArtifactFile, "artifact", "", "verified local release artifact for offline transfer (gzip, zip or Windows installer)")
 	f.StringVar(&r.ArtifactSHA256, "artifact-sha256", "", "expected official artifact SHA-256")
 	f.BoolVar(&flags.interactive, "interactive", false, "open the guided setup form with supplied values")
 	f.BoolVar(&flags.yes, "yes", false, "apply exactly the reviewed plan")
@@ -125,7 +134,7 @@ func addSetupFlags(cmd *cobra.Command, flags *setupFlags) {
 
 func (o *options) setupCommand() *cobra.Command {
 	flags := &setupFlags{}
-	cmd := &cobra.Command{Use: "setup [ID]", Short: "Install and register an explicitly managed local or SSH Mihomo client", Args: func(_ *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "setup [ID]", Short: "Install or clone a managed client locally or over SSH", Args: func(_ *cobra.Command, args []string) error {
 		if len(args) > 1 {
 			return usage("setup accepts at most one core ID")
 		}
@@ -142,6 +151,12 @@ func (o *options) setupCommand() *cobra.Command {
 			flags.request.ID = args[0]
 		}
 		flags.request.SSHHost = o.ssh
+		if flags.request.CloneSourceID != "" && (flags.input != "" || cmd.Flags().Changed("input-kind")) {
+			return usage("--from-target cannot be combined with --input or --input-kind")
+		}
+		if flags.request.Client == "verge" && cmd.Flags().Changed("core-version") {
+			return usage("Verge uses its bundled core; select --client-version instead of --core-version")
+		}
 		bare := len(args) == 0
 		cmd.Flags().Visit(func(flag *pflag.Flag) {
 			if flag.Name != "json" && flag.Name != "config" && flag.Name != "ssh" {
@@ -155,14 +170,16 @@ func (o *options) setupCommand() *cobra.Command {
 		if interactive {
 			return o.runSetupWizard(cmd, flags.request, "", flags.input)
 		}
-		if flags.request.ID == "" || flags.input == "" {
-			return usage("supply ID, --input-kind and --input FILE; run bare setup in a terminal for the wizard")
+		if flags.request.ID == "" || flags.input == "" && flags.request.CloneSourceID == "" {
+			return usage("supply ID and either --from-target SOURCE or --input FILE; run bare setup in a terminal for the wizard")
 		}
 		if flags.yes && flags.expect == "" {
 			return usage("--yes requires the reviewed --expect digest")
 		}
-		if err := loadSetupInput(cmd, &flags.request, flags.input); err != nil {
-			return err
+		if flags.request.CloneSourceID == "" {
+			if err := loadSetupInput(cmd, &flags.request, flags.input); err != nil {
+				return err
+			}
 		}
 		cfg, _, err := o.load(cmd)
 		if err != nil {
@@ -206,20 +223,34 @@ func (o *options) runManagedPreviewApply(cmd *cobra.Command, request managedcore
 	opts := o.managedOptions(cmd)
 	var plan managedcore.Plan
 	var receipt managedcore.Receipt
+	preparedCtx := cmd.Context()
 	err := o.authenticatedDiagnostic(cmd, config.Target{SSHHost: request.SSHHost}, func() error {
 		var e error
 		if configureID == "" {
-			plan, e = managedcore.Preview(cmd.Context(), request, opts)
+			preparedCtx, request, e = o.prepareSetupRequest(cmd.Context(), cmd, request, opts)
+			if e != nil {
+				return e
+			}
+		}
+		if configureID == "" {
+			plan, e = managedcore.Preview(preparedCtx, request, opts)
 		} else {
-			plan, e = managedcore.PreviewConfigure(cmd.Context(), configureID, request, opts)
+			plan, e = managedcore.PreviewConfigure(preparedCtx, configureID, request, opts)
 		}
 		return e
 	})
 	if err == nil && yes {
+		// Re-read the source immediately before the single guarded apply. A
+		// changed active profile or selection produces a different plan digest.
 		if configureID == "" {
-			receipt, err = managedcore.Apply(cmd.Context(), request, expect, opts)
-		} else {
-			receipt, err = managedcore.Configure(cmd.Context(), configureID, request, expect, opts)
+			preparedCtx, request, err = o.prepareSetupRequest(cmd.Context(), cmd, request, opts)
+		}
+		if err == nil {
+			if configureID == "" {
+				receipt, err = managedcore.Apply(preparedCtx, request, expect, opts)
+			} else {
+				receipt, err = managedcore.Configure(preparedCtx, configureID, request, expect, opts)
+			}
 		}
 	}
 
@@ -235,12 +266,76 @@ func (o *options) runManagedPreviewApply(cmd *cobra.Command, request managedcore
 	return err
 }
 
+func (o *options) prepareSetupRequest(ctx context.Context, cmd *cobra.Command, request managedcore.Request, opts managedcore.Options) (context.Context, managedcore.Request, error) {
+	if request.HostOS == "" && opts.Execute == nil {
+		platform, err := connection.DetectHostOS(ctx, request.SSHHost)
+		if err != nil {
+			return ctx, request, err
+		}
+		request.HostOS = platform
+	}
+	if request.CloneSourceID == "" {
+		return ctx, request, nil
+	}
+	if request.CloneSourceID == request.ID {
+		return ctx, request, usage("clone destination must differ from the source target")
+	}
+	cfg, _, err := o.load(cmd)
+	if err != nil {
+		return ctx, request, err
+	}
+	i, err := targetIndex(cfg, request.CloneSourceID)
+	if err != nil {
+		return ctx, request, err
+	}
+	snapshot, err := managedcore.SnapshotTarget(ctx, o.overrideCredentials(cfg.Targets[i]), opts)
+	if err != nil {
+		return ctx, request, err
+	}
+	return managedcore.ApplyCloneToRequest(ctx, request, snapshot)
+}
+
 func (o *options) runSetupWizard(cmd *cobra.Command, request managedcore.Request, configureID, inputPath string) error {
 	message := "Create an owned instance; existing cores and VPNs are not taken over."
 	var draft map[string]string
 	for {
-		spec := setupSpec(request, inputPath, message)
+		view := request
+		if configureID != "" {
+			view.CloneSourceID = ""
+		}
+		spec := setupSpec(view, inputPath, message)
+		if configureID != "" {
+			fields := spec.Fields[:0]
+			for _, f := range spec.Fields {
+				if f.Key == "from_target" {
+					continue
+				}
+				if f.Key == "kind" {
+					choices := f.Options[:0]
+					for _, c := range f.Options {
+						if c.Value != "target" {
+							choices = append(choices, c)
+						}
+					}
+					f.Options = choices
+				}
+				fields = append(fields, f)
+			}
+			spec.Fields = fields
+		}
+		cfg, _, loadErr := o.load(cmd)
+		if loadErr != nil {
+			return loadErr
+		}
 		for i := range spec.Fields {
+			if spec.Fields[i].Key == "from_target" {
+				spec.Fields[i].Kind = wizard.Select
+				spec.Fields[i].Options = []wizard.Choice{{Value: "", Label: "Choose a source target"}}
+				for _, t := range cfg.Targets {
+					spec.Fields[i].Options = append(spec.Fields[i].Options, wizard.Choice{Value: t.ID, Label: t.Label()})
+				}
+			}
+
 			if value, ok := draft[spec.Fields[i].Key]; ok {
 				spec.Fields[i].Value = value
 			}
@@ -253,8 +348,16 @@ func (o *options) runSetupWizard(cmd *cobra.Command, request managedcore.Request
 			return err
 		}
 		draft = values
+		prepareSetupDraftTransition(&request, configureID, values["kind"], values["from_target"], values["ssh"], cmd.Flags().Changed("host-os"))
 		request.ID, request.Name, request.SSHHost, request.Backend, request.InputKind = values["id"], values["name"], values["ssh"], values["backend"], values["kind"]
 		request.Preset, request.ServiceScope, request.DockerContext = values["preset"], values["scope"], values["docker"]
+		request.Client, request.ClientVersion = values["client"], values["client_version"]
+		if request.InputKind == "target" {
+			if request.CloneSourceID == "" {
+				message = "Choose a source target"
+				continue
+			}
+		}
 		request.BootstrapTarget = values["bootstrap"]
 		request.DockerArchive = values["docker_archive"]
 		request.DockerArchiveSHA256 = values["docker_archive_sha"]
@@ -272,6 +375,12 @@ func (o *options) runSetupWizard(cmd *cobra.Command, request managedcore.Request
 		}
 		if policyInvalid {
 			continue
+		}
+		if configureID == "" {
+			if _, exists := targetIndex(cfg, request.ID); exists == nil {
+				message = fmt.Sprintf("Target ID %q is already registered; choose another ID or use cores configure", request.ID)
+				continue
+			}
 		}
 		request.Version = values["version"]
 		request.ArtifactFile = values["artifact"]
@@ -291,7 +400,9 @@ func (o *options) runSetupWizard(cmd *cobra.Command, request managedcore.Request
 		request.Network.Services = splitNonempty(values["services"])
 		request.Network.ExcludedRoutes = splitNonempty(values["excluded"])
 		inputPath = values["file"]
-		if request.InputKind == "yaml" {
+		if configureID == "" && request.CloneSourceID != "" {
+			request.Input = nil
+		} else if request.InputKind == "yaml" {
 			if inputPath != "" || len(request.Input) == 0 {
 				if err := loadSetupInput(cmd, &request, inputPath); err != nil {
 					message = err.Error()
@@ -303,12 +414,19 @@ func (o *options) runSetupWizard(cmd *cobra.Command, request managedcore.Request
 		}
 		opts := o.managedOptions(cmd)
 		var plan managedcore.Plan
+		preparedCtx := cmd.Context()
 		err = o.authenticatedDiagnostic(cmd, config.Target{SSHHost: request.SSHHost}, func() error {
 			var e error
 			if configureID == "" {
-				plan, e = managedcore.Preview(cmd.Context(), request, opts)
+				preparedCtx, request, e = o.prepareSetupRequest(cmd.Context(), cmd, request, opts)
+				if e != nil {
+					return e
+				}
+			}
+			if configureID == "" {
+				plan, e = managedcore.Preview(preparedCtx, request, opts)
 			} else {
-				plan, e = managedcore.PreviewConfigure(cmd.Context(), configureID, request, opts)
+				plan, e = managedcore.PreviewConfigure(preparedCtx, configureID, request, opts)
 			}
 			return e
 		})
@@ -330,9 +448,15 @@ func (o *options) runSetupWizard(cmd *cobra.Command, request managedcore.Request
 		}
 		var receipt managedcore.Receipt
 		if configureID == "" {
-			receipt, err = managedcore.Apply(cmd.Context(), request, plan.Digest, opts)
+			preparedCtx, request, err = o.prepareSetupRequest(cmd.Context(), cmd, request, opts)
+			if err != nil {
+				return err
+			}
+		}
+		if configureID == "" {
+			receipt, err = managedcore.Apply(preparedCtx, request, plan.Digest, opts)
 		} else {
-			receipt, err = managedcore.Configure(cmd.Context(), configureID, request, plan.Digest, opts)
+			receipt, err = managedcore.Configure(preparedCtx, configureID, request, plan.Digest, opts)
 		}
 		if receipt.ID != "" {
 			_ = o.output(cmd, receipt)
@@ -341,6 +465,26 @@ func (o *options) runSetupWizard(cmd *cobra.Command, request managedcore.Request
 			return err
 		}
 		return nil
+	}
+}
+
+// A new setup draft must rebuild its clone snapshot for each preview. Configure
+// keeps the destination's independent snapshot and recorded platform instead.
+func prepareSetupDraftTransition(request *managedcore.Request, configureID, kind, sourceID, sshHost string, explicitHostOS bool) {
+	if configureID != "" {
+		return
+	}
+	if request.SSHHost != sshHost && !explicitHostOS {
+		request.HostOS = ""
+	}
+	hadClone := request.CloneSourceID != "" || request.CloneSourceSHA256 != "" || len(request.CloneSelections) > 0 || len(request.CloneChecks) > 0
+	if kind == "target" || hadClone {
+		request.Input, request.InputBaseDir = nil, ""
+		request.CloneSourceID, request.CloneSourceSHA256 = "", ""
+		request.CloneSelections, request.CloneChecks = nil, nil
+	}
+	if kind == "target" {
+		request.CloneSourceID = sourceID
 	}
 }
 
@@ -355,6 +499,12 @@ func splitNonempty(value string) []string {
 }
 
 func setupSpec(request managedcore.Request, path, message string) wizard.Spec {
+	if request.Client == "" {
+		request.Client = "mihomo"
+	}
+	if request.CloneSourceID != "" {
+		request.InputKind = "target"
+	}
 	if request.Backend == "" {
 		request.Backend = "native"
 	}
@@ -383,10 +533,13 @@ func setupSpec(request managedcore.Request, path, message string) wizard.Spec {
 	if request.MixedPort == 0 {
 		request.MixedPort = 7890
 	}
-	return wizard.Spec{Title: "Managed Mihomo client", Description: message, SubmitLabel: "Preview", Fields: []wizard.Field{
+	return wizard.Spec{Title: "Deploy client", Description: message, SubmitLabel: "Preview", Fields: []wizard.Field{
 		{Key: "id", Label: "Core ID", Value: request.ID, Required: true}, {Key: "name", Label: "Display name", Value: request.Name}, {Key: "ssh", Label: "SSH host (empty = local)", Value: request.SSHHost},
+		{Key: "client", Label: "Client", Value: request.Client, Kind: wizard.Select, Options: []wizard.Choice{{Value: "mihomo", Label: "Background Mihomo"}, {Value: "verge", Label: "Clash Verge Rev (Windows desktop)"}}},
+		{Key: "client_version", Label: "Desktop client version", Value: request.ClientVersion, Help: "Verge default: 2.5.2; its bundled core is used"},
+		{Key: "from_target", Label: "Source target to copy", Value: request.CloneSourceID},
 		{Key: "backend", Label: "Backend", Value: request.Backend, Kind: wizard.Select, Options: []wizard.Choice{{Value: "native", Label: "Native service"}, {Value: "docker", Label: "Existing Docker daemon"}}},
-		{Key: "kind", Label: "Input format", Value: request.InputKind, Kind: wizard.Select, Options: []wizard.Choice{{Value: "links", Label: "Node share links/YAML"}, {Value: "subscription", Label: "Node subscription HTTPS URL"}, {Value: "yaml", Label: "Complete YAML file"}}},
+		{Key: "kind", Label: "Input format", Value: request.InputKind, Kind: wizard.Select, Options: []wizard.Choice{{Value: "target", Label: "Copy an existing target"}, {Value: "links", Label: "Node share links/YAML"}, {Value: "subscription", Label: "Node subscription HTTPS URL"}, {Value: "yaml", Label: "Complete YAML file"}}},
 		{Key: "nodes", Label: "Private node links or subscription URL", Value: nodes, Kind: wizard.Multiline}, {Key: "file", Label: "Complete YAML local file", Value: path},
 		{Key: "preset", Label: "Routing preset", Value: request.Preset, Kind: wizard.Select, Options: []wizard.Choice{{Value: "auto", Label: "Auto: preserve full YAML; otherwise China split"}, {Value: "cn-split", Label: "China direct / rest proxy"}, {Value: "simple", Label: "Local/VPN bypass / rest proxy"}, {Value: "preserve", Label: "Preserve complete profile rules"}}},
 		{Key: "scope", Label: "Service ownership", Value: request.ServiceScope, Kind: wizard.Select, Options: []wizard.Choice{{Value: "system", Label: "System service (required for host TUN)"}, {Value: "user", Label: "User service / explicit proxy"}}},

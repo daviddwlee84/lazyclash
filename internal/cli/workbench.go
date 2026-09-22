@@ -10,6 +10,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/diagnostics"
 	"github.com/daviddwlee84/lazyclash/internal/rulework"
 	"github.com/daviddwlee84/lazyclash/internal/tui"
+	"github.com/spf13/cobra"
 )
 
 func workJSON(v any) string { b, _ := json.MarshalIndent(v, "", "  "); return string(b) }
@@ -19,10 +20,12 @@ func (o *options) runWorkbench(ctx context.Context, r tui.WorkRequest) (tui.Work
 	}
 	result := tui.WorkResult{}
 	cmp := compare.Options{Open: o.deps.Open, ReadOnly: o.readOnly}
-	rules := rulework.Options{Open: o.deps.Open, ReadOnly: o.readOnly}
+	ownerCommand := &cobra.Command{}
+	ownerCommand.SetContext(ctx)
+	rules := o.ruleOptions(ownerCommand)
 	switch r.Kind {
 	case "source-inspect":
-		source, e := rulework.InspectSource(ctx, r.Target)
+		source, e := rulework.InspectSourceWithOptions(ctx, r.Target, rules)
 		return tui.WorkResult{Title: "Persistent source", Summary: workJSON(source)}, e
 	case "diff":
 		d, e := compare.Diff(ctx, r.Target, r.DestinationTarget, cmp)
@@ -106,7 +109,7 @@ func (o *options) runWorkbench(ctx context.Context, r tui.WorkRequest) (tui.Work
 		}
 		result.Title = "Review domain rule · " + p.Owner.Kind
 		result.Summary = "File: " + p.Owner.File + "\n" + p.Diff + "\nDigest: " + p.Digest + "\n" + strings.Join(p.Owner.Warnings, "\n")
-		if p.Owner.Kind == "verge" {
+		if p.Owner.Kind == "verge" && r.Target.ManagedCoreID == "" {
 			result.Summary += "\nAfter saving, reactivate the profile in Clash Verge, then Verify."
 		}
 		if p.NoChange {

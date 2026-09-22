@@ -7,7 +7,7 @@ import (
 )
 
 func (o *options) coresCommand() *cobra.Command {
-	group := &cobra.Command{Use: "cores", Short: "Inspect and control only explicitly lazyclash-owned Mihomo installations"}
+	group := &cobra.Command{Use: "cores", Short: "Inspect and control only explicitly lazyclash-owned client installations"}
 	group.AddCommand(&cobra.Command{Use: "list", Short: "List local managed-instance registrations without connecting", Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error {
 		instances, err := managedcore.List(o.managedOptions(cmd))
 		if err != nil {
@@ -29,6 +29,35 @@ func (o *options) coresCommand() *cobra.Command {
 		})
 		if status.Instance.ID != "" {
 			if e := o.output(cmd, status); e != nil {
+				return e
+			}
+		}
+		return err
+	}})
+	group.AddCommand(&cobra.Command{Use: "resume ID", Short: "Inspect and resume an interrupted owned Windows deployment without reinstalling", Args: argsExact(1), RunE: func(cmd *cobra.Command, args []string) error {
+		defer connection.CloseAuthentications()
+		if o.readOnly {
+			return usage("deployment resume is disabled in read-only mode")
+		}
+		instance, err := managedcore.GetInstance(args[0], o.managedOptions(cmd))
+		if err != nil {
+			return err
+		}
+		if instance.OS != "windows" {
+			return usage("resume currently supports owned Windows deployments; inspect cores status for this instance")
+		}
+		// Authenticate with a read before the single mutation; never replay a
+		// partial resume automatically after an authentication failure.
+		err = o.authenticatedDiagnostic(cmd, instance.Target, func() error {
+			_, e := managedcore.WindowsStatus(cmd.Context(), args[0], o.managedOptions(cmd))
+			return e
+		})
+		if err != nil {
+			return err
+		}
+		receipt, err := managedcore.ResumeWindows(cmd.Context(), args[0], o.managedOptions(cmd))
+		if receipt.ID != "" {
+			if e := o.output(cmd, receipt); e != nil {
 				return e
 			}
 		}
@@ -78,6 +107,9 @@ func (o *options) coresCommand() *cobra.Command {
 	flags := &setupFlags{}
 	configure := &cobra.Command{Use: "configure ID", Short: "Preview or interactively edit an owned core's profile and network choices", Args: argsExact(1), RunE: func(cmd *cobra.Command, args []string) error {
 		defer connection.CloseAuthentications()
+		if cmd.Flags().Changed("from-target") {
+			return usage("--from-target creates a new deployment with setup; configure edits this instance's saved snapshot")
+		}
 		request, err := managedcore.LoadRequest(args[0], o.managedOptions(cmd))
 		if err != nil {
 			return err
@@ -124,7 +156,7 @@ func (o *options) coresCommand() *cobra.Command {
 }
 
 func changedSetupBusiness(cmd *cobra.Command) bool {
-	for _, name := range []string{"backend", "input-kind", "input", "preset", "category", "policy", "service-scope", "boot", "tun", "system-proxy", "network-service", "exclude-route", "controller-port", "mixed-port", "core-version", "docker-context", "artifact", "artifact-sha256", "yes", "expect", "routing-owner", "bootstrap-target", "docker-archive", "docker-archive-sha256"} {
+	for _, name := range []string{"client", "client-version", "host-os", "from-target", "backend", "input-kind", "input", "preset", "category", "policy", "service-scope", "boot", "tun", "system-proxy", "network-service", "exclude-route", "controller-port", "mixed-port", "core-version", "docker-context", "artifact", "artifact-sha256", "yes", "expect", "routing-owner", "bootstrap-target", "docker-archive", "docker-archive-sha256"} {
 		if cmd.Flags().Changed(name) {
 			return true
 		}
@@ -133,7 +165,7 @@ func changedSetupBusiness(cmd *cobra.Command) bool {
 }
 
 func mergeSetupFlags(cmd *cobra.Command, to *managedcore.Request, from managedcore.Request) {
-	for name, fields := range map[string][2]*string{"docker-archive": {&to.DockerArchive, &from.DockerArchive}, "docker-archive-sha256": {&to.DockerArchiveSHA256, &from.DockerArchiveSHA256}, "bootstrap-target": {&to.BootstrapTarget, &from.BootstrapTarget}, "backend": {&to.Backend, &from.Backend}, "input-kind": {&to.InputKind, &from.InputKind}, "preset": {&to.Preset, &from.Preset}, "service-scope": {&to.ServiceScope, &from.ServiceScope}, "core-version": {&to.Version, &from.Version}, "docker-context": {&to.DockerContext, &from.DockerContext}, "artifact": {&to.ArtifactFile, &from.ArtifactFile}, "artifact-sha256": {&to.ArtifactSHA256, &from.ArtifactSHA256}, "routing-owner": {&to.Network.RoutingOwner, &from.Network.RoutingOwner}} {
+	for name, fields := range map[string][2]*string{"client": {&to.Client, &from.Client}, "client-version": {&to.ClientVersion, &from.ClientVersion}, "host-os": {&to.HostOS, &from.HostOS}, "docker-archive": {&to.DockerArchive, &from.DockerArchive}, "docker-archive-sha256": {&to.DockerArchiveSHA256, &from.DockerArchiveSHA256}, "bootstrap-target": {&to.BootstrapTarget, &from.BootstrapTarget}, "backend": {&to.Backend, &from.Backend}, "input-kind": {&to.InputKind, &from.InputKind}, "preset": {&to.Preset, &from.Preset}, "service-scope": {&to.ServiceScope, &from.ServiceScope}, "core-version": {&to.Version, &from.Version}, "docker-context": {&to.DockerContext, &from.DockerContext}, "artifact": {&to.ArtifactFile, &from.ArtifactFile}, "artifact-sha256": {&to.ArtifactSHA256, &from.ArtifactSHA256}, "routing-owner": {&to.Network.RoutingOwner, &from.Network.RoutingOwner}} {
 		if cmd.Flags().Changed(name) {
 			*fields[0] = *fields[1]
 		}

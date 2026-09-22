@@ -130,6 +130,7 @@ func inspectSource(ctx context.Context, target config.Target, opts Options) (Sou
 			}
 		}
 	} else {
+		automaticActivation := target.HostOS == "windows" && target.ManagedCoreID != "" && opts.ActivateOwner != nil
 		manifest, err := readSourceHost(ctx, target, hostpath.Join(target.HostOS, s.DataDir, "profiles.yaml"), opts)
 		if err != nil {
 			return source, err
@@ -201,11 +202,19 @@ func inspectSource(ctx context.Context, target config.Target, opts Options) (Sou
 					return source, errors.New("Verge Merge companion is invalid")
 				}
 				if mappingValue(doc.Content[0], "rules") != nil {
-					source.Warnings = append(source.Warnings, "A later Verge Merge defines rules and may replace this Rules companion; verify after native reactivation.")
+					warning := "A later Verge Merge defines rules and may replace this Rules companion; verify after native reactivation."
+					if automaticActivation {
+						warning = "A later Verge Merge defines rules and may replace this Rules companion; the owned Windows client handles activation and verification."
+					}
+					source.Warnings = append(source.Warnings, warning)
 				}
 			}
 			if item.Type == "script" {
-				source.Warnings = append(source.Warnings, "Verge Scripts run after Rules; final rule order must be verified after native reactivation.")
+				warning := "Verge Scripts run after Rules; final rule order must be verified after native reactivation."
+				if automaticActivation {
+					warning = "Verge Scripts run after Rules; the owned Windows client handles activation and final rule-order verification."
+				}
+				source.Warnings = append(source.Warnings, warning)
 			}
 		}
 		if source.File == "" {

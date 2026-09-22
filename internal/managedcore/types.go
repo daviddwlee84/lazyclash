@@ -29,6 +29,14 @@ type NetworkOptions struct {
 }
 
 type Request struct {
+	HostOS            string                   `json:"host_os,omitempty"`
+	Client            string                   `json:"client,omitempty"`
+	ClientVersion     string                   `json:"client_version,omitempty"`
+	CloneSourceID     string                   `json:"clone_source_id,omitempty"`
+	CloneSourceSHA256 string                   `json:"clone_source_sha256,omitempty"`
+	CloneSelections   map[string]string        `json:"clone_selections,omitempty"`
+	CloneChecks       []config.DiagnosticCheck `json:"clone_checks,omitempty"`
+
 	ID             string            `json:"id"`
 	Name           string            `json:"name,omitempty"`
 	SSHHost        string            `json:"ssh_host,omitempty"`
@@ -59,6 +67,18 @@ type Request struct {
 }
 
 type HostFacts struct {
+	WindowsRASEntries  int                `json:"windows_ras_entries,omitempty"`
+	UserSID            string             `json:"user_sid,omitempty"`
+	InteractiveSession int                `json:"interactive_session,omitempty"`
+	TaskScheduler      bool               `json:"task_scheduler,omitempty"`
+	VergeExisting      bool               `json:"verge_existing,omitempty"`
+	VergeDataDir       string             `json:"verge_data_dir,omitempty"`
+	LocalAppData       string             `json:"local_app_data,omitempty"`
+	ProgramFiles       string             `json:"program_files,omitempty"`
+	WindowsStateDigest string             `json:"windows_state_digest,omitempty"`
+	WindowsProxy       *WindowsProxyState `json:"windows_proxy,omitempty"`
+	WindowsCFW         []WindowsProcess   `json:"windows_cfw,omitempty"`
+
 	OS             string `json:"os"`
 	Arch           string `json:"arch"`
 	Home           string `json:"home"`
@@ -111,6 +131,7 @@ type Plan struct {
 	Changes           []string          `json:"changes"`
 	Warnings          []string          `json:"warnings"`
 	Blockers          []string          `json:"blockers"`
+	windowsProxy      *WindowsProxyState
 	current           *Instance
 	profile           []byte
 	resources         map[string][]byte
@@ -119,6 +140,15 @@ type Plan struct {
 }
 
 type Instance struct {
+	WindowsGUIActivated bool   `json:"windows_gui_activated,omitempty"`
+	WindowsRegistered   bool   `json:"windows_registered,omitempty"`
+	WindowsInitialized  bool   `json:"windows_initialized,omitempty"`
+	Client              string `json:"client,omitempty"`
+	ClientVersion       string `json:"client_version,omitempty"`
+	UserSID             string `json:"user_sid,omitempty"`
+	AppRoot             string `json:"app_root,omitempty"`
+	ProfileUID          string `json:"profile_uid,omitempty"`
+
 	ID                string         `json:"id"`
 	Name              string         `json:"name"`
 	SSHHost           string         `json:"ssh_host,omitempty"`
@@ -171,6 +201,7 @@ type Status struct {
 
 type HostExecutor func(context.Context, string, bool, []byte) ([]byte, error)
 type Options struct {
+	Upload          func(context.Context, string, string, string) error
 	DownloadClient  func(context.Context, string) (*http.Client, io.Closer, error)
 	ReadOnly        bool
 	StateDir        string

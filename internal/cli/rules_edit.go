@@ -1,14 +1,30 @@
 package cli
 
 import (
+	"context"
 	"github.com/daviddwlee84/lazyclash/internal/config"
+	"github.com/daviddwlee84/lazyclash/internal/configwork"
 	"github.com/daviddwlee84/lazyclash/internal/connection"
+	"github.com/daviddwlee84/lazyclash/internal/managedcore"
 	"github.com/daviddwlee84/lazyclash/internal/rulework"
 	"github.com/spf13/cobra"
 )
 
-func (o *options) ruleOptions() rulework.Options {
-	return rulework.Options{ReadOnly: o.readOnly, Open: o.deps.Open}
+func (o *options) ruleOptions(cmd *cobra.Command) rulework.Options {
+	return rulework.Options{ReadOnly: o.readOnly, Open: o.deps.Open,
+		Host: func(ctx context.Context, target config.Target, request rulework.HostRequest) (rulework.HostFile, error) {
+			operation := configwork.HostRequest{Op: request.Op, Path: request.Path, Data: request.Data, Guards: request.Guards, Binary: request.Binary, Home: request.Home, Version: request.Version, Document: request.Document, ValidationDockerHost: request.ValidationDockerHost, ValidationImage: request.ValidationImage}
+			if target.ManagedCoreID != "" {
+				result, err := managedcore.SourceOperation(ctx, target, operation, o.managedOptions(cmd))
+				return result.File, err
+			}
+			result, err := configwork.DefaultHostOperation(ctx, target, operation)
+			return result.File, err
+		},
+		ActivateOwner: func(ctx context.Context, target config.Target) error {
+			return managedcore.WindowsActivateSource(ctx, target, o.managedOptions(cmd))
+		},
+	}
 }
 
 func (o *options) ruleTarget(cmd *cobra.Command) (config.Target, error) {
@@ -46,7 +62,11 @@ func (o *options) ruleEditCommands() []*cobra.Command {
 			return usage("%s", err)
 		}
 		var owner rulework.Source
-		err = o.authenticatedDiagnostic(cmd, cfg.Targets[i], func() error { var e error; owner, e = rulework.InspectSource(cmd.Context(), cfg.Targets[i]); return e })
+		err = o.authenticatedDiagnostic(cmd, cfg.Targets[i], func() error {
+			var e error
+			owner, e = rulework.InspectSourceWithOptions(cmd.Context(), cfg.Targets[i], o.ruleOptions(cmd))
+			return e
+		})
 		if err != nil {
 			return err
 		}
@@ -72,7 +92,7 @@ func (o *options) ruleEditCommands() []*cobra.Command {
 		var r rulework.Receipt
 		err = o.authenticatedDiagnostic(cmd, t, func() error {
 			var e error
-			r, e = rulework.Verify(cmd.Context(), t, args[0], o.ruleOptions())
+			r, e = rulework.Verify(cmd.Context(), t, args[0], o.ruleOptions(cmd))
 			return e
 		})
 		if r.ID != "" {
@@ -95,11 +115,14 @@ func (o *options) ruleEditCommands() []*cobra.Command {
 		if err != nil {
 			return err
 		}
-		err = o.authenticatedDiagnostic(cmd, t, func() error { _, e := rulework.InspectSource(cmd.Context(), t); return e })
+		err = o.authenticatedDiagnostic(cmd, t, func() error {
+			_, e := rulework.InspectSourceWithOptions(cmd.Context(), t, o.ruleOptions(cmd))
+			return e
+		})
 		if err != nil {
 			return err
 		}
-		r, err := rulework.Restore(cmd.Context(), t, args[0], o.ruleOptions())
+		r, err := rulework.Restore(cmd.Context(), t, args[0], o.ruleOptions(cmd))
 		if r.ID != "" {
 			if e := o.output(cmd, r); e != nil {
 				return e
@@ -144,7 +167,7 @@ func (o *options) ruleAddCommand(ip bool) *cobra.Command {
 			var plan rulework.Plan
 			err = o.authenticatedDiagnostic(cmd, t, func() error {
 				var e error
-				plan, e = preview(cmd.Context(), t, args[0], policy, o.ruleOptions())
+				plan, e = preview(cmd.Context(), t, args[0], policy, o.ruleOptions(cmd))
 				return e
 			})
 			if err != nil {
@@ -158,7 +181,7 @@ func (o *options) ruleAddCommand(ip bool) *cobra.Command {
 		var checked rulework.Plan
 		err = o.authenticatedDiagnostic(cmd, t, func() error {
 			var e error
-			checked, e = preview(cmd.Context(), t, args[0], policy, o.ruleOptions())
+			checked, e = preview(cmd.Context(), t, args[0], policy, o.ruleOptions(cmd))
 			return e
 		})
 		if err != nil {
@@ -167,7 +190,7 @@ func (o *options) ruleAddCommand(ip bool) *cobra.Command {
 		if checked.Digest != expected {
 			return usage("rule preview changed; review a new preview before applying")
 		}
-		receipt, err := apply(cmd.Context(), t, args[0], policy, expected, o.ruleOptions())
+		receipt, err := apply(cmd.Context(), t, args[0], policy, expected, o.ruleOptions(cmd))
 		if receipt.ID != "" {
 			if e := o.output(cmd, receipt); e != nil {
 				return e
