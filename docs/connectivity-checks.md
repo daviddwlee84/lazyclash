@@ -75,9 +75,13 @@ default HTTP expectation failed, and the check does not establish whether a
 logged-in browser could use Claude. A successful status is also not a test of
 an authenticated Claude conversation.
 
-Checks run sequentially and have a bounded per-check timeout. An interrupted run
-retains partial results and marks unstarted checks as `not-run`. Failed checks
-produce a nonzero command result while preserving their individual observations.
+Checks run sequentially with a per-check budget of 10 seconds for local targets
+and 30 seconds for SSH targets, including data-proxy tunnel setup and an optional
+policy comparison. If that budget expires during the comparison, the result is
+`comparison-timeout`; a successful HTTP response and its matched expectation
+remain visible. An interrupted run retains partial results and marks unstarted
+checks as `not-run`. Failed checks or timed-out comparisons produce a nonzero
+command result while preserving the independent HTTP observations.
 
 The optional `--via POLICY` adds a separate core URLTest against that policy's
 resolved leaf from the batch-start selector snapshot. Health-based selections

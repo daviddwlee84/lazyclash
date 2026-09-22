@@ -75,6 +75,11 @@ func RunChecks(ctx context.Context, target config.Target, checks []config.Diagno
 	limit := opts.Timeout
 	if limit <= 0 {
 		limit = 10 * time.Second
+		if target.SSHHost != "" {
+			// The data-plane SSH tunnel opens within each check. Allow its
+			// setup, the HEAD request and optional URLTest their bounded work.
+			limit = 30 * time.Second
+		}
 	}
 	if limit > 30*time.Second {
 		return CheckReport{}, errors.New("check timeout must not exceed 30 seconds")
@@ -167,10 +172,17 @@ func RunChecks(ctx context.Context, target config.Target, checks []config.Diagno
 			if client != nil && checkCtx.Err() == nil {
 				comparison = outboundURLTest(checkCtx, client, proxies, check.Via, check.URL)
 			}
+			if comparison.Status != "response-sample" && errors.Is(checkCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+				comparison.Status = "timeout"
+				comparison.Error = "Per-check time budget expired before the optional policy comparison completed; the HTTP result is retained."
+			}
 			comparison.Note += " Resolved leaf/chain reflect the batch-start selector snapshot. Health-based selections can change during URLTests."
 			result.PolicyComparison = &comparison
 			if result.Status == "passed" && comparison.Status != "response-sample" {
 				result.Status = "comparison-failed"
+				if comparison.Status == "timeout" {
+					result.Status = "comparison-timeout"
+				}
 			}
 		}
 		if ctx.Err() != nil {
@@ -300,6 +312,9 @@ func FormatChecks(report CheckReport) string {
 		if check.PolicyComparison != nil {
 			p := check.PolicyComparison
 			lines = append(lines, fmt.Sprintf("  Policy comparison %s: %s · %.0f ms (URLTest, not HTTP status)", core.Sanitize(p.Policy), core.Sanitize(p.Status), p.Milliseconds))
+			if p.Status == "timeout" && p.Error != "" {
+				lines = append(lines, "  "+core.Sanitize(p.Error))
+			}
 			if len(p.Chain) > 0 {
 				lines = append(lines, "  Selection at batch start: "+core.Sanitize(strings.Join(p.Chain, " → ")))
 			}

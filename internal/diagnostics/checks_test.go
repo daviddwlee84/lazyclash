@@ -188,3 +188,110 @@ func TestSavedChecksProbableRoutingIsVisibleWithoutBecomingObserved(t *testing.T
 		t.Fatalf("ambiguous candidate promoted: %s", text)
 	}
 }
+
+func TestSavedChecksTransportBudgetDefaultsAndExplicitOverride(t *testing.T) {
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	defer proxy.Close()
+	for _, tc := range []struct {
+		name, ssh      string
+		override, want time.Duration
+	}{
+		{name: "local-default", want: 10 * time.Second},
+		{name: "ssh-default", ssh: "fixture-ssh", want: 30 * time.Second},
+		{name: "ssh-explicit", ssh: "fixture-ssh", override: 2 * time.Second, want: 2 * time.Second},
+		{name: "local-explicit", override: 2 * time.Second, want: 2 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tunnelCalls := 0
+			assertDeadline := func(ctx context.Context, want time.Duration) {
+				t.Helper()
+				deadline, ok := ctx.Deadline()
+				remaining := time.Until(deadline)
+				if !ok || remaining > want || remaining < want-time.Second {
+					t.Fatalf("deadline budget=%s, want near %s (present=%v)", remaining, want, ok)
+				}
+			}
+			opts := CheckOptions{Timeout: tc.override, Options: Options{
+				Open: func(ctx context.Context, _ config.Target, _ bool) (*core.Client, io.Closer, error) {
+					assertDeadline(ctx, tc.want+15*time.Second)
+					return nil, nil, errors.New("fixture controller offline")
+				},
+				OpenTunnel: func(ctx context.Context, host, endpoint string) (string, io.Closer, error) {
+					tunnelCalls++
+					if host != tc.ssh || endpoint != proxy.URL {
+						t.Fatal("tunnel scope changed")
+					}
+					assertDeadline(ctx, tc.want)
+					return strings.TrimPrefix(proxy.URL, "http://"), nil, nil
+				},
+			}}
+			report, err := RunChecks(context.Background(), config.Target{ID: "fixture", ProbeProxy: proxy.URL, SSHHost: tc.ssh}, []config.DiagnosticCheck{{ID: "website", URL: "http://service.invalid/"}}, opts)
+			if err != nil || report.Passed != 1 || report.Checks[0].Request.HTTPStatus != 204 || (tunnelCalls == 1) != (tc.ssh != "") {
+				t.Fatalf("budget changed the actual request route/result: %+v %v (tunnels=%d)", report, err, tunnelCalls)
+			}
+		})
+	}
+}
+
+func TestSavedChecksSSHBudgetStillHonorsParentCancellation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	parentDeadline, _ := ctx.Deadline()
+	opts := CheckOptions{Options: Options{
+		Open: func(context.Context, config.Target, bool) (*core.Client, io.Closer, error) {
+			return nil, nil, errors.New("fixture controller offline")
+		},
+		OpenTunnel: func(checkCtx context.Context, _, _ string) (string, io.Closer, error) {
+			deadline, ok := checkCtx.Deadline()
+			if !ok || !deadline.Equal(parentDeadline) {
+				t.Fatal("SSH default extended its parent's deadline")
+			}
+			cancel()
+			<-checkCtx.Done()
+			return "", nil, checkCtx.Err()
+		},
+	}}
+	report, err := RunChecks(ctx, config.Target{ProbeProxy: "http://127.0.0.1:7890", SSHHost: "fixture-ssh"}, []config.DiagnosticCheck{{ID: "first", URL: "http://service.invalid/", Via: "Compare"}, {ID: "second", URL: "http://service.invalid/"}}, opts)
+	if !errors.Is(err, context.Canceled) || !report.Canceled || report.Checks[0].Status != "canceled" || report.Checks[1].Status != "not-run" {
+		t.Fatalf("parent cancellation was replaced by a comparison timeout: %+v %v", report, err)
+	}
+}
+
+func TestSavedChecksComparisonTimeoutRetainsSuccessfulHTTP(t *testing.T) {
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404) }))
+	defer proxy.Close()
+	var comparisons atomic.Int32
+	controller := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/configs":
+			fmt.Fprint(w, `{"mode":"rule"}`)
+		case "/proxies":
+			fmt.Fprint(w, `{"proxies":{"Compare":{"type":"Selector","all":["Alternative"],"now":"Alternative"},"Alternative":{"type":"Shadowsocks"}}}`)
+		case "/connections":
+			fmt.Fprint(w, `{"connections":[]}`)
+		case "/proxies/Alternative/delay":
+			comparisons.Add(1)
+			<-r.Context().Done()
+		default:
+			t.Errorf("unexpected controller request: %s", r.URL.Path)
+			w.WriteHeader(500)
+		}
+	}))
+	defer controller.Close()
+	opts := CheckOptions{Timeout: 500 * time.Millisecond, Options: Options{Open: func(context.Context, config.Target, bool) (*core.Client, io.Closer, error) {
+		client, err := core.New(core.Options{Endpoint: controller.URL})
+		return client, nil, err
+	}}}
+	report, err := RunChecks(context.Background(), config.Target{ProbeProxy: proxy.URL}, []config.DiagnosticCheck{{ID: "api", URL: "http://service.invalid/", ExpectedStatuses: []int{404}, Via: "Compare"}}, opts)
+	result := report.Checks[0]
+	if !errors.Is(err, ErrPartial) || report.Canceled || result.Status != "comparison-timeout" || !result.TransportReachable || result.ExpectedStatusMatched == nil || !*result.ExpectedStatusMatched || result.Request.Status != "http-response" || result.Request.HTTPStatus != 404 || comparisons.Load() != 1 {
+		t.Fatalf("comparison timeout obscured the successful HTTP response: %+v %v", report, err)
+	}
+	if result.PolicyComparison == nil || result.PolicyComparison.Status != "timeout" || !strings.Contains(result.PolicyComparison.Error, "HTTP result is retained") {
+		t.Fatal("comparison deadline evidence missing", result.PolicyComparison)
+	}
+	text := FormatChecks(report)
+	if !strings.Contains(text, "[comparison-timeout]: transport reachable · HTTP 404 (matched)") || !strings.Contains(text, "HTTP result is retained") {
+		t.Fatal("human output mislabels successful HTTP as network failure", text)
+	}
+}
