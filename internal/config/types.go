@@ -11,28 +11,29 @@ type Config struct {
 }
 
 type Target struct {
-	TransportOverride bool           `toml:"-" json:"-"` // temporary endpoint/SSH rebinding; never a persistent rule owner
-	ID                string         `toml:"id" json:"id"`
-	Name              string         `toml:"name,omitempty" json:"name,omitempty"`
-	Controller        string         `toml:"controller" json:"controller"`
-	SecretFile        string         `toml:"secret_file,omitempty" json:"secret_file,omitempty"`
-	SecretEnv         string         `toml:"secret_env,omitempty" json:"secret_env,omitempty"`
-	CAFile            string         `toml:"ca_file,omitempty" json:"ca_file,omitempty"`
-	SSHHost           string         `toml:"ssh_host,omitempty" json:"ssh_host,omitempty"`
-	SourceConfig      string         `toml:"source_config,omitempty" json:"source_config,omitempty"`
-	ProbeProxy        string         `toml:"probe_proxy,omitempty" json:"probe_proxy,omitempty"`
-	ProbeUsername     string         `toml:"probe_username,omitempty" json:"probe_username,omitempty"`
-	ProbePasswordEnv  string         `toml:"probe_password_env,omitempty" json:"probe_password_env,omitempty"`
-	ProbePasswordFile string         `toml:"probe_password_file,omitempty" json:"probe_password_file,omitempty"`
-	ProbeCAFile       string         `toml:"probe_ca_file,omitempty" json:"probe_ca_file,omitempty"`
-	Configs           []CoreConfig   `toml:"configs,omitempty" json:"configs,omitempty"`
-	RuleSource        *RuleSource    `toml:"rule_source,omitempty" json:"rule_source,omitempty"`
-	ConfigSource      *ConfigSource  `toml:"config_source,omitempty" json:"config_source,omitempty"`
-	Service           *ClientService `toml:"service,omitempty" json:"service,omitempty"`
-	ManagedCoreID     string         `toml:"managed_core_id,omitempty" json:"managed_core_id,omitempty"`
-	Secret            string         `toml:"-" json:"-"`
-	Transient         bool           `toml:"-" json:"-"`
-	AuthRequired      bool           `toml:"-" json:"auth_required,omitempty"`
+	TransportOverride bool              `toml:"-" json:"-"` // temporary endpoint/SSH rebinding; never a persistent rule owner
+	ID                string            `toml:"id" json:"id"`
+	Name              string            `toml:"name,omitempty" json:"name,omitempty"`
+	Controller        string            `toml:"controller" json:"controller"`
+	SecretFile        string            `toml:"secret_file,omitempty" json:"secret_file,omitempty"`
+	SecretEnv         string            `toml:"secret_env,omitempty" json:"secret_env,omitempty"`
+	CAFile            string            `toml:"ca_file,omitempty" json:"ca_file,omitempty"`
+	SSHHost           string            `toml:"ssh_host,omitempty" json:"ssh_host,omitempty"`
+	SourceConfig      string            `toml:"source_config,omitempty" json:"source_config,omitempty"`
+	ProbeProxy        string            `toml:"probe_proxy,omitempty" json:"probe_proxy,omitempty"`
+	ProbeUsername     string            `toml:"probe_username,omitempty" json:"probe_username,omitempty"`
+	ProbePasswordEnv  string            `toml:"probe_password_env,omitempty" json:"probe_password_env,omitempty"`
+	ProbePasswordFile string            `toml:"probe_password_file,omitempty" json:"probe_password_file,omitempty"`
+	ProbeCAFile       string            `toml:"probe_ca_file,omitempty" json:"probe_ca_file,omitempty"`
+	Configs           []CoreConfig      `toml:"configs,omitempty" json:"configs,omitempty"`
+	Checks            []DiagnosticCheck `toml:"checks,omitempty" json:"checks,omitempty"`
+	RuleSource        *RuleSource       `toml:"rule_source,omitempty" json:"rule_source,omitempty"`
+	ConfigSource      *ConfigSource     `toml:"config_source,omitempty" json:"config_source,omitempty"`
+	Service           *ClientService    `toml:"service,omitempty" json:"service,omitempty"`
+	ManagedCoreID     string            `toml:"managed_core_id,omitempty" json:"managed_core_id,omitempty"`
+	Secret            string            `toml:"-" json:"-"`
+	Transient         bool              `toml:"-" json:"-"`
+	AuthRequired      bool              `toml:"-" json:"auth_required,omitempty"`
 }
 
 // ConfigSource explicitly grants node/group writes. It is independent of the

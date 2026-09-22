@@ -256,6 +256,10 @@ func cloneSettings(c config.Config) config.Config {
 	c.Targets = append([]config.Target(nil), c.Targets...)
 	for i := range c.Targets {
 		c.Targets[i].Configs = append([]config.CoreConfig(nil), c.Targets[i].Configs...)
+		c.Targets[i].Checks = append([]config.DiagnosticCheck(nil), c.Targets[i].Checks...)
+		for j := range c.Targets[i].Checks {
+			c.Targets[i].Checks[j].ExpectedStatuses = append([]int(nil), c.Targets[i].Checks[j].ExpectedStatuses...)
+		}
 		if c.Targets[i].RuleSource != nil {
 			source := *c.Targets[i].RuleSource
 			c.Targets[i].RuleSource = &source

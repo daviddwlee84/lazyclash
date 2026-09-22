@@ -15,6 +15,7 @@ The [changelog](../CHANGELOG.md) identifies the version that introduced a featur
 | Using a Tailscale Exit Node or sharing an HTTP/SOCKS proxy privately inside a tailnet | [Tailscale 出口與私有 proxy](tailnet.md) |
 | Inspecting Tailscale/other VPN conflicts, split DNS, service permissions or recovery | [VPN／TUN 共存](vpn-coexistence.md) |
 | Interpreting dashboard metrics or diagnosing a URL | [Diagnostics and routing](diagnostics-and-routing.md) |
+| Repeating saved website checks and inspecting their observed routing | [Saved connectivity checks](connectivity-checks.md) |
 | Persisting a domain override, reloading or recovering a change | [Rules and ownership](rules-and-ownership.md) |
 | Installing, upgrading, activating completion or maintaining a release | [Installation, upgrades and completion](install-upgrade-completion.md) |
 | Checking an upstream contract, design inspiration or research claim | [References and evidence](references.md) |
@@ -50,8 +51,8 @@ prove that a remote write was undone. Mouse rows select, explicit buttons act,
 and typing retains ownership of printable keys.
 
 Development checks are `go vet ./...`, `go test -race ./...`, and the real PTY
-harnesses in `scripts/pty_smoke.py`, `scripts/auth_pty_smoke.py` and
-`scripts/tools_pty_smoke.py`. `scripts/reverse_pty_smoke.py` uses an isolated sshd
+harnesses in `scripts/pty_smoke.py`, `scripts/auth_pty_smoke.py`,
+`scripts/tools_pty_smoke.py` and `scripts/connectivity_checks_pty_smoke.py`. `scripts/reverse_pty_smoke.py` uses an isolated sshd
 for reverse forwarding, remote shells and cleanup. Tests use disposable state and controllers.
 Keep actual OS execution, cross-builds, fixture checks and real-host observations
 distinct in verification reports.

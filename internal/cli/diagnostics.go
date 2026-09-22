@@ -112,7 +112,7 @@ func (o *options) targetTestCommand() *cobra.Command {
 
 func (o *options) diagnosticsCommand() *cobra.Command {
 	group := &cobra.Command{Use: "diagnostics", Short: "Manually probe egress through the selected target's explicit data proxy"}
-	group.AddCommand(o.diagnosticURLCommand(), o.diagnosticNetworkCommand())
+	group.AddCommand(o.diagnosticURLCommand(), o.diagnosticNetworkCommand(), o.diagnosticChecksCommand())
 	group.AddCommand(&cobra.Command{Use: "ip", Short: "Read IP.SB egress IP and location through the configured proxy", Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error {
 		defer connection.CloseAuthentications()
 		if err := o.writable(); err != nil {

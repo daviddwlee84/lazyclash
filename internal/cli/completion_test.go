@@ -17,7 +17,7 @@ import (
 func TestNewSurfaceCompletionUsesOnlyOfflineMetadata(t *testing.T) {
 	path := isolated(t)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	cfg := config.Config{Targets: []config.Target{{ID: "saved", Controller: "http://127.0.0.1:1", SSHHost: "saved-host", SecretEnv: "NEVER_READ_COMPLETION_SECRET", ManagedCoreID: "fixture-core"}}}
+	cfg := config.Config{Targets: []config.Target{{ID: "saved", Controller: "http://127.0.0.1:1", SSHHost: "saved-host", SecretEnv: "NEVER_READ_COMPLETION_SECRET", ManagedCoreID: "fixture-core", Checks: []config.DiagnosticCheck{{ID: "claude-api", URL: "https://api.example.test/", ExpectedStatuses: []int{404}}}}}}
 	if err := config.Save(path, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -47,6 +47,9 @@ func TestNewSurfaceCompletionUsesOnlyOfflineMetadata(t *testing.T) {
 		{[]string{"proxies", "edit", ""}, ""},
 		{[]string{"groups", "edit", ""}, ""},
 		{[]string{"diagnostics", "network", ""}, ""},
+		{[]string{"diagnostics", "checks", "run", ""}, "claude-api"},
+		{[]string{"diagnostics", "checks", "remove", ""}, "claude-api"},
+		{[]string{"targets", "service", "restart", ""}, "saved"},
 		{[]string{"proxy", "docker", "test", "--container", ""}, ""},
 	} {
 		out, _, err := run(t, deps, append([]string{"__complete"}, test.args...)...)

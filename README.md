@@ -131,6 +131,11 @@ have [monthly usage reports](docs/vps-usage.md): press **u Usage** in Servers / 
 or use `servers usage ID`. VM network bytes and shared provider billing meters
 remain separate. Proxy details show recorded server/VPS provenance.
 
+**C Checks** opens [saved connectivity checks](docs/connectivity-checks.md) for
+the selected target. Save your usual HTTP(S) destinations, run them once together,
+and inspect HTTP expectations, timing and observed routing evidence. API login
+and application access remain separate from network reachability.
+
 ```sh
 lazyclash setup                                      # client setup wizard
 lazyclash servers deploy                             # server / VPS deployment wizard

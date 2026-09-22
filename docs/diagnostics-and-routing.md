@@ -14,6 +14,14 @@ a group's current selection alone does not prove those connections used it.
 Arrow/Vim navigation, Tab, mouse rows/buttons and `M` (mouse capture) work
 together. Braille, block and ASCII graph modes offer terminal-compatible views.
 
+## Reusable connectivity checks
+
+Overview → **Saved connectivity checks** (or **C**) manages public HTTP(S) checks
+for the selected target. Save website expectations once, then run one or all
+manually. Transport, expected HTTP status, authentication limits and observed
+rule/chain remain separate results. See [saved connectivity checks](connectivity-checks.md)
+for the CLI commands and result semantics.
+
 ## Diagnose one URL
 
 ```sh

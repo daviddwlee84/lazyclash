@@ -275,6 +275,10 @@ func preserve(raw []byte, cfg Config) ([]byte, error) {
 			configs = append(configs, cb)
 		}
 		b = replaceBlocks(b, bs, configs)
+		b, err = patchDiagnosticChecks(b, t.Checks)
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, b)
 	}
 	return replaceBlocks(raw, old, out), nil

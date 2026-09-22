@@ -215,6 +215,8 @@ func (m *Model) toolAction(id string) tea.Cmd {
 			return m.runTool("Configure managed core", false, "cores", "configure", target.ManagedCoreID, "--interactive")
 		}
 		return m.runTool("Managed cores", false, "cores", "list")
+	case "tool-checks":
+		return m.runTool("Saved connectivity checks", true, "diagnostics", "checks", "--interactive")
 	case "tool-network":
 		if m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride {
 			return m.runTool("Network diagnosis", true, "diagnostics", "network")

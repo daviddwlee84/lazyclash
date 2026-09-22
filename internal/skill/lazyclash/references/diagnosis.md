@@ -33,3 +33,27 @@ rule affects the whole host, not only the tested path.
 Diagnosis does not apply recommendations. Use the separate
 [preview/apply workflow](workflows.md). Userinfo URLs are rejected, query
 strings/raw logs are omitted, and reports are not automatically saved.
+
+## Reusable connectivity checks
+
+Use a saved target and keep its check definitions separate from Mihomo YAML:
+
+```sh
+lazyclash --target TARGET diagnostics checks add claude --url https://claude.ai/
+lazyclash --target TARGET diagnostics checks list --json
+lazyclash --target TARGET diagnostics checks run --all --json
+```
+
+`add` only saves; `run ID` or `run --all` explicitly sends checks. Use
+`--status 200,204` for exact expectations (default 200–399), `--replace` to
+edit an existing ID, and `remove ID` to remove it. Dashboard Overview → Saved
+connectivity checks (`C`) uses the same CLI workflow. Read-only mode permits
+review/list only. Definitions reject credentials, query strings and fragments.
+
+Each bounded HEAD request uses the selected target's explicit data proxy or a
+local/SSH endpoint resolved from that same target's runtime ports in memory.
+Do not select another controller or a process proxy variable as a fallback.
+Separate transport reachability, expected HTTP status, application access
+(not tested), and observed rule/chain. A possible SSH connection is a candidate,
+not confirmation that this check followed that route. Optional `--via POLICY`
+adds a separate core URLTest comparison; it does not reroute the HTTP request.

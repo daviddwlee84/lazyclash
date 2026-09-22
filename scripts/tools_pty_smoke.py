@@ -41,6 +41,19 @@ def main():
             for path in files:
                 path.write_text(json.dumps(source, ensure_ascii=False))
             snapshots = [path.read_bytes() for path in files]
+            # Candidate validation now runs before preview. Match the fake
+            # controller's version with a private parser fixture, while keeping
+            # the real native OS sandbox and source-write boundaries exercised.
+            validators = []
+            for index, url in enumerate(urls):
+                validator = root / f"fixture-validator-{index}"
+                version = request(url, "/version")["version"]
+                validator.write_text("#!/usr/bin/env python3\nimport json,sys\n"
+                                     "if '-v' in sys.argv: print('Mihomo Meta '+" + repr(version) + "+' fixture fixture')\n"
+                                     "elif '-t' in sys.argv:\n document=json.load(sys.stdin)\n assert isinstance(document,dict) and isinstance(document.get('proxies'),list) and isinstance(document.get('proxy-groups'),list)\n"
+                                     "else: sys.exit(1)\n")
+                validator.chmod(0o700)
+                validators.append(validator)
             settings = root / "settings.toml"
             sections = ['default_target = "first"']
             for index, target in enumerate(("first", "second")):
@@ -54,7 +67,7 @@ path = {json.dumps(str(files[index]))}
 [targets.config_source]
 kind = "native"
 config_id = "main"
-binary = "/fixture-no-execute"
+binary = {json.dumps(str(validators[index]))}
 home = {json.dumps(scratch)}
 ''')
             settings.write_text("\n".join(sections))

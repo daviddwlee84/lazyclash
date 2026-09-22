@@ -138,5 +138,27 @@ func (m *Model) overviewStatusLayout(width int) ([]string, []hitRegion) {
 	} else {
 		body = append(body, status, port)
 	}
+	if m.options.RunCommand != nil {
+		label := "C Saved connectivity checks"
+		if ansi.StringWidth(label)+2 > inner {
+			label = "C Saved checks"
+		}
+		button := "[" + label + "]"
+		if !enabled["tool-checks"] {
+			button = "(" + label + ")"
+		}
+		buttonWidth := ansi.StringWidth(button)
+		buttonX, buttonY := 0, len(body)
+		if len(body) > 0 && ansi.StringWidth(body[len(body)-1])+1+buttonWidth <= inner {
+			buttonY--
+			buttonX = ansi.StringWidth(body[buttonY]) + 1
+			body[buttonY] += " " + button
+		} else {
+			body = append(body, button)
+		}
+		if enabled["tool-checks"] && buttonWidth <= inner {
+			hits = append(hits, hitRegion{rect: rect{border + buttonX, 1 + buttonY, buttonWidth, 1}, kind: "action", id: "tool-checks"})
+		}
+	}
 	return panel(m.accent(title), body, width), hits
 }

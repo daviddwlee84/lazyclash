@@ -94,6 +94,9 @@ func ValidateTarget(t Target) error {
 	if err := ValidateProbe(t); err != nil {
 		return err
 	}
+	if err := ValidateDiagnosticChecks(t.Checks); err != nil {
+		return err
+	}
 	if t.SecretFile != "" && t.SecretEnv != "" {
 		return errors.New("secret_file and secret_env are mutually exclusive")
 	}

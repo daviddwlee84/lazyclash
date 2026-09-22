@@ -222,6 +222,12 @@ func (o *options) registerCompletions(root *cobra.Command) {
 							result = append(result, c.ID)
 						}
 					}
+				case "checks":
+					if t.ID == selected {
+						for _, check := range t.Checks {
+							result = append(result, check.ID)
+						}
+					}
 				}
 			}
 			if kind == "cores" {
@@ -313,7 +319,7 @@ func (o *options) registerCompletions(root *cobra.Command) {
 			cmd.ValidArgsFunction = values("rule", "global", "direct")
 		case "tun", "allow-lan":
 			cmd.ValidArgsFunction = values("on", "off")
-		case "targets edit", "targets remove", "targets default", "targets test", "targets diff", "targets copy-settings":
+		case "targets edit", "targets remove", "targets default", "targets test", "targets diff", "targets copy-settings", "targets service", "targets service bind", "targets service status", "targets service start", "targets service stop", "targets service restart", "targets service enable", "targets service disable":
 			cmd.ValidArgsFunction = local("targets")
 		case "targets move":
 			cmd.ValidArgsFunction = func(c *cobra.Command, a []string, s string) ([]string, cobra.ShellCompDirective) {
@@ -345,14 +351,16 @@ func (o *options) registerCompletions(root *cobra.Command) {
 			}
 		case "cores status", "cores start", "cores stop", "cores restart", "cores configure", "cores remove":
 			cmd.ValidArgsFunction = local("cores")
-		case "servers status", "servers start", "servers stop", "servers restart", "servers remove", "servers resume", "servers export", "servers connect", "servers manage":
+		case "servers status", "servers start", "servers stop", "servers restart", "servers remove", "servers resume", "servers export", "servers connect", "servers manage", "servers usage":
 			cmd.ValidArgsFunction = serverIDs(false)
 		case "tailnet exit export", "tailnet exit status", "tailnet exit enable", "tailnet exit disable", "tailnet exit remove", "tailnet exit use", "tailnet exit manage":
 			cmd.ValidArgsFunction = tailnetIDs(false)
 		case "tailnet proxy status", "tailnet proxy configure", "tailnet proxy start", "tailnet proxy stop", "tailnet proxy restart", "tailnet proxy remove", "tailnet proxy export", "tailnet proxy connect", "tailnet proxy manage":
 			cmd.ValidArgsFunction = tailnetIDs(true)
-		case "vps status", "vps start", "vps stop", "vps reboot", "vps delete", "vps resume", "vps manage":
+		case "vps status", "vps start", "vps stop", "vps reboot", "vps delete", "vps resume", "vps manage", "vps usage", "vps bind-cloud":
 			cmd.ValidArgsFunction = serverIDs(true)
+		case "diagnostics checks run", "diagnostics checks remove":
+			cmd.ValidArgsFunction = local("checks")
 		case "proxies copy":
 			cmd.ValidArgsFunction = func(c *cobra.Command, a []string, s string) ([]string, cobra.ShellCompDirective) {
 				if len(a) < 2 && !globalChanged(c, "target") {
