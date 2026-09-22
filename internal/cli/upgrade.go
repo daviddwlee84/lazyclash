@@ -16,8 +16,11 @@ func (o *options) upgradeCommand() *cobra.Command {
 		Long: `Upgrade the running executable to the latest stable lazyclash release.
 The resolved executable path is retained, including for moved Go release binaries.
 Use --check to inspect the version, build source, destination and update method.
-Development builds require --force; package-managed or unknown binaries are never
-overwritten. Archive installations use checksummed platform assets; Go source installations
+Standalone development builds require --force. Verified Homebrew installations delegate to
+brew upgrade for their installed formula, then report the actual installed version.
+Homebrew keeps its own version and pin policy; --force does not request a reinstall.
+Other package managers retain manual guidance; unknown binaries are never overwritten.
+Archive installations use checksummed platform assets; Go source installations
 require Go. Neither method installs a missing toolchain.
 
 This command runs without prompting, including in pipelines. It does not load
@@ -49,13 +52,30 @@ envelope. Build progress is suppressed in JSON mode.`,
 
 func printUpgrade(out io.Writer, r selfupdate.Result) error {
 	clean := func(s string) string { return core.Sanitize(s) }
-	_, err := fmt.Fprintf(out, "Current: %s\nLatest stable: %s\nBuild: %s\nMethod: %s\nExecutable: %s\nDestination: %s\n",
-		clean(r.CurrentVersion), clean(r.LatestVersion), clean(r.Installation.BuildKind), clean(r.Installation.Method),
+	_, err := fmt.Fprintf(out, "Current: %s\n", clean(r.CurrentVersion))
+	if err != nil {
+		return err
+	}
+	if r.LatestVersion != "" {
+		if _, err = fmt.Fprintf(out, "Latest stable: %s\n", clean(r.LatestVersion)); err != nil {
+			return err
+		}
+	}
+	_, err = fmt.Fprintf(out, "Build: %s\nMethod: %s\nExecutable: %s\nDestination: %s\n",
+		clean(r.Installation.BuildKind), clean(r.Installation.Method),
 		clean(r.Installation.Executable), clean(r.Installation.ResolvedPath))
 	if err != nil {
 		return err
 	}
-	if _, err = fmt.Fprintf(out, "Update available: %t\nCan upgrade here: %t\n", r.UpdateAvailable, r.CanUpgrade); err != nil {
+	if r.Installation.Manager == "homebrew" && !r.UpdateAvailableKnown {
+		_, err = fmt.Fprintln(out, "Update available: determined by Homebrew")
+	} else {
+		_, err = fmt.Fprintf(out, "Update available: %t\n", r.UpdateAvailable)
+	}
+	if err != nil {
+		return err
+	}
+	if _, err = fmt.Fprintf(out, "Can upgrade here: %t\n", r.CanUpgrade); err != nil {
 		return err
 	}
 	if r.Installation.Manager != "" {
@@ -68,9 +88,23 @@ func printUpgrade(out io.Writer, r selfupdate.Result) error {
 			return err
 		}
 	}
+	if len(r.Command) > 0 {
+		if _, err = fmt.Fprintf(out, "Manager command: %q\n", r.Command); err != nil {
+			return err
+		}
+	}
+	if r.InstalledPath != "" {
+		if _, err = fmt.Fprintln(out, "Installed executable:", clean(r.InstalledPath)); err != nil {
+			return err
+		}
+	}
 	label := r.Status
 	if r.Status == "updated" {
-		label = "Updated to " + r.LatestVersion + "; start a new invocation to use it."
+		version := r.InstalledVersion
+		if version == "" {
+			version = r.LatestVersion
+		}
+		label = "Updated to " + version + "; start a new invocation to use it."
 	}
 	if _, err = fmt.Fprintln(out, clean(label)); err != nil {
 		return err

@@ -1,10 +1,17 @@
 # Changelog
 
 User-facing changes are recorded here for every published version. Install a
-fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.10`,
+fixed release with `go install github.com/daviddwlee84/lazyclash/cmd/lazyclash@v0.1.11`,
 or use `@latest` to upgrade. Check the installed binary with `lazyclash --version`.
 
 ## Unreleased
+
+## 0.1.11 — 2026-09-23
+
+- Homebrew-owned `upgrade` now invokes the exact installed formula's owning
+  `brew upgrade`, verifies the resulting stable executable and reports the
+  actual version. Check mode previews without upgrading or requiring GitHub;
+  pins, manager errors and unchanged formulas retain Homebrew's policy.
 
 ## 0.1.10 — 2026-09-22
 

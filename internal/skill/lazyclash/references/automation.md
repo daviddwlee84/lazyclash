@@ -81,9 +81,13 @@ lazyclash upgrade --check --json
 ```
 
 Inspect `installation` (build kind, ownership, evidence and resolved path),
-`current_version`, `latest_version`, `update_available`, `can_upgrade` and
-`reason`. A check writes no settings, locks or update cache. It does make a
-release lookup; help, version and skill output remain offline. A copied Go release
+`current_version`, `latest_version`, `update_available`, `update_available_known`,
+`can_upgrade` and `reason`. A check writes no settings, locks or update cache.
+Source/archive checks make a release lookup; Homebrew checks only verify owner
+metadata and return the exact `command`, without a GitHub lookup or upgrade.
+For Homebrew, `latest_version` is absent and `update_available_known` is false:
+the manager decides which formula version is available. Help, version and skill
+output remain offline. A copied Go release
 binary remains identifiable, but build provenance cannot prove its historical
 installer. The resolved running file is the destination, not another PATH/GOBIN
 copy. Controller/SSH selection does not make this a remote or Mihomo upgrade.
@@ -94,17 +98,23 @@ When the user has authorized updating this CLI and the check permits it:
 lazyclash upgrade --json
 ```
 
-The command does not prompt. It pins one stable release tag, stages a verified archive for official archive installations or a Go build for source installations,
+The command does not prompt. Verified Homebrew installations run the exact
+installed formula's `brew upgrade`, then report `installed_version` and
+`installed_path` from its stable `opt` executable. A manager no-op is not proof
+that the newest GitHub tag was installed. Other supported installations pin
+one stable release tag, stage a verified archive or a Go build,
 verifies identity/version, revalidates the destination and atomically replaces
 that file. Failures before replacement retain the original. JSON mode suppresses
 build progress; success emits one result on stdout and failure uses the normal
 stderr error envelope. Cancellation retains the usual exit 130.
 
-Development, VCS, dirty and pseudo-version builds are preserved unless the user
+Unmanaged development, VCS, dirty and pseudo-version builds are preserved unless the user
 explicitly wants to replace them with a stable release (`upgrade --force`).
 Force also permits a stable reinstall; it cannot override package ownership or
-unknown binary identity. Follow the reported package-manager guidance for managed
-installations. Do not invent a formula, change update channels, use sudo or install
+unknown binary identity; it does not request `brew reinstall` or bypass pins.
+Homebrew delegates only after its receipt, installed formula and selected brew
+agree. Follow manual guidance for unsupported managers. Do not invent a formula,
+fall back after a manager error, change update channels, use sudo or install
 a missing Go installation without authorization. The source builder honors the
 installed Go command's `GOTOOLCHAIN` policy (including its enabled automatic
 toolchain downloads). Go/network errors are not permission to

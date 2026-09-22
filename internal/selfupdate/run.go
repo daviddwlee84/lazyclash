@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/daviddwlee84/lazyclash/internal/brewupgrade"
 )
 
 // Run inspects this process's executable and optionally replaces that same
@@ -30,6 +32,7 @@ type runOptions struct {
 	inspectCandidate func(string) (Installation, error)
 	version          func(context.Context, string) (string, error)
 	download         func(context.Context, Release, string) error
+	brew             brewupgrade.Options
 }
 
 func run(ctx context.Context, req Request, progress io.Writer, opts runOptions) (Result, error) {
@@ -47,6 +50,14 @@ func run(ctx context.Context, req Request, progress io.Writer, opts runOptions) 
 	result.Installation = installation
 	result.CurrentVersion = installation.Version
 	result.Status = "checked"
+	// The installed formula is Homebrew's version authority. Delegation must
+	// work without a separate GitHub lookup or standalone staging directory.
+	if installation.Manager == "homebrew" || installation.Manager == "" {
+		managed, err := runHomebrew(ctx, req, progress, result, opts)
+		if installation.Manager == "homebrew" || !errors.Is(err, brewupgrade.ErrNotManaged) {
+			return managed, err
+		}
+	}
 	var original installationSnapshot
 	if !req.Check && installation.IdentityValid && installation.Manager == "" {
 		original, err = snapshotInstallation(installation)
@@ -65,6 +76,7 @@ func run(ctx context.Context, req Request, progress io.Writer, opts runOptions) 
 	if StableVersion(installation.Version) {
 		comparison, _ := CompareVersions(release.Version, installation.Version)
 		result.UpdateAvailable = comparison > 0
+		result.UpdateAvailableKnown = true
 	}
 	goPath, reason := upgradePrerequisites(installation, req.Force, opts.lookPath)
 	if installation.Method == "release-asset" && reason == "" {

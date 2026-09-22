@@ -44,12 +44,16 @@ type Release struct {
 }
 
 type Result struct {
-	Status          string       `json:"status"`
-	Installation    Installation `json:"installation"`
-	CurrentVersion  string       `json:"current_version"`
-	LatestVersion   string       `json:"latest_version,omitempty"`
-	ReleaseURL      string       `json:"release_url,omitempty"`
-	UpdateAvailable bool         `json:"update_available"`
-	CanUpgrade      bool         `json:"can_upgrade"`
-	Reason          string       `json:"reason,omitempty"`
+	Status               string       `json:"status"`
+	Installation         Installation `json:"installation"`
+	CurrentVersion       string       `json:"current_version"`
+	LatestVersion        string       `json:"latest_version,omitempty"`
+	ReleaseURL           string       `json:"release_url,omitempty"`
+	UpdateAvailable      bool         `json:"update_available"`
+	UpdateAvailableKnown bool         `json:"update_available_known"`
+	CanUpgrade           bool         `json:"can_upgrade"`
+	Reason               string       `json:"reason,omitempty"`
+	Command              []string     `json:"command,omitempty"`
+	InstalledVersion     string       `json:"installed_version,omitempty"`
+	InstalledPath        string       `json:"installed_path,omitempty"`
 }

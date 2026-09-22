@@ -11,7 +11,7 @@ lazyclash upgrade
 
 Go 1.25+ is required. The executable package is `/cmd/lazyclash`, not the
 repository root. GOBIN controls install location; otherwise Go uses GOPATH/bin.
-`@latest` selects a published version, `@v0.1.8` pins one, and `@main` opts
+`@latest` selects a published version, `@v0.1.11` pins one, and `@main` opts
 into development. Prebuilt archives cover macOS/Linux amd64/arm64 and include checksums and Bash/Zsh completions. Package-manager publication is maintained separately.
 
 The updater resolves the current executable, identifies build provenance and
@@ -20,10 +20,15 @@ verifies it and atomically replaces the same resolved path. Relocated Go
 release binaries and retained symlinks are supported. Destination changes,
 concurrent updates and failed candidate validation preserve the original.
 
-Provenance is evidence, not perfect installer detection. Package-manager-owned
-copies receive that manager's guidance; unknown builds are not overwritten.
-Development builds require explicit `--force`, which does not bypass ownership
-checks. The updater does not edit the checkout, use sudo, bootstrap Go or check
+Provenance is evidence, not perfect installer detection. Homebrew-owned copies
+delegate to the installed formula's `brew upgrade`. The keg receipt and owning
+Cellar determine the target; a different Homebrew on PATH is rejected.
+`upgrade --check` only previews this command and does not need GitHub metadata.
+After success, the updater verifies the stable `opt` executable and reports its
+actual version, including when Homebrew leaves a pinned/current formula unchanged.
+Nix/mise copies retain their manager's guidance; unknown builds are not overwritten.
+Unmanaged development builds require explicit `--force`, which does not bypass ownership
+checks or force a Homebrew reinstall. The updater does not edit the checkout, use sudo, bootstrap Go or check
 at startup. Go retains the user's GOTOOLCHAIN policy.
 
 `--read-only` protects core operations, not local registrations or executable
@@ -81,10 +86,11 @@ PTY checks, update the version references, create an immutable tag and GitHub
 release, and verify fixed-tag/latest installs and installed version reporting.
 Use the same release number in CHANGELOG, docs and install manifests.
 
-The embedded operating skill ships with the binary. Contributor skill updates
-are published from their canonical agent-skills source and then refreshed in
-this project; ordinary users do not run that development workflow.
+The embedded operating skill ships with the binary. The contributor skill is
+maintained in awesome-lazy-tools and distributed through agent-skills' owned
+collection, then refreshed in this project; ordinary users do not run that
+development workflow.
 
 ## Archive upgrade channel
 
-Official archives carry a release stamp separate from the displayed version. The updater verifies the exact platform archive against `checksums.txt`, inspects the candidate package/module/platform and release stamp, then runs a bounded version check before replacing the same resolved executable. Failed or missing downloads/checksums never fall back to a source build. Source-installed copies continue to build exact stable tags with Go; package-owned copies must use their manager.
+Official archives carry a release stamp separate from the displayed version. The updater verifies the exact platform archive against `checksums.txt`, inspects the candidate package/module/platform and release stamp, then runs a bounded version check before replacing the same resolved executable. Failed or missing downloads/checksums never fall back to a source build. Source-installed copies continue to build exact stable tags with Go; Homebrew-owned copies delegate to their manager, whose failure never triggers direct replacement.

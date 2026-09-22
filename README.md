@@ -27,8 +27,9 @@ Verify it against `checksums.txt` before extracting. Archives contain the
 for source installation. Runtime backends remain separate prerequisites.
 
 Standalone archive installations use verified release archives for `upgrade`;
-source installations retain exact-tag Go builds. Homebrew/Nix/mise installations
-must use their owning package manager. Upgrades never install a missing Go toolchain
+source installations retain exact-tag Go builds. Homebrew installations delegate
+`upgrade` to the owning `brew upgrade` formula. Nix/mise installations retain
+their manager-specific guidance. Upgrades never install a missing Go toolchain
 or fall back to source after a download/checksum failure.
 
 ## Install and start
@@ -45,7 +46,7 @@ The `/cmd/lazyclash` suffix identifies the executable package. Go installs it in
 `go env GOBIN` when configured, otherwise in the first `go env GOPATH` entry's
 `bin` directory (usually `~/go/bin`). Add that directory to your shell's PATH.
 Repeating the install command upgrades to the latest published version. To pin
-a release, use `@v0.1.10`; `@main` explicitly opts into the development
+a release, use `@v0.1.11`; `@main` explicitly opts into the development
 branch. `@latest` selects a published version, not necessarily the newest commit.
 See [CHANGELOG.md](CHANGELOG.md) for changes between versions.
 
@@ -72,11 +73,17 @@ PATH does not redirect the replacement. Symlinks are retained. Failures before
 replacement leave the original binary in place; progress goes to stderr and is
 suppressed with `--json`.
 
-Development/VCS/dirty/pseudo-version builds are preserved by default. Use
+Unmanaged development/VCS/dirty/pseudo-version builds are preserved by default. Use
 `lazyclash upgrade --force` explicitly to replace one with the latest stable
 release, or reinstall that release. This never pulls or edits a Git checkout.
-Package-manager installations (Homebrew, mise, Nix) get their own update guidance;
-unknown builds are not overwritten. `--force` does not bypass ownership or
+For Homebrew, `upgrade --check` previews the exact installed formula and owner
+command without contacting GitHub or upgrading. `upgrade` runs that command,
+then verifies the effective executable through the formula's stable `opt` path.
+Homebrew controls available versions and pins; an unchanged formula is reported
+without claiming the newest GitHub release was installed. Manager errors do not
+switch to a source/archive replacement. Nix/mise retain manual guidance, and
+unknown builds are not overwritten. `--force` does not request `brew reinstall`
+or bypass ownership or
 identity checks. The updater does not use sudo, bootstrap a missing Go installation,
 or check for updates at startup. An installed Go command retains the configured
 `GOTOOLCHAIN` policy, including toolchain downloads when enabled. The embedded

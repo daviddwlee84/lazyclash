@@ -213,7 +213,7 @@ func ownedByManager(path string, env managerEnv) (string, string) {
 func managerInstruction(manager string) string {
 	switch manager {
 	case "homebrew":
-		return "Homebrew owns this executable; update its installed formula with brew upgrade"
+		return "Homebrew owns this executable; upgrade uses brew upgrade for its installed formula"
 	case "mise":
 		return "mise owns this executable; update its registered tool with mise upgrade"
 	case "nix":

@@ -84,6 +84,32 @@ func TestUpgradeJSONProgressAndForceContract(t *testing.T) {
 	}
 }
 
+func TestHomebrewUpgradeReportsManagerResultWithoutInventingLatest(t *testing.T) {
+	for _, status := range []string{"checked", "updated", "up-to-date"} {
+		t.Run(status, func(t *testing.T) {
+			result := selfupdate.Result{
+				Status: status, CurrentVersion: "v0.1.1", CanUpgrade: true,
+				Installation: selfupdate.Installation{Manager: "homebrew", Method: "package-manager"},
+				Command:      []string{"/opt/homebrew/bin/brew", "upgrade", "daviddwlee84/tap/lazyclash"},
+			}
+			if status != "checked" {
+				result.InstalledVersion, result.InstalledPath = "v0.1.2", "/opt/homebrew/opt/lazyclash/bin/lazyclash"
+			}
+			var out bytes.Buffer
+			if err := printUpgrade(&out, result); err != nil {
+				t.Fatal(err)
+			}
+			text := out.String()
+			if !strings.Contains(text, "determined by Homebrew") || !strings.Contains(text, "daviddwlee84/tap/lazyclash") || strings.Contains(text, "Latest stable:") || strings.Contains(text, "Update available: false") {
+				t.Fatalf("misleading owner result: %s", text)
+			}
+			if status == "updated" && (!strings.Contains(text, "Updated to v0.1.2") || !strings.Contains(text, result.InstalledPath)) {
+				t.Fatalf("installed target missing: %s", text)
+			}
+		})
+	}
+}
+
 func TestUpgradeErrorAndCancellationContracts(t *testing.T) {
 	isolated(t)
 	for _, test := range []struct {
