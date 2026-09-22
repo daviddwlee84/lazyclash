@@ -34,6 +34,8 @@ func (m *Model) actions() []action {
 		{"tool-core", "Manage installed cores", nil, m.canRunTool()},
 		{"tool-client-service", "Existing target service: status / start / stop / autostart", nil, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride && m.target.ManagedCoreID == ""},
 		{"tool-servers", "Servers / VPS / Tailnet: deploy, manage and share", nil, m.options.Workbench != nil && !m.toolPending},
+		{"tool-analytics", "Historical analytics: sources, domains, traffic and activity", nil, m.canRunTool()},
+		{"tool-analytics-setup", "Configure historical analytics collection", nil, m.canRunTool() && !m.options.ReadOnly},
 		{"tool-network", "Diagnose VPN / TUN / DNS conflicts", nil, m.canRunTool()},
 		{"tool-topology", "Routing topology: configuration / current selections", nil, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride},
 		{"tool-checks", "Saved connectivity checks: review / add / edit / run", []string{"C"}, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride},

@@ -274,6 +274,7 @@ func New(deps Dependencies) *cobra.Command {
 	root.AddCommand(o.skillCommand(), o.diagnosticsCommand(), o.upgradeCommand(), o.groupsCommand(), o.setupCommand(), o.coresCommand())
 	root.AddCommand(o.vpsCommand(), o.serversCommand(), o.tailnetCommand())
 	root.AddCommand(o.topologyCommand(), o.completionCommand(root))
+	root.AddCommand(o.analyticsCommand())
 	o.registerCompletions(root)
 	return root
 }

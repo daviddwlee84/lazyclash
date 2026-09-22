@@ -87,7 +87,7 @@ func (m *Model) runTool(label string, targeted bool, args ...string) tea.Cmd {
 	m.overlay = "external-tool"
 	m.status = label
 	request := toolMsg{generation: m.generation, serial: m.toolSerial, label: label}
-	task := &terminalTask{ctx: m.ctx, args: append([]string(nil), args...), run: m.options.RunCommand, viewOnly: label == "Routing topology"}
+	task := &terminalTask{ctx: m.ctx, args: append([]string(nil), args...), run: m.options.RunCommand, viewOnly: label == "Routing topology" || label == "Historical analytics"}
 	return tea.Exec(task, func(err error) tea.Msg { request.err = err; return request })
 }
 
@@ -213,6 +213,13 @@ func (m *Model) toolAction(id string) tea.Cmd {
 	}
 	r, has := m.selectedRow()
 	switch id {
+	case "tool-analytics":
+		return m.runTool("Historical analytics", false, "analytics", "report", "--interactive")
+	case "tool-analytics-setup":
+		if m.options.ReadOnly {
+			return nil
+		}
+		return m.runTool("Configure analytics", false, "analytics", "setup", "--interactive")
 	case "tool-servers":
 		return m.startServers()
 	case "tool-setup":

@@ -6,6 +6,13 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 
 ## Unreleased
 
+- Added opt-in historical analytics with private SQLite, configurable retention
+  and storage budgets, Mihomo/interface/access-log/user-stats collectors, vnStat
+  import, day/week/month CLI/TUI reports, SSH queries and manual domain diagnosis.
+  User service lifecycle requires reviewed actions and never elevates privileges.
+  Host TX notifications retain threshold and delivery state without mixing client,
+  server, interface or billing counters.
+
 - Added offline YAML routing topology, terminal/Mermaid/JSON output, searchable
   CLI/TUI graph browsing and optional current-selection/provider overlays.
 - Added searchable per-target proxy import wizards, per-target destination

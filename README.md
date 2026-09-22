@@ -122,6 +122,14 @@ If controller discovery requires authentication, configure a secret reference or
 
 ## Dashboard
 
+**Historical analytics** in `:` opens day/week/month reports with source, domain,
+process and route drill-down. Collection is opt-in and independent of the TUI:
+`analytics setup`, `analytics collect --duration 10m`, and `analytics report` use
+private SQLite history with configurable retention and storage limits. User
+services and SSH queries keep collection on each host; sampled client bytes,
+server access events and host interface totals remain separate. See
+[historical analytics](docs/analytics.md) for setup, limitations and alerts.
+
 New client and source workflows are available from `:` and the target picker:
 
 Imports offer existing group toggles and new select groups, with protocol/core

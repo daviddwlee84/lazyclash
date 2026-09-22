@@ -32,7 +32,7 @@ func printSkill(cmd *cobra.Command, topic string) error {
 	}
 	document, err := skill.Read(topic)
 	if errors.Is(err, skill.ErrUnknownTopic) {
-		return usage("unknown skill topic %q; choose controllers, runtime, automation, diagnosis, workflows, sources, environment, setup, servers or tailnet", topic)
+		return usage("unknown skill topic %q; choose controllers, runtime, automation, diagnosis, workflows, sources, environment, setup, servers, tailnet or analytics", topic)
 	}
 	if err != nil {
 		return err
@@ -53,7 +53,7 @@ func (o *options) skillCommand() *cobra.Command {
 		Use:       "print [topic]",
 		Short:     "Print an embedded operating topic, including sources, environment and setup",
 		Long:      "Print embedded operational knowledge without loading settings or contacting a core. Omit topic for SKILL.md. Use each command's --help as the authority for CLI syntax. --json is not supported for Markdown documents.",
-		ValidArgs: []string{"controllers", "runtime", "automation", "diagnosis", "workflows", "sources", "environment", "setup", "servers", "tailnet"},
+		ValidArgs: []string{"controllers", "runtime", "automation", "diagnosis", "workflows", "sources", "environment", "setup", "servers", "tailnet", "analytics"},
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 1 {
 				return usage("%s accepts at most one topic; see --help", cmd.CommandPath())

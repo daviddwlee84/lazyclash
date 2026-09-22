@@ -2,6 +2,8 @@
 
 The current release supports existing-core observation, runtime comparison/control, URL diagnosis and exact-domain repairs for explicitly bound owners. Remaining milestones:
 
+- **VPS 每人／每裝置憑證管理 (P?, L)**: multiple UUIDs, device-specific exports, revocation and rotation with persistent configuration ownership; preserve legacy shared credentials and distinguish blocking new authentication from terminating existing sessions. → [research](backlog/server-client-identities.md)
+
 - **SVG topology export (P?, M)**: optional local Mermaid CLI rendering when needed; terminal/Mermaid/JSON output ships first, without Node or Chromium. → [research](backlog/topology-svg-export.md)
 
 - **Extended rules workbench**: edit general staged personal overrides with `$VISUAL`/`$EDITOR`; keep baseline, overrides and generated configuration separate; validate with the target core version in isolated storage; show diff, detect conflicting edits and retain previous revisions.

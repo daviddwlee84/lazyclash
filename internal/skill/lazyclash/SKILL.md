@@ -46,6 +46,9 @@ the request is only to inspect.
 - [Runtime operations](references/runtime.md), also
   `lazyclash skill print runtime`: select proxies, interpret TUN, diagnose
   connections, and apply complete YAML without confusing it with Verge profiles.
+- [Historical analytics](references/analytics.md), also
+  `lazyclash skill print analytics`: opt-in local collection, bounded retention,
+  independent observation scopes, SSH history, user services and manual diagnosis.
 - [Automation](references/automation.md), also
   `lazyclash skill print automation`: JSON/NDJSON, bounded log collection,
   noninteractive errors, exit codes, uncertain-write recovery and local CLI upgrades.

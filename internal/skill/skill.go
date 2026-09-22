@@ -19,7 +19,7 @@ func Read(topic string) (string, error) {
 	switch topic {
 	case "":
 		path = "lazyclash/SKILL.md"
-	case "controllers", "runtime", "automation", "diagnosis", "workflows", "sources", "environment", "setup", "servers", "tailnet":
+	case "controllers", "runtime", "automation", "diagnosis", "workflows", "sources", "environment", "setup", "servers", "tailnet", "analytics":
 		path = "lazyclash/references/" + topic + ".md"
 	default:
 		return "", ErrUnknownTopic
