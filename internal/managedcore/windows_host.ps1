@@ -147,14 +147,30 @@ function Session(){
  if($ids.Count -eq 1){return $ids[0]};return 0
 }
 
-function ProcessRecord($p){
+function ProcessOwner($p){
+ try{
+  $owner=Invoke-CimMethod -InputObject $p -MethodName GetOwnerSid -ErrorAction Stop
+  if(-not $owner.Sid -or ($owner.ReturnValue -and [int]$owner.ReturnValue -ne 0)){Fail 'Process owner lookup did not return a verified SID'}
+  return $owner
+ }catch [Microsoft.Management.Infrastructure.CimException]{
+  if($_.Exception.NativeErrorCode -ne [Microsoft.Management.Infrastructure.NativeErrorCode]::NotFound){throw}
+  # A task stop may reap a process after enumeration. Only a recognized
+  # NotFound plus absence of that exact process generation is an ordinary exit.
+  $current=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$p.ProcessId) -ErrorAction Stop
+  if(-not $current -or $current.CreationDate.ToUniversalTime() -ne $p.CreationDate.ToUniversalTime()){return $null}
+  throw
+ }
+}
+function ProcessRecord($p,[bool]$AllowExited=$false){
  if(-not $p.ExecutablePath){Fail 'Process executable identity is unavailable'}
- $o=Invoke-CimMethod -InputObject $p -MethodName GetOwnerSid
+ $o=ProcessOwner $p
+ if(-not $o){if($AllowExited){return $null};Fail 'Process exited during identity verification'}
  return @{pid=[int]$p.ProcessId;path=(Full $p.ExecutablePath);sha256=(Get-FileHash -LiteralPath $p.ExecutablePath -Algorithm SHA256).Hash.ToLowerInvariant();created=$p.CreationDate.ToUniversalTime().ToString('o');user_sid=$o.Sid;session=[int]$p.SessionId}
 }
 function ProcessMatches($p,$record){
- if(-not $p -or -not $p.ExecutablePath -or -not(ProcessPathSame $p.ExecutablePath $record.path) -or $p.CreationDate.ToUniversalTime().ToString('o') -ne $record.created -or [int]$p.SessionId -ne [int]$record.session){return $false}
- $owner=Invoke-CimMethod -InputObject $p -MethodName GetOwnerSid
+ if(-not $p -or -not $record -or -not $p.ExecutablePath -or -not(ProcessPathSame $p.ExecutablePath $record.path) -or $p.CreationDate.ToUniversalTime().ToString('o') -ne $record.created -or [int]$p.SessionId -ne [int]$record.session){return $false}
+ $owner=ProcessOwner $p
+ if(-not $owner){return $false}
  if($owner.Sid -ne $script:SID -or $record.user_sid -ne $script:SID){return $false}
  NoReparse $p.ExecutablePath
  return (Get-FileHash -LiteralPath $p.ExecutablePath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $record.sha256
@@ -163,7 +179,7 @@ function OwnedProcesses($m){
  $session=Session;if($session -eq 0){return}
  $items=@();foreach($p in @(Get-CimInstance Win32_Process)){
   if(-not $p.ExecutablePath -or [int]$p.SessionId -ne $session){continue}
-  if(($m.app_path -and (ProcessPathSame $p.ExecutablePath $m.app_path)) -or ($m.core_path -and (ProcessPathSame $p.ExecutablePath $m.core_path))){$o=Invoke-CimMethod -InputObject $p -MethodName GetOwnerSid;if($o.Sid -eq $script:SID){$items+=$p}}
+  if(($m.app_path -and (ProcessPathSame $p.ExecutablePath $m.app_path)) -or ($m.core_path -and (ProcessPathSame $p.ExecutablePath $m.core_path))){$o=ProcessOwner $p;if($o -and $o.Sid -eq $script:SID){$items+=$p}}
  };return $items
 }
 function AssertTask($m){
@@ -249,7 +265,7 @@ function StopOwned($m){
  if((Session) -eq 0){Fail 'Stopping the owned client requires the reviewed desktop session'}
  AssertTask $m
  if($m.task_sha256){Stop-ScheduledTask -TaskName $m.task -ErrorAction SilentlyContinue}
- foreach($p in @(OwnedProcesses $m)){$record=ProcessRecord $p;$current=Get-CimInstance Win32_Process -Filter ('ProcessId='+$p.ProcessId);if(ProcessMatches $current $record){Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue}}
+ foreach($p in @(OwnedProcesses $m)){$record=ProcessRecord $p $true;if(-not $record){continue};$current=Get-CimInstance Win32_Process -Filter ('ProcessId='+$p.ProcessId);if(ProcessMatches $current $record){Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue}}
  $deadline=[DateTime]::UtcNow.AddSeconds(5)
  do{$remaining=@(OwnedProcesses $m);$task=Get-ScheduledTask -TaskName $m.task -ErrorAction SilentlyContinue;if($remaining.Count -eq 0 -and $task.State -ne 'Running'){return};if([DateTime]::UtcNow -ge $deadline){Fail 'Owned processes or startup task did not stop within five seconds'};Start-Sleep -Milliseconds 100}while($true)
 }
@@ -708,7 +724,9 @@ try{
  $stage=if($m.phase -in @('staging','installer_started','staged','running_unverified','proxy_activation_started','proxy_pending_verification','proxy_restore_started','proxy_restored','gui_activation_started','gui_pending_verification','running_verified','source_persisted','stopped','removed_data_preserved')){$m.phase}else{'request'}
  $kind=$_.Exception.GetType().FullName;if($kind -notmatch '^[A-Za-z0-9_.]+$'){$kind='Exception'}
  $line=[int]$_.InvocationInfo.ScriptLineNumber
- $reason='Windows managed helper failed (operation='+$op+'; stage='+$stage+'; exception='+$kind+'; helper line='+$line+'). Check Windows path permissions and task prerequisites.'
+ $cim=''
+ if($_.Exception -is [Microsoft.Management.Infrastructure.CimException]){$cim='; cim_native='+[int]$_.Exception.NativeErrorCode+'; cim_status='+[uint32]$_.Exception.StatusCode+'; hresult='+[int]$_.Exception.HResult}
+ $reason='Windows managed helper failed (operation='+$op+'; stage='+$stage+'; exception='+$kind+'; helper line='+$line+$cim+'). Check Windows path permissions and task prerequisites.'
  if($_.Exception.Message.StartsWith('LCWIN:')){$reason=$_.Exception.Message.Substring(6)}
  [Console]::Out.WriteLine((JSON @{error=$reason;status='unconfirmed'}))
  # Scheduled rollback retries on interruption/failure; SSH callers consume the same structured error.

@@ -53,6 +53,23 @@ func TestWindowsUnrelatedProcessPaths(t *testing.T) {
 	}
 }
 
+func TestWindowsProcessExitDuringStop(t *testing.T) {
+	pwsh, err := exec.LookPath("pwsh")
+	if err != nil {
+		t.Skip("PowerShell runtime is unavailable")
+	}
+	helper, err := filepath.Abs("windows_host.ps1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, pwsh, "-NoLogo", "-NoProfile", "-NonInteractive", "-File", "testdata/windows_process_exit.ps1", "-Helper", helper)
+	if output, err := cmd.CombinedOutput(); err != nil || !strings.Contains(string(output), "PASS: CIM exit races") {
+		t.Fatalf("process exit race: %v\n%s", err, output)
+	}
+}
+
 func TestWindowsFactsRemoteReadOnlySmoke(t *testing.T) {
 	host := os.Getenv("LAZYCLASH_WINDOWS_BRIDGE_LIVE")
 	if host == "" {

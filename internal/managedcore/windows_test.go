@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/configwork"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/diagnostics"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -171,7 +173,7 @@ func TestWindowsInstallStoresPrivateSnapshotBeforeMutationAndRegistersLast(t *te
 		return config.ValidateTarget(target)
 	}
 	receipt := installWindowsFixture(t, r, o)
-	if receipt.Status != "running_verified" || receipt.NeedsACK || !registered {
+	if receipt.Status != "running_verified" || receipt.NeedsACK || !receipt.ProxyHealthy || !registered {
 		t.Fatalf("unverified registration %#v", receipt)
 	}
 	instance, e := loadInstance(r.ID, o)
@@ -229,6 +231,83 @@ func TestWindowsFailedProxyCheckNeverTakesOverOrRegisters(t *testing.T) {
 		}
 	}
 }
+
+func TestWindowsProbeFailureDetailsAndRestartReceipt(t *testing.T) {
+	result := diagnostics.LatencyResult{Route: "http://PRIVATE:SECRET@proxy.test", Sites: []diagnostics.SiteResult{
+		{Name: "Google", URL: "https://PRIVATE.test/?token=SECRET", StatusCode: 204, Milliseconds: 410},
+		{Name: "GitHub", URL: "https://github.com", Error: "request timed out", Milliseconds: 5001},
+	}}
+	failure := windowsProbeError(result, diagnostics.ErrPartial)
+	if !errors.Is(failure, diagnostics.ErrPartial) || !strings.Contains(failure.Error(), "Google: HTTP 204 (410 ms)") || !strings.Contains(failure.Error(), "GitHub: request timed out (5001 ms)") || strings.Contains(failure.Error(), "PRIVATE") || strings.Contains(failure.Error(), "SECRET") {
+		t.Fatalf("unsafe or incomplete per-site failure: %v", failure)
+	}
+	r, o, f := newWindowsFixture(t)
+	installWindowsFixture(t, r, o)
+	probeCalls := 0
+	o.Probe = func(context.Context, config.Target) error { probeCalls++; return failure }
+	plan, err := WindowsPreviewAction(context.Background(), r.ID, "restart", o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := len(f.ops)
+	receipt, err := WindowsLifecycle(context.Background(), r.ID, "restart", plan.Digest, o)
+	if !errors.Is(err, diagnostics.ErrPartial) || receipt.Status != "running_proxy_unverified" || receipt.ProxyHealthy || !strings.Contains(receipt.Message, "after restart") || !strings.Contains(receipt.Message, "GitHub: request timed out") || strings.Contains(receipt.Message, "staged") || strings.Contains(receipt.Message, "CFW") {
+		t.Fatalf("restart health receipt misreported: %v %#v", err, receipt)
+	}
+	if !reflect.DeepEqual(f.ops[before:], []string{"status", "restart", "verify-runtime"}) {
+		t.Fatalf("probe failure changed lifecycle state: %v", f.ops[before:])
+	}
+	if probeCalls != 1 || len(receipt.Warnings) != 0 {
+		t.Fatal("caller-provided probe was retried")
+	}
+	stored, err := os.ReadFile(filepath.Join(o.StateDir, "receipts", receipt.ID+".json"))
+	if err != nil || !strings.Contains(string(stored), "GitHub: request timed out") {
+		t.Fatal("per-site details not saved", err)
+	}
+}
+
+func TestWindowsLifecycleDefaultProbeRetriesOnceAndRetainsEvidence(t *testing.T) {
+	failed := diagnostics.LatencyResult{Sites: []diagnostics.SiteResult{{Name: "GitHub", Error: "request timed out", Milliseconds: 5000}}}
+	for _, succeeds := range []bool{true, false} {
+		t.Run(fmt.Sprint(succeeds), func(t *testing.T) {
+			receipt := Receipt{}
+			calls := 0
+			started := time.Now()
+			err := windowsLifecycleProbe(context.Background(), config.Target{}, &receipt, func(context.Context, config.Target) (diagnostics.LatencyResult, error) {
+				calls++
+				if calls == 2 && succeeds {
+					return diagnostics.LatencyResult{}, nil
+				}
+				return failed, diagnostics.ErrPartial
+			})
+			if calls != 2 || time.Since(started) < time.Second || len(receipt.Warnings) != 1 || !strings.Contains(receipt.Warnings[0], "first HTTPS verification attempt failed") || !strings.Contains(receipt.Warnings[0], "GitHub: request timed out") {
+				t.Fatalf("retry evidence missing: %d %v %#v", calls, err, receipt.Warnings)
+			}
+			if succeeds && (err != nil || !strings.Contains(receipt.Warnings[0], "All sites passed")) || !succeeds && (!errors.Is(err, diagnostics.ErrPartial) || !strings.Contains(receipt.Warnings[0], "retry also failed")) {
+				t.Fatalf("retry outcome changed: %v %#v", err, receipt.Warnings)
+			}
+		})
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	calls := 0
+	receipt := Receipt{}
+	err := windowsLifecycleProbe(ctx, config.Target{}, &receipt, func(context.Context, config.Target) (diagnostics.LatencyResult, error) {
+		calls++
+		return failed, diagnostics.ErrPartial
+	})
+	if calls != 1 || !errors.Is(err, context.DeadlineExceeded) || len(receipt.Warnings) != 1 || !strings.Contains(receipt.Warnings[0], "deadline canceled") {
+		t.Fatalf("deadline did not bound retry: %d %v", calls, err)
+	}
+	calls = 0
+	err = windowsLifecycleProbe(context.Background(), config.Target{}, nil, func(context.Context, config.Target) (diagnostics.LatencyResult, error) {
+		calls++
+		return failed, diagnostics.ErrPartial
+	})
+	if calls != 1 || !errors.Is(err, diagnostics.ErrPartial) {
+		t.Fatal("source activation unexpectedly retried")
+	}
+}
 func TestWindowsFreshManagementFailureRetainsRollbackReceipt(t *testing.T) {
 	r, o, f := newWindowsFixture(t)
 	r.Network.SystemProxy = true
@@ -238,7 +317,7 @@ func TestWindowsFreshManagementFailureRetainsRollbackReceipt(t *testing.T) {
 		t.Fatal(e)
 	}
 	receipt, e := ApplyWindows(context.Background(), r, p.Digest, o)
-	if e == nil || !receipt.NeedsACK || receipt.RollbackDeadline.IsZero() {
+	if e == nil || receipt.ProxyHealthy || !receipt.NeedsACK || receipt.RollbackDeadline.IsZero() {
 		t.Fatal(e, receipt)
 	}
 	for _, op := range f.ops {
@@ -247,6 +326,70 @@ func TestWindowsFreshManagementFailureRetainsRollbackReceipt(t *testing.T) {
 		}
 	}
 }
+func TestWindowsTransitionFailureDoesNotReuseStagedProxyHealth(t *testing.T) {
+	for _, tc := range []struct{ name, transition, failure string }{
+		{"takeover-probe", "takeover", "probe"},
+		{"gui-probe", "activate-gui", "probe"},
+		{"takeover-unknown", "takeover", "transition"},
+		{"gui-unknown", "activate-gui", "transition"},
+		{"fresh-management", "takeover", "management"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, o, f := newWindowsFixture(t)
+			installWindowsFixture(t, r, o)
+			instance, err := loadInstance(r.ID, o)
+			if err != nil {
+				t.Fatal(err)
+			}
+			instance.Client = "verge"
+			instance.WindowsGUIActivated = false
+			instance.Network.SystemProxy = tc.transition == "takeover"
+			calls := 0
+			o.Probe = func(context.Context, config.Target) error {
+				calls++
+				if calls == 2 && tc.failure == "probe" {
+					return errors.New("post-transition probe failed")
+				}
+				return nil
+			}
+			o.FreshManagement = func(context.Context, string) error {
+				if tc.failure == "management" {
+					return errors.New("fresh management failed")
+				}
+				return nil
+			}
+			f.intercept = func(r windowsRequest) error {
+				if r.Op == tc.transition && tc.failure == "transition" {
+					return errors.New("transition outcome unknown")
+				}
+				return nil
+			}
+			before := len(f.ops)
+			receipt, err := finishWindowsActivation(context.Background(), instance, r, newReceipt(instance, "resume", instance.Digest, o), o)
+			if err == nil || receipt.ProxyHealthy {
+				t.Fatalf("staged health reused after transition failure: %v %#v", err, receipt)
+			}
+			raw, e := os.ReadFile(filepath.Join(o.StateDir, "receipts", receipt.ID+".json"))
+			var saved Receipt
+			if e != nil || json.Unmarshal(raw, &saved) != nil || saved.ProxyHealthy {
+				t.Fatal("saved transition receipt claims healthy proxy", e)
+			}
+			for _, op := range f.ops[before:] {
+				if op == "ack" {
+					t.Fatal("failed transition was acknowledged")
+				}
+			}
+			wantCalls := 1
+			if tc.failure == "probe" {
+				wantCalls = 2
+			}
+			if calls != wantCalls {
+				t.Fatalf("health checks=%d, want %d", calls, wantCalls)
+			}
+		})
+	}
+}
+
 func TestWindowsUnknownInstallerResumeNeverInstallsAgain(t *testing.T) {
 	r, o, f := newWindowsFixture(t)
 	f.intercept = func(r windowsRequest) error {

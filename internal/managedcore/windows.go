@@ -286,7 +286,7 @@ func ApplyWindows(ctx context.Context, request Request, expected string, opts Op
 	return finishWindowsActivation(ctx, instance, request, receipt, opts)
 }
 
-func windowsHealth(ctx context.Context, instance Instance, request Request, initial bool, opts Options) error {
+func windowsHealth(ctx context.Context, instance Instance, request Request, initial bool, opts Options, receipt *Receipt) error {
 	ctx, cancel := context.WithTimeout(ctx, 75*time.Second)
 	readinessCtx, readinessCancel := context.WithTimeout(ctx, 35*time.Second)
 	defer readinessCancel()
@@ -364,12 +364,76 @@ func windowsHealth(ctx context.Context, instance Instance, request Request, init
 	probe := opts.Probe
 	if probe == nil {
 		probe = func(ctx context.Context, t config.Target) error {
-			_, e := diagnostics.Latency(ctx, t, diagnostics.Options{})
-			return e
+			return windowsLifecycleProbe(ctx, t, receipt, func(ctx context.Context, t config.Target) (diagnostics.LatencyResult, error) {
+				return diagnostics.Latency(ctx, t, diagnostics.Options{})
+			})
 		}
 	}
 	return probe(ctx, instance.Target)
 }
+
+// Only lifecycle's default website probes receive one warmup retry. Source
+// validation, caller-provided probes and standalone diagnostics keep their
+// existing semantics. Both attempts share the health/rollback deadline.
+func windowsLifecycleProbe(ctx context.Context, target config.Target, receipt *Receipt, run func(context.Context, config.Target) (diagnostics.LatencyResult, error)) error {
+	result, err := run(ctx, target)
+	first := windowsProbeError(result, err)
+	if receipt == nil || !errors.Is(err, diagnostics.ErrPartial) || ctx.Err() != nil {
+		return first
+	}
+	index := len(receipt.Warnings)
+	warning := "The first HTTPS verification attempt failed. " + first.Error()
+	receipt.Warnings = append(receipt.Warnings, warning)
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		receipt.Warnings[index] = warning + " The verification deadline canceled the retry."
+		return &windowsProbeFailure{summary: "Windows HTTPS verification deadline expired before retry; " + first.Error(), cause: ctx.Err()}
+	case <-timer.C:
+	}
+	result, err = run(ctx, target)
+	if err == nil {
+		receipt.Warnings[index] = warning + " All sites passed on the single retry after a one-second warmup."
+	} else {
+		receipt.Warnings[index] = warning + " The single retry also failed."
+	}
+	return windowsProbeError(result, err)
+}
+
+type windowsProbeFailure struct {
+	summary string
+	cause   error
+}
+
+func (e *windowsProbeFailure) Error() string { return e.summary }
+func (e *windowsProbeFailure) Unwrap() error { return e.cause }
+
+// The fixed public probe names and diagnostics' classified errors are useful
+// in a lifecycle receipt; URLs, routes and proxy credentials are omitted.
+func windowsProbeError(result diagnostics.LatencyResult, err error) error {
+	if err == nil || len(result.Sites) == 0 {
+		return err
+	}
+	parts := make([]string, 0, len(result.Sites))
+	for _, site := range result.Sites {
+		outcome := fmt.Sprintf("HTTP %d", site.StatusCode)
+		if site.Error != "" {
+			outcome = site.Error
+		}
+		parts = append(parts, fmt.Sprintf("%s: %s (%.0f ms)", site.Name, outcome, site.Milliseconds))
+	}
+	return &windowsProbeFailure{summary: "Windows HTTPS verification incomplete: " + strings.Join(parts, "; "), cause: err}
+}
+
+func windowsProbeMessage(message string, err error) string {
+	var failure *windowsProbeFailure
+	if errors.As(err, &failure) {
+		return message + " " + failure.Error()
+	}
+	return message
+}
+
 func verifyWindowsGenerated(expected, generated []byte) error {
 	var a, b map[string]any
 	if yaml.Unmarshal(expected, &a) != nil || yaml.Unmarshal(generated, &b) != nil {
@@ -383,14 +447,21 @@ func verifyWindowsGenerated(expected, generated []byte) error {
 	return nil
 }
 func finishWindowsActivation(ctx context.Context, instance Instance, request Request, receipt Receipt, opts Options) (Receipt, error) {
-	if err := windowsHealth(ctx, instance, request, !instance.WindowsInitialized, opts); err != nil {
+	receipt.ProxyHealthy = false
+	if err := windowsHealth(ctx, instance, request, !instance.WindowsInitialized, opts, &receipt); err != nil {
 		receipt.Status = "running_proxy_unverified"
 		receipt.Message = "The staged Windows client is unverified. Existing CFW/system proxy remain unchanged unless an earlier takeover is still awaiting rollback."
+		if instance.WindowsInitialized {
+			receipt.Message = "Windows client verification is incomplete after " + receipt.Operation + "; check the controller and per-site probe results."
+		}
+		receipt.Message = windowsProbeMessage(receipt.Message, err)
 		_ = saveReceipt(receipt, opts)
 		return receipt, err
 	}
 	receipt.ProxyHealthy = true
 	if instance.Network.SystemProxy {
+		// The staged probe does not establish the post-handoff data route.
+		receipt.ProxyHealthy = false
 		r := windowsHostRequest(instance, request, "takeover")
 		r.Expected = ""
 		response, err := callWindows(ctx, instance.SSHHost, r, opts)
@@ -429,18 +500,21 @@ func finishWindowsActivation(ctx context.Context, instance Instance, request Req
 		if err = fresh(verifyCtx, instance.SSHHost); err != nil {
 			return receipt, err
 		}
-		if err = windowsHealth(verifyCtx, instance, request, !instance.WindowsInitialized, opts); err != nil {
+		if err = windowsHealth(verifyCtx, instance, request, !instance.WindowsInitialized, opts, &receipt); err != nil {
 			receipt.Status = "proxy_verification_failed"
 			receipt.Message = "Post-takeover verification failed; inspect the saved ownership state before further control."
 			if receipt.NeedsACK {
 				receipt.Status = "proxy_pending_rollback"
 				receipt.Message = "Post-takeover verification failed; the owned rollback task remains armed."
 			}
+			receipt.Message = windowsProbeMessage(receipt.Message, err)
 			_ = saveReceipt(receipt, opts)
 			return receipt, err
 		}
+		receipt.ProxyHealthy = true
 	}
 	if instance.Client == "verge" && !instance.Network.SystemProxy && !instance.WindowsGUIActivated {
+		receipt.ProxyHealthy = false
 		response, err := callWindows(ctx, instance.SSHHost, windowsHostRequest(instance, request, "activate-gui"), opts)
 		if err != nil {
 			receipt.Status = "gui_activation_unconfirmed"
@@ -464,11 +538,13 @@ func finishWindowsActivation(ctx context.Context, instance Instance, request Req
 		}
 		verifyCtx, verifyCancel := windowsVerificationContext(ctx, receipt)
 		defer verifyCancel()
-		if err = windowsHealth(verifyCtx, instance, request, !instance.WindowsInitialized, opts); err != nil {
+		if err = windowsHealth(verifyCtx, instance, request, !instance.WindowsInitialized, opts, &receipt); err != nil {
 			receipt.Status = "gui_running_unverified"
+			receipt.Message = windowsProbeMessage("Native GUI verification is incomplete; inspect the owned recovery receipt.", err)
 			_ = saveReceipt(receipt, opts)
 			return receipt, err
 		}
+		receipt.ProxyHealthy = true
 	}
 	ackCtx := ctx
 	if receipt.NeedsACK && !receipt.RollbackDeadline.IsZero() {
@@ -735,7 +811,7 @@ func WindowsActivateSource(ctx context.Context, target config.Target, opts Optio
 	if err = saveInstance(instance, request, opts); err != nil {
 		return err
 	}
-	return windowsHealth(ctx, instance, request, false, opts)
+	return windowsHealth(ctx, instance, request, false, opts, nil)
 }
 
 // Verification never consumes the time reserved for the guarded ACK. The

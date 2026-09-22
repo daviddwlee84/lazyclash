@@ -42,6 +42,10 @@ Review the preview, then repeat the same command with
 `--artifact FILE` can supply the exact verified release for offline transfer;
 `--bootstrap-target ID` explicitly selects an existing data proxy for downloads.
 
+Cloning from a Windows target can take several minutes while its files are
+verified over SSH. Changes to the source during verification invalidate the
+snapshot and require a fresh preview.
+
 The setup wizard, also available through the TUI setup action, includes **Copy
 an existing target** and **Clash Verge Rev / Background Mihomo** choices. A bound
 Windows source uses `host_os = "windows"`; local secret-file references continue

@@ -184,6 +184,7 @@ type Receipt struct {
 	Digest           string        `json:"digest"`
 	CreatedAt        time.Time     `json:"created_at"`
 	Message          string        `json:"message,omitempty"`
+	Warnings         []string      `json:"warnings,omitempty"`
 	Target           config.Target `json:"target"`
 	NeedsACK         bool          `json:"needs_ack"`
 	RollbackDeadline time.Time     `json:"rollback_deadline,omitempty"`

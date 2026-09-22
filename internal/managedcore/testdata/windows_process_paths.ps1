@@ -2,7 +2,7 @@ param([string]$Helper)
 $ErrorActionPreference='Stop'
 $tok=$null;$err=$null;$ast=[System.Management.Automation.Language.Parser]::ParseFile($Helper,[ref]$tok,[ref]$err)
 if($err.Count){throw 'Helper parse failed'}
-foreach($name in @('Fail','Full','Same','ProcessPathSame','OwnedProcesses','Running','ProcessMatches')){
+foreach($name in @('Fail','Full','Same','ProcessPathSame','ProcessOwner','OwnedProcesses','Running','ProcessMatches')){
  $f=$ast.Find({param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$false)
  Invoke-Expression $f.Extent.Text
 }
