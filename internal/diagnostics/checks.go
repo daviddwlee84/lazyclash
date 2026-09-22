@@ -146,7 +146,7 @@ func RunChecks(ctx context.Context, target config.Target, checks []config.Diagno
 			capture = beginCheckCapture(captureCtx, client, u.Hostname())
 		}
 		result := &report.Checks[i]
-		result.Request = explicitURLRequest(checkCtx, target, check.URL, opts.Options)
+		result.Request = explicitURLRequestWithBudget(checkCtx, target, check.URL, opts.Options, true)
 		stopCapture()
 		if capture != nil {
 			capture.wait()
@@ -158,6 +158,9 @@ func RunChecks(ctx context.Context, target config.Target, checks []config.Diagno
 		}
 		result.TransportReachable = result.Request.Status == "http-response"
 		result.Status = "failed"
+		if result.Request.Status == "timeout" {
+			result.Status = "request-timeout"
+		}
 		if result.TransportReachable {
 			matched := matchesExpectedStatus(result.Request.HTTPStatus, check.ExpectedStatuses)
 			result.ExpectedStatusMatched = &matched
@@ -278,6 +281,9 @@ func FormatChecks(report CheckReport) string {
 		}
 		if check.Status == "not-run" {
 			transport = "not run"
+		}
+		if check.Request.Status == "timeout" {
+			transport = "unconfirmed"
 		}
 		httpStatus := "unknown"
 		if check.Request.HTTPStatus != 0 {

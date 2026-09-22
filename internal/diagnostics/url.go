@@ -249,13 +249,22 @@ func evidenceText(v any) string {
 }
 
 func explicitURLRequest(ctx context.Context, target config.Target, endpoint string, opts Options) RequestEvidence {
+	return explicitURLRequestWithBudget(ctx, target, endpoint, opts, false)
+}
+
+func explicitURLRequestWithBudget(ctx context.Context, target config.Target, endpoint string, opts Options, deadlineOnly bool) RequestEvidence {
 	r := RequestEvidence{Source: "explicit data proxy", Status: "unavailable", Route: route(target, safeEndpoint(target.ProbeProxy)), Note: "Fresh HEAD request, no redirects; controller availability is independent. HTTP status is not a core URLTest result. DNS/connect/TLS/first-byte times are cumulative local transport milestones and can describe the proxy, not destination DNS."}
-	p, err := newProbe(ctx, target, opts)
+	client, p, err := newURLProbe(ctx, target, opts, deadlineOnly)
 	if err != nil {
 		if errors.Is(err, ErrNoProxy) {
 			r.Error = ErrNoProxy.Error()
 		} else {
 			r.Error = "explicit proxy setup unavailable"
+		}
+		if deadlineOnly && requestTimedOut(ctx, err) {
+			r.Status, r.Error = "timeout", "Saved-check request timed out during proxy setup; destination availability remains unknown."
+		} else if deadlineOnly && errors.Is(ctx.Err(), context.Canceled) {
+			r.Status, r.Error = "canceled", "Saved-check request canceled during proxy setup."
 		}
 		return r
 	}
@@ -288,18 +297,31 @@ func explicitURLRequest(ctx context.Context, target config.Target, endpoint stri
 	}}
 	request, _ := http.NewRequestWithContext(httptrace.WithClientTrace(ctx, trace), http.MethodHead, endpoint, nil)
 	request.Header.Set("User-Agent", "lazyclash")
-	response, err := probeClient(p, 5*time.Second).Do(request)
+	response, err := client.Do(request)
 	mu.Lock()
 	defer mu.Unlock()
 	r.FinishedAt = time.Now()
 	r.Milliseconds = float64(r.FinishedAt.Sub(r.StartedAt)) / float64(time.Millisecond)
 	if err != nil {
 		r.Status, r.Error = "failed", safeRequestError(ctx, err).Error()
+		if deadlineOnly && requestTimedOut(ctx, err) {
+			r.Status, r.Error = "timeout", "Saved-check HTTP request timed out before response headers; destination availability remains unknown."
+		} else if deadlineOnly && errors.Is(ctx.Err(), context.Canceled) {
+			r.Status = "canceled"
+		}
 		return r
 	}
 	response.Body.Close()
 	r.Status, r.HTTPStatus = "http-response", response.StatusCode
 	return r
+}
+
+func requestTimedOut(ctx context.Context, err error) bool {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var timeout net.Error
+	return errors.As(err, &timeout) && timeout.Timeout()
 }
 
 func safeEndpoint(raw string) string {

@@ -47,8 +47,22 @@ func (p *probeTransport) Close() error {
 }
 
 func newProbe(ctx context.Context, t config.Target, opts Options) (*probeTransport, error) {
+	return newProbeWithBudget(ctx, t, opts, false)
+}
+
+// deadlineOnly delegates each transport phase to the request context. This is
+// only used for saved checks, whose whole per-check budget is already bounded.
+func newProbeWithBudget(ctx context.Context, t config.Target, opts Options, deadlineOnly bool) (*probeTransport, error) {
 	if opts.ReadOnly {
 		return nil, ErrReadOnly
+	}
+	if deadlineOnly {
+		if _, ok := ctx.Deadline(); !ok {
+			return nil, errors.New("saved-check HTTP requests require a bounded context")
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 	}
 	if t.ProbeProxy == "" {
 		return nil, ErrNoProxy
@@ -96,6 +110,10 @@ func newProbe(ctx context.Context, t config.Target, opts Options) (*probeTranspo
 			return nil, err
 		}
 	}
+	dialTimeout, tlsTimeout, headerTimeout := 5*time.Second, 5*time.Second, 8*time.Second
+	if deadlineOnly {
+		dialTimeout, tlsTimeout, headerTimeout = 0, 0, 0
+	}
 	// Proxy is always explicit. Never inherit HTTP_PROXY/ALL_PROXY or fall back
 	// to direct dialing; the guard also prevents a future transport change from
 	// accidentally sending destinations to the controller or local network.
@@ -105,11 +123,11 @@ func newProbe(ctx context.Context, t config.Target, opts Options) (*probeTranspo
 			if address != u.Host {
 				return nil, errors.New("unexpected address outside the configured data proxy")
 			}
-			return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "tcp", dialAddress)
+			return (&net.Dialer{Timeout: dialTimeout}).DialContext(ctx, "tcp", dialAddress)
 		},
 		TLSClientConfig:        tlsConfig,
-		TLSHandshakeTimeout:    5 * time.Second,
-		ResponseHeaderTimeout:  8 * time.Second,
+		TLSHandshakeTimeout:    tlsTimeout,
+		ResponseHeaderTimeout:  headerTimeout,
 		MaxResponseHeaderBytes: 64 * 1024,
 		DisableKeepAlives:      true,
 		ForceAttemptHTTP2:      false,
@@ -157,6 +175,20 @@ func limitedFile(path string, max int64) ([]byte, error) {
 		return nil, errors.New("file exceeds size limit")
 	}
 	return data, nil
+}
+
+func newURLProbe(ctx context.Context, target config.Target, opts Options, deadlineOnly bool) (*http.Client, *probeTransport, error) {
+	p, err := newProbeWithBudget(ctx, target, opts, deadlineOnly)
+	if err != nil {
+		return nil, nil, err
+	}
+	timeout := 5 * time.Second
+	if deadlineOnly {
+		// The original per-check deadline continues through SSH setup and
+		// every HTTP phase; starting a fresh HTTP timer would extend it.
+		timeout = 0
+	}
+	return probeClient(p, timeout), p, nil
 }
 
 func probeClient(p *probeTransport, timeout time.Duration) *http.Client {

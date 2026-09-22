@@ -77,7 +77,11 @@ an authenticated Claude conversation.
 
 Checks run sequentially with a per-check budget of 10 seconds for local targets
 and 30 seconds for SSH targets, including data-proxy tunnel setup and an optional
-policy comparison. If that budget expires during the comparison, the result is
+policy comparison. The HTTP request uses the remaining check budget through
+connection, TLS and response headers; it has no separate five-second cutoff.
+A deadline before response headers is `request-timeout`, with transport marked
+unconfirmed and destination availability unknown. Other diagnostics retain their
+existing request limits. If the check budget expires during the comparison, the result is
 `comparison-timeout`; a successful HTTP response and its matched expectation
 remain visible. An interrupted run retains partial results and marks unstarted
 checks as `not-run`. Failed checks or timed-out comparisons produce a nonzero
