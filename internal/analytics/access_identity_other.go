@@ -19,3 +19,5 @@ func accessFileIdentity(_ string, info os.FileInfo) string {
 	}
 	return fmt.Sprintf("%s:%d", info.Name(), info.ModTime().UnixNano())
 }
+
+func openAccessFile(path string) (*os.File, error) { return os.Open(path) }

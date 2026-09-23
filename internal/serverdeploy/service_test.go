@@ -6,10 +6,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -141,7 +143,7 @@ func TestDeploymentRetriesKeepCredentialsAndPartialVerification(t *testing.T) {
 		t.Fatal("missing verification evidence")
 	}
 	info, err := os.Stat(filepath.Join(o.Store.StateDir, "deployments", p.ID+".json"))
-	if err != nil || info.Mode().Perm() != 0600 {
+	if err != nil || !info.Mode().IsRegular() || !privatefs.Private(filepath.Join(o.Store.StateDir, "deployments", p.ID+".json")) {
 		t.Fatalf("unsafe journal permissions %v", err)
 	}
 }
@@ -261,6 +263,9 @@ func TestDraftValidationAndJournalTampering(t *testing.T) {
 }
 
 func TestHelperOwnershipAndTracking(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("Python unavailable")

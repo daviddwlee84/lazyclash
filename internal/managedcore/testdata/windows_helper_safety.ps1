@@ -110,7 +110,7 @@ $script:processes=@(
  [pscustomobject]@{ProcessId=17;ParentProcessId=16;ExecutablePath='/cfw/child-of-unowned';SessionId=1;Owner='owner';CreationDate=$created.AddSeconds(3)})
 function Get-CimInstance {param($ClassName,$Filter) if($Filter){return $script:processes|Where-Object ProcessId -eq ([int]($Filter -replace 'ProcessId=',''))};return $script:processes}
 function Get-FileHash {param($LiteralPath,$Algorithm) return @{Hash='abcd'}}
-function Within($path,$parent){return $path.StartsWith($parent+'/') -or $path -eq $parent}
+function Within($path,$parent){$path=$path.Replace('\','/');$parent=$parent.Replace('\','/');return $path.StartsWith($parent+'/') -or $path -eq $parent}
 $m=@{before_cfw=@((ProcessRecord $script:processes[0]))}
 $plan=CFWStopPlan $m
 Check ($plan.Count -eq 2 -and $plan[0].pid -eq 10 -and $plan[1].pid -eq 11) 'CFW plan crossed owner, external executable branch, or reused parent PID'

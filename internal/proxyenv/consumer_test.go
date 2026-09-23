@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -12,6 +13,9 @@ import (
 )
 
 func TestConsumerRejectsCopiedOwnedSSHAndAllowsLocalSessions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	dir := filepath.Join(t.TempDir(), "sessions")
 	opts := ConsumerOptions{Directory: dir, Getenv: func(string) string { return "" }}
 	p := Plan{HTTP: "http://127.0.0.1:43210", All: "socks5h://127.0.0.1:43211"}

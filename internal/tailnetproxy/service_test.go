@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,7 +78,7 @@ func TestExistingProxyPreviewApplyExportsAndScopedLifecycle(t *testing.T) {
 	}
 	path, _ := s.path(r.ID)
 	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0600 {
+	if !info.Mode().IsRegular() || !privatefs.Private(path) {
 		t.Fatal("state permissions")
 	}
 	inv, err := os.ReadFile(s.Options.Store.Path)

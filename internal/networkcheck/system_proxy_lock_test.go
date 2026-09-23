@@ -3,6 +3,7 @@ package networkcheck
 import (
 	"context"
 	"encoding/json"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -10,6 +11,9 @@ import (
 )
 
 func TestSystemProxyTransactionsSerializeAcrossInstances(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	encoded, _ := json.Marshal(SystemProxyScript)
 	script := "import json\nns={'__name__':'lazyclash_system_proxy'}\nexec(json.loads(" + strconvQuote(string(encoded)) + "),ns)\n" + `
 import copy,os,pathlib,tempfile,threading,time

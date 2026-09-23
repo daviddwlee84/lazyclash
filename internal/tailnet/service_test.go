@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,7 +116,7 @@ func TestSetupApplyApprovalPendingAndPrivateState(t *testing.T) {
 	}
 	p, _ := s.receiptPath("rpi")
 	info, _ := os.Stat(p)
-	if info.Mode().Perm() != 0600 {
+	if !info.Mode().IsRegular() || !privatefs.Private(p) {
 		t.Fatal("receipt not private")
 	}
 	data, _ := os.ReadFile(s.Store.Path)

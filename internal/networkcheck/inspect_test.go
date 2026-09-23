@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -102,6 +103,9 @@ func TestSystemProxyPlanGuardsAndRedacts(t *testing.T) {
 	}
 }
 func TestPythonSystemProxyConflictAndPartialResult(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	// The fixed adapter runs against in-memory readers/writers only. No host
 	// proxy, DNS, route, service or production configuration is touched.
 	fixture := `\nimport copy\nbase={"service":"Wi-Fi","http":{"enabled":False,"host":"","port":0,"authenticated":False},"https":{"enabled":False,"host":"","port":0,"authenticated":False},"socks":{"enabled":False,"host":"","port":0,"authenticated":False},"pac_enabled":False,"pac_url":"","discovery":False,"exceptions":[],"mode":"manual"}\nafter=copy.deepcopy(base)\nafter["http"].update({"enabled":True,"host":"127.0.0.1","port":7890})\nstate=copy.deepcopy(base)\nwrites=[]\ndef read(service): return copy.deepcopy(state)\ndef write(value):\n    state.clear();state.update(copy.deepcopy(value));writes.append(True)\nns["mac_state"]=read\nns["write_mac"]=write\nns["platform"].system=lambda:"Darwin"\nplan={"backend":"macos-networksetup","os":"Darwin","changes":[{"service":"Wi-Fi","before":base,"after":after}]}\nassert ns["apply_plan"](plan)["status"]=="applied"\nstate["http"]["port"]=9999\nassert ns["apply_plan"](plan,True)["status"]=="conflict"\nassert len(writes)==1\nstate.clear();state.update(copy.deepcopy(after))\nassert ns["apply_plan"](plan,True)["status"]=="restored"\ndef partial(value):\n    state["http"]=copy.deepcopy(value["http"]);raise RuntimeError("private raw failure")\nns["write_mac"]=partial\nresult=ns["apply_plan"](plan)\nassert result["status"]=="partial"\nassert "private raw failure" not in json.dumps(result)\nprint("ok")\n`

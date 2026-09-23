@@ -89,7 +89,7 @@ func (a *accessTail) open() (gaps int64, err error) {
 	if !info.Mode().IsRegular() {
 		return 0, errors.New("access log is not a regular readable file")
 	}
-	f, err := os.Open(a.source.Path)
+	f, err := openAccessFile(a.source.Path)
 	if err != nil {
 		return 0, err
 	}

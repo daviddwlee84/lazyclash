@@ -4,12 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 )
 
 func runHelperFixture(t *testing.T, body string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	t.Helper()
 	python, err := exec.LookPath("python3")
 	if err != nil {

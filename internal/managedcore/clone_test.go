@@ -486,6 +486,9 @@ func TestCloneSnapshotWindowsBudgetRemainsBoundedAndHonorsParent(t *testing.T) {
 		want    time.Duration
 	}{{"native", false, false, 2 * time.Minute}, {"owned-windows", true, false, 10 * time.Minute}, {"parent-deadline", true, true, 30 * time.Second}} {
 		t.Run(tc.name, func(t *testing.T) {
+			if runtime.GOOS == "windows" && !tc.windows {
+				t.Skip("local POSIX source snapshot; Windows adapter cases still run")
+			}
 			f := newCloneFixture(t, false)
 			if tc.windows {
 				f.target.HostOS = "windows"

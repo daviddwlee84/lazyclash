@@ -259,7 +259,7 @@ func TestServerConnectionRecoversInterruptedReceiptAndRefusesDuplicateApply(t *t
 	if _, _, err = readServerConnection(path + "-missing"); err != nil {
 		t.Fatal(err)
 	}
-	if err = os.Chmod(path, 0644); err != nil {
+	if err = makePublicFixture(path); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err = readServerConnection(path); err == nil {

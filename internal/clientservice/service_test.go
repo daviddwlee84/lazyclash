@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -31,7 +33,7 @@ func TestReviewedActionRecordsBeforeMutationAndRejectsDrift(t *testing.T) {
 				t.Fatal("receipt missing before mutation", err)
 			}
 			info, _ := files[0].Info()
-			if info.Mode().Perm() != 0600 {
+			if !info.Mode().IsRegular() || !privatefs.Private(filepath.Join(root, files[0].Name())) {
 				t.Fatal("receipt permissions", info.Mode())
 			}
 			raw, _ := os.ReadFile(filepath.Join(root, files[0].Name()))
@@ -74,6 +76,9 @@ func TestReviewedActionRecordsBeforeMutationAndRejectsDrift(t *testing.T) {
 }
 
 func dockerFixture(t *testing.T) (config.Target, Options, string, string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	t.Helper()
 	dir := t.TempDir()
 	compose := filepath.Join(dir, "compose.yaml")
@@ -200,6 +205,9 @@ func TestSingleFileOwnerRestartRefreshesMountWithoutRecreating(t *testing.T) {
 func hashedBytes(b []byte) string { v := sha256.Sum256(b); return hex.EncodeToString(v[:]) }
 
 func TestSystemdIdentityAndCombinedDisableStop(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	dir := t.TempDir()
 	unit := filepath.Join(dir, "mihomo.service")
 	state := filepath.Join(dir, "state.json")

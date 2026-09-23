@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -57,6 +58,9 @@ func TestVPSGuideOfflineWithMissingCLIAndBrokenSettings(t *testing.T) {
 }
 
 func TestVPSGuideShellCommandsPreserveLiteralArgumentsAndRequireMissingValues(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	// Execute the generated preview against a harmless argument recorder. This
 	// exercises shell quoting and the missing-value guards, not a cloud account.
 	dir := t.TempDir()

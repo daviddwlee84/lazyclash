@@ -58,6 +58,14 @@ func run(ctx context.Context, req Request, progress io.Writer, opts runOptions) 
 			return managed, err
 		}
 	}
+	if runtime.GOOS == "windows" {
+		result.Reason = "Standalone Windows replacement is not supported; upgrade through Scoop or replace the ZIP installation while the tool is closed."
+		if req.Check {
+			return result, nil
+		}
+		result.Status = "unsupported"
+		return result, errors.New(result.Reason)
+	}
 	var original installationSnapshot
 	if !req.Check && installation.IdentityValid && installation.Manager == "" {
 		original, err = snapshotInstallation(installation)

@@ -32,6 +32,7 @@ func TestCloudDraftRejectsUnsupportedOverrides(t *testing.T) {
 }
 
 func TestCloudKeyPathAndFingerprintStayPinnedAcrossResumeDirectories(t *testing.T) {
+	t.Chdir(t.TempDir())
 	file := filepath.Join(t.TempDir(), "key.pub")
 	if err := os.WriteFile(file, []byte("ssh-ed25519 AAAA fixture\n"), 0600); err != nil {
 		t.Fatal(err)

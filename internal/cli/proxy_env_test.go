@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -29,7 +30,11 @@ func TestProxyCLIEnvExecAndDockerPreview(t *testing.T) {
 	if err != nil || !strings.Contains(out, "export http_proxy='http://127.0.0.1:7897'") {
 		t.Fatalf("env %s %v", out, err)
 	}
-	out, _, err = run(t, Dependencies{}, "proxy", "exec", "--endpoint", "http://127.0.0.1:7897", "--", "sh", "-c", `printf '%s' "$http_proxy"; exit 37`)
+	child := []string{"sh", "-c", `printf '%s' "$http_proxy"; exit 37`}
+	if runtime.GOOS == "windows" {
+		child = []string{"pwsh", "-NoProfile", "-NonInteractive", "-Command", `[Console]::Write($env:http_proxy); exit 37`}
+	}
+	out, _, err = run(t, Dependencies{}, append([]string{"proxy", "exec", "--endpoint", "http://127.0.0.1:7897", "--"}, child...)...)
 	if ExitCode(err) != 37 || out != "http://127.0.0.1:7897" {
 		t.Fatalf("child exit: %q %v", out, err)
 	}
@@ -67,6 +72,9 @@ func TestProxyCLILocalDefaultAmbiguityAndJSONNoPrompt(t *testing.T) {
 }
 
 func TestProxyCLITunnelLocalStartRenderAndCleanup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	proxyIsolated(t)
 	id, _ := proxyenv.NewID()
 	out, _, err := run(t, Dependencies{}, "proxy", "tunnel", "start", "--endpoint", "http://127.0.0.1:7897", "--lease", id, "--json")

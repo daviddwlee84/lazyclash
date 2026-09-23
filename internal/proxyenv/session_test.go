@@ -10,11 +10,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestSessionLocalOwnershipNoCredentialsPersisted(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	opts := SessionOptions{Directory: filepath.Join(t.TempDir(), "sessions")}
 	id, _ := NewID()
 	p := Plan{HTTP: "http://127.0.0.1:7890", All: "http://127.0.0.1:7890", PasswordEnv: "FIXTURE_SESSION_PASSWORD"}
@@ -102,6 +106,9 @@ func (f *sessionSSHFixture) run(cmd *exec.Cmd) error {
 }
 
 func TestPersistentSSHPrivateOwnershipFailureAndGC(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	f := &sessionSSHFixture{listeners: map[string]net.Listener{}}
 	t.Cleanup(func() {
 		for _, ln := range f.listeners {

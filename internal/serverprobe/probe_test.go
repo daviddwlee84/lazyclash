@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"io"
 	"net"
 	"net/http"
@@ -28,7 +29,7 @@ func testOptions(t *testing.T, endpoint string, roots *x509.CertPool, fail bool,
 		if err != nil {
 			return err
 		}
-		if info.Mode().Perm() != 0600 {
+		if !info.Mode().IsRegular() || !privatefs.Private(path) {
 			return fmt.Errorf("nonprivate config")
 		}
 		return nil

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -51,6 +52,9 @@ func TestReverseRejectsUnsupportedSourcesBeforeSSHOrState(t *testing.T) {
 }
 
 func TestReverseRejectsCopiedKnownSSHSourceBeforeConnecting(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	opts := SessionOptions{Directory: filepath.Join(t.TempDir(), "sessions"), Run: func(*exec.Cmd) error { t.Fatal("copied source invoked SSH"); return nil }}
 	dir, err := sessionDir(opts, true)
 	if err != nil {
@@ -109,7 +113,7 @@ func TestReverseArgvQuotingStdinAndOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("/bin/sh", "-c", command)
+	cmd := exec.Command("sh", "-c", command)
 	cmd.Stdin = strings.NewReader("stdin\x00bytes\n")
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
@@ -143,6 +147,9 @@ func TestReverseChannelCannotReconnectOrReuseUserConfig(t *testing.T) {
 }
 
 func TestReversePreparingCrashLeaseCanBeReadAndCleaned(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	opts := SessionOptions{Directory: filepath.Join(t.TempDir(), "sessions")}
 	dir, err := sessionDir(opts, true)
 	if err != nil {
@@ -165,6 +172,9 @@ func TestReversePreparingCrashLeaseCanBeReadAndCleaned(t *testing.T) {
 }
 
 func TestReversePrepareCancellationRetainsCleanupEvidence(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	for _, phase := range []string{"source", "forward", "proof", "cleanup"} {
 		t.Run(phase, func(t *testing.T) {
 			proxy := httptest.NewServer(nil)

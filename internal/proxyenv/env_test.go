@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -132,7 +133,7 @@ func TestArtifactNoOverwrite(t *testing.T) {
 	}
 	data, _ := os.ReadFile(path)
 	info, _ := os.Stat(path)
-	if string(data) != "first" || info.Mode().Perm() != 0600 {
+	if string(data) != "first" || !info.Mode().IsRegular() || !privatefs.Private(path) {
 		t.Fatalf("artifact: %q %v", data, info.Mode())
 	}
 }

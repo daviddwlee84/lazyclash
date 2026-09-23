@@ -2,12 +2,16 @@ package tailnet
 
 import (
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 )
 
 func TestPythonRollbackPreservesSnapshotsAndLaterEdits(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("Python unavailable")
@@ -107,6 +111,9 @@ func TestHelperIncludesOnlyNamedTailscaleMutations(t *testing.T) {
 }
 
 func TestPythonRemoteMutationRecoveryAndOwnership(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("Python unavailable")
@@ -184,6 +191,9 @@ print('ok')
 }
 
 func TestPythonDetachedWorkerAcknowledgementAndTimeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("Python unavailable")
@@ -232,6 +242,9 @@ print('ok')
 }
 
 func TestPythonProbeFailuresIdentifyPhaseWithoutCredentials(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX helper/session execution is covered on native Unix; Windows retains explicit refusal")
+	}
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("Python unavailable")

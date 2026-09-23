@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -136,7 +137,11 @@ func TestExplicitProxyExecDoesNotReselectInheritedSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(proxyenv.OriginVariable, origin)
-	out, _, err := run(t, Dependencies{}, "proxy", "exec", "--endpoint", "http://127.0.0.1:7897", "--", "sh", "-c", `printf '%s|%s|%s' "$http_proxy" "${LAZYCLASH_PROXY_SESSION-unset}" "$LAZYCLASH_PROXY_ORIGIN"`)
+	child := []string{"sh", "-c", `printf '%s|%s|%s' "$http_proxy" "${LAZYCLASH_PROXY_SESSION-unset}" "$LAZYCLASH_PROXY_ORIGIN"`}
+	if runtime.GOOS == "windows" {
+		child = []string{"pwsh", "-NoProfile", "-NonInteractive", "-Command", `$session = if ($env:LAZYCLASH_PROXY_SESSION) { $env:LAZYCLASH_PROXY_SESSION } else { 'unset' }; [Console]::Write("$($env:http_proxy)|$session|$($env:LAZYCLASH_PROXY_ORIGIN)")`}
+	}
+	out, _, err := run(t, Dependencies{}, append([]string{"proxy", "exec", "--endpoint", "http://127.0.0.1:7897", "--"}, child...)...)
 	if err != nil || out != "http://127.0.0.1:7897|unset|" {
 		t.Fatalf("child retained a different selection: %q %v", out, err)
 	}
