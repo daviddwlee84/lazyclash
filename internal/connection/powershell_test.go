@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -115,7 +116,7 @@ func newRPCFixture(t *testing.T) *rpcFixture {
 			local := args[len(args)-2]
 			info, err := os.Stat(local)
 			dir, dirErr := os.Stat(filepath.Dir(local))
-			if err != nil || dirErr != nil || info.Mode().Perm() != 0600 || dir.Mode().Perm() != 0700 {
+			if err != nil || dirErr != nil || !info.Mode().IsRegular() || !dir.IsDir() || !privatefs.Private(local) || !privatefs.Private(filepath.Dir(local)) {
 				t.Fatal("RPC spool is not private")
 			}
 			if !strings.HasPrefix(filepath.Base(filepath.Dir(local)), "lazyclash-windows-rpc-") {

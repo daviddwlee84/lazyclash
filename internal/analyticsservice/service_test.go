@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -76,6 +77,9 @@ func TestHelperErrorsAreReturned(t *testing.T) {
 // calls, platform facts and home lookup are stubbed inside the isolated Python
 // process, so this test cannot install or alter a real user service.
 func TestHostLifecycleAndSafety(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("python3 unavailable")

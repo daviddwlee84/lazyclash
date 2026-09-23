@@ -96,6 +96,8 @@ Check ($script:validated -eq 0) 'Unpinned validator ran'
 'PASS: guarded before-image commit, dependency race refusal, source readback/cleanup, validator identity'
 # Re-load the real process-plan functions replaced by prior rollback mocks.
 foreach($name in @('CFWStopPlan','StopCFW','ProcessRecord','ProcessMatches')){$f=$ast.Find({param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$false);Invoke-Expression $f.Extent.Text}
+# Mock POSIX fixture paths consistently on both the native Windows and Unix hosts.
+function Full($path){return $path}
 $created=[DateTime]::UtcNow.AddMinutes(-10)
 $script:processes=@(
  [pscustomobject]@{ProcessId=10;ParentProcessId=1;ExecutablePath='/cfw/app';SessionId=1;Owner='owner';CreationDate=$created},

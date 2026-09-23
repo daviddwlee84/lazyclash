@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -13,6 +14,9 @@ import (
 )
 
 func TestRuleCLIRequiresReviewedDigestAndUsesVergeCompanion(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	isolated(t)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	server := testcore.NewServer()
@@ -111,6 +115,9 @@ func TestTargetTransportEditRequiresRuleOwnerRebinding(t *testing.T) {
 }
 
 func TestIPRuleCLIUsesPrefixAndReviewedVergeCompanion(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	for _, tc := range []struct{ address, prefix, kind string }{{"134.185.90.66", "134.185.90.66/32", "IP-CIDR"}, {"2001:0DB8::1", "2001:db8::1/128", "IP-CIDR6"}} {
 		t.Run(tc.kind, func(t *testing.T) {
 			isolated(t)

@@ -6,11 +6,15 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestDockerMountProofAndIsolatedValidationArguments(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	dir := t.TempDir()
 	home := filepath.Join(dir, "home")
 	os.Mkdir(home, 0700)

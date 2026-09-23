@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -203,7 +204,7 @@ func TestTargetsAndConfigsRoundTrip(t *testing.T) {
 		t.Fatalf("wrong saved state: %+v", cfg)
 	}
 	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0600 {
+	if !info.Mode().IsRegular() || !privatefs.Private(path) {
 		t.Fatalf("permissions %v", info.Mode())
 	}
 	for _, args := range [][]string{{"--target", "a", "configs", "remove", "work"}, {"targets", "remove", "b"}} {

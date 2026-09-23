@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,7 +104,7 @@ theme = "dark" # app-independent field
 		t.Fatalf("incorrect saved state: %+v", loaded)
 	}
 	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0600 {
+	if !info.Mode().IsRegular() || !privatefs.Private(path) {
 		t.Fatalf("mode %v", info.Mode())
 	}
 }

@@ -14,6 +14,9 @@ import (
 )
 
 func TestNativeValidatorIsolationAndCopiedResources(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	sandbox := "bwrap"
 	if runtime.GOOS == "darwin" {
 		sandbox = "sandbox-exec"
@@ -82,6 +85,9 @@ except (PermissionError,OSError): pass
 }
 
 func TestMissingSandboxFailsBeforeSourceWrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip(err)

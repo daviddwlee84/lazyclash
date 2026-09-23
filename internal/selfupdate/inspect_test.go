@@ -90,6 +90,9 @@ func TestBuildPlatformMetadata(t *testing.T) {
 }
 
 func TestPackageManagerOwnership(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix standalone archive/owner fixtures")
+	}
 	tests := []struct {
 		path    string
 		env     managerEnv

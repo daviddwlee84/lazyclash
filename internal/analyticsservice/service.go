@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	posixpath "path"
 	"path/filepath"
 	"regexp"
 	"time"
@@ -71,11 +72,11 @@ func Run(ctx context.Context, r Request, o Options) (Result, error) {
 	default:
 		return Result{}, errors.New("analytics service action must be status, install, start, stop, or remove")
 	}
-	if r.StateDir == "" || !filepath.IsAbs(r.StateDir) {
+	if r.StateDir == "" || !posixpath.IsAbs(r.StateDir) {
 		return Result{}, errors.New("analytics service state directory must be absolute on the selected host")
 	}
 	for _, path := range []string{r.StateDir, r.ConfigPath, r.Executable} {
-		if path != "" && !filepath.IsAbs(path) {
+		if path != "" && !posixpath.IsAbs(path) {
 			return Result{}, errors.New("analytics service paths must be absolute on the selected host")
 		}
 	}

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -36,7 +37,7 @@ func TestOpenResolvesSecretPerTargetAndRereadsSource(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	target := config.Target{ID: "test", Controller: server.URL, SourceConfig: path}
+	target := config.Target{ID: "test", Controller: server.URL, SourceConfig: path, HostOS: runtime.GOOS}
 	for _, secret := range []string{"first-token", "second-token"} {
 		write(secret)
 		want = secret
@@ -155,6 +156,9 @@ func TestRuntimeParsingAndNormalization(t *testing.T) {
 }
 
 func TestProcessConfigPathsHandlesSpacesAndIgnoresShellContents(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX ps/lsof output fixture; native Windows uses explicit controller targets")
+	}
 	ps := `/usr/bin/mihomo -d /home/user/.config/mihomo -f /srv/core.yaml
 /Applications/Verge.app/Contents/MacOS/verge-mihomo -d /Users/me/Library/Application Support/io.github.clash-verge-rev -ext-ctl 127.0.0.1:9097
 /bin/sh -c 'cat /home/mihomo/config.yaml'
@@ -368,6 +372,9 @@ func TestOpenHandshakesAndRejectsUnknownService(t *testing.T) {
 }
 
 func TestOwnedListenerDiscovery(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX ps/lsof output fixture; native Windows uses explicit controller targets")
+	}
 	ps := `42 /usr/bin/mihomo -f /tmp/config.yaml
 43 /usr/bin/other-mihomo-tool
 44 /usr/bin/clash-meta -d /tmp/core

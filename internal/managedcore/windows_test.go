@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -184,7 +185,7 @@ func TestWindowsInstallStoresPrivateSnapshotBeforeMutationAndRegistersLast(t *te
 		t.Fatal("cloned selection not restored", f.selections)
 	}
 	info, e := os.Stat(instance.Target.SecretFile)
-	if e != nil || info.Mode().Perm() != 0600 {
+	if e != nil || !info.Mode().IsRegular() || !privatefs.Private(instance.Target.SecretFile) {
 		t.Fatal("controller reference not private", e)
 	}
 	if _, e = loadInstance(r.ID, o); e != nil {

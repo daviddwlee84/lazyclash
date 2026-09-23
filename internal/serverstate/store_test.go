@@ -2,6 +2,7 @@ package serverstate
 
 import (
 	"errors"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,7 +91,7 @@ note = 'unrelated'
 		t.Fatalf("cloud ownership and pricing metadata did not survive update: %+v", h)
 	}
 	info, _ := os.Stat(p)
-	if info.Mode().Perm() != 0600 {
+	if !info.Mode().IsRegular() || !privatefs.Private(p) {
 		t.Fatalf("permissions: %o", info.Mode().Perm())
 	}
 }

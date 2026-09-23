@@ -10,7 +10,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -62,18 +61,6 @@ func checkAccessPath(path string) error {
 	return nil
 }
 
-// Only stable inode/device identifiers are retained; file content never enters checkpoints.
-func accessFileIdentity(info os.FileInfo) string {
-	v := reflect.Indirect(reflect.ValueOf(info.Sys()))
-	if v.IsValid() && v.Kind() == reflect.Struct {
-		d, i := v.FieldByName("Dev"), v.FieldByName("Ino")
-		if d.IsValid() && i.IsValid() {
-			return fmt.Sprint(d.Interface(), ":", i.Interface())
-		}
-	}
-	return fmt.Sprintf("%s:%d", info.Name(), info.ModTime().UnixNano())
-}
-
 func accessAnchor(f *os.File, offset int64) string {
 	if offset == 0 {
 		return ""
@@ -111,7 +98,7 @@ func (a *accessTail) open() (gaps int64, err error) {
 		_ = f.Close()
 		return 0, errors.New("access log is not a regular readable file")
 	}
-	identity := accessFileIdentity(info)
+	identity := accessFileIdentity(a.source.Path, info)
 	if !a.restored {
 		// Opt-in starts at EOF; existing historical text is never silently imported.
 		a.position = accessCheckpoint{Identity: identity, Offset: info.Size()}
@@ -197,12 +184,12 @@ func (a *accessTail) poll(ctx context.Context, now time.Time) (Batch, int64, int
 	// Drain the open inode before following a renamed replacement. This keeps
 	// buffered old-file writes visible without rereading compressed rotations.
 	current, statErr := os.Stat(a.source.Path)
-	if statErr == nil && accessFileIdentity(current) != a.position.Identity && read < maxAccessPoll {
+	if statErr == nil && accessFileIdentity(a.source.Path, current) != a.position.Identity && read < maxAccessPoll {
 		if info.Size() > a.position.Offset {
 			dropped++
 		} // incomplete final line on old inode
 		a.close()
-		a.position = accessCheckpoint{Identity: accessFileIdentity(current), Generation: a.position.Generation + 1}
+		a.position = accessCheckpoint{Identity: accessFileIdentity(a.source.Path, current), Generation: a.position.Generation + 1}
 		a.restored = true
 	}
 	if a.file != nil {

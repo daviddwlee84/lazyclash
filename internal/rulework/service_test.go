@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -31,6 +32,12 @@ type fixture struct {
 }
 
 func newFixture(t *testing.T, verge bool) *fixture {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX source helper; Windows host operations have separate injected fixtures")
+	}
+	return baseFixture(t, verge)
+}
+func baseFixture(t *testing.T, verge bool) *fixture {
 	t.Helper()
 	root := t.TempDir()
 	f := &fixture{rules: []map[string]any{{"type": "Match", "payload": "", "proxy": "DIRECT"}}}

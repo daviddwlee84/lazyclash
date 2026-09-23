@@ -6,11 +6,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestExplicitDockerSandboxUsesPinnedImageAndPrivateResources(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	for _, rootless := range []bool{false, true} {
 		t.Run(map[bool]string{false: "rootful", true: "rootless"}[rootless], func(t *testing.T) {
 			dir := t.TempDir()

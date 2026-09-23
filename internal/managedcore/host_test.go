@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -86,6 +87,9 @@ print("ok")`)
 }
 
 func runHostFixture(t *testing.T, body string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	t.Helper()
 	python, err := exec.LookPath("python3")
 	if err != nil {

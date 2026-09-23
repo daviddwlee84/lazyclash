@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -26,6 +27,9 @@ type configFixture struct {
 }
 
 func newConfigFixture(t *testing.T, verge bool) *configFixture {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	t.Helper()
 	dir := t.TempDir()
 	f := &configFixture{}

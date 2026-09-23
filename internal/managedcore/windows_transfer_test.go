@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,7 +56,7 @@ func largeWindowsFixture(t *testing.T, failure string) (Request, Options, *[]str
 	o.Upload = func(_ context.Context, host, local, remote string) error {
 		ops = append(ops, "sftp-upload")
 		info, e := os.Stat(local)
-		if e != nil || info.Mode().Perm() != 0600 {
+		if e != nil || !info.Mode().IsRegular() || !privatefs.Private(local) {
 			t.Fatal("payload spool is not private", e)
 		}
 		if host != r.SSHHost || !strings.HasSuffix(remote, "payload.json") {

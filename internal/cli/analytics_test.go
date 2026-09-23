@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -80,7 +81,7 @@ func TestAnalyticsSourceOptInAndConfigUpdates(t *testing.T) {
 	if len(cfg.Sources) != 1 || cfg.Sources[0].Enabled {
 		t.Fatalf("source enabled without opt in: %+v", cfg)
 	}
-	if st, _ := os.Stat(p.Config); st.Mode().Perm() != 0600 {
+	if st, _ := os.Stat(p.Config); !st.Mode().IsRegular() || !privatefs.Private(p.Config) {
 		t.Fatal("configuration is not private")
 	}
 	if _, _, err = run(t, Dependencies{}, "analytics", "setup", "--source", "vps", "--enabled", "--yes", "--json"); err != nil {

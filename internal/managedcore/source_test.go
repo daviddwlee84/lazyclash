@@ -10,11 +10,15 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestManagedSourceBridgeKeepsOwnershipAndPrivateSnapshot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	t.Setenv("LAZYCLASH_MANAGED_FIXTURE", "1")
 	base, e := filepath.EvalSymlinks(t.TempDir())
 	if e != nil {

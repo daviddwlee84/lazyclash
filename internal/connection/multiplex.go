@@ -118,7 +118,7 @@ func readMultiplexPolicy(ctx context.Context, host string) (multiplexPolicy, err
 func parseMultiplexPolicy(output string) (multiplexPolicy, error) {
 	p := multiplexPolicy{master: "no", persist: "no"}
 	for _, line := range strings.Split(output, "\n") {
-		key, value, ok := strings.Cut(line, " ")
+		key, value, ok := strings.Cut(strings.TrimSuffix(line, "\r"), " ")
 		if !ok {
 			continue
 		}

@@ -79,7 +79,7 @@ func TestCopyPrivateFileUsesDefaultSFTPAndExistingSSHPolicy(t *testing.T) {
 		t.Fatal("transfer was retried or omitted", len(copies))
 	}
 	args := copies[0]
-	for _, want := range []string{"BatchMode=yes", "StrictHostKeyChecking=yes", "ClearAllForwardings=yes", "ControlMaster=no", "ControlPath=/tmp/fixture control %% socket", "-q"} {
+	for _, want := range []string{"BatchMode=yes", "StrictHostKeyChecking=yes", "ClearAllForwardings=yes", "ControlMaster=no", "ControlPath=" + controlSocketArgument(func() string { p, _ := filepath.Abs("/tmp/fixture control % socket"); return p }()), "-q"} {
 		found := false
 		for _, arg := range args {
 			found = found || arg == want

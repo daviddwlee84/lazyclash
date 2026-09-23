@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"io"
 	"os"
 	"os/exec"
@@ -34,11 +35,11 @@ func TestSettingsEditCreatesPrivateFileAndHonorsVisual(t *testing.T) {
 			t.Fatalf("argv: %q", cmd.Args)
 		}
 		info, err := os.Stat(path)
-		if err != nil || info.Mode().Perm() != 0600 {
+		if err != nil || !info.Mode().IsRegular() || !privatefs.Private(path) {
 			t.Fatalf("private file: %v %v", info, err)
 		}
 		info, err = os.Stat(filepath.Dir(path))
-		if err != nil || info.Mode().Perm() != 0700 {
+		if err != nil || !info.IsDir() || !privatefs.Private(filepath.Dir(path)) {
 			t.Fatalf("private directory: %v %v", info, err)
 		}
 		return os.WriteFile(path, []byte("# edited\n"), 0600)

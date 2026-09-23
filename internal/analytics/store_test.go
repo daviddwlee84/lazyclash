@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"math"
 	"os"
 	"path/filepath"
@@ -67,7 +68,7 @@ func TestConfigPrivateRoundtripAndReadDoesNotCreate(t *testing.T) {
 		t.Fatalf("roundtrip=%+v err=%v", got, err)
 	}
 	st, _ := os.Stat(path)
-	if st.Mode().Perm() != 0600 {
+	if !st.Mode().IsRegular() || !privatefs.Private(path) {
 		t.Fatal(st.Mode())
 	}
 	link := filepath.Join(root, "link")

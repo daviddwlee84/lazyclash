@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -184,7 +186,7 @@ func TestServerCLIExportsPrivateFilesAndStructuredText(t *testing.T) {
 		t.Fatal("invalid QR", err)
 	}
 	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0600 {
+	if !info.Mode().IsRegular() || !privatefs.Private(path) {
 		t.Fatal("export is not private")
 	}
 	if _, _, err := run(t, deps, "servers", "export", "demo", "--output", path, "--json"); err == nil {
@@ -301,6 +303,9 @@ func TestNewServerReadinessOnlyPollsSavedHostAndHonorsCancellation(t *testing.T)
 }
 
 func TestServerConnectPreservesUnknownImportAndRepeatOnlyVerifies(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	deps, _ := serverCLIFixture(t)
 	deployedCLIServer(t, deps)
 	dir := t.TempDir()

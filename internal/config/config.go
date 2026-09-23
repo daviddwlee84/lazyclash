@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -180,7 +181,7 @@ func ValidateConfigSource(t Target) error {
 		if s.DockerHost != "" && !ValidDockerHost(s.DockerHost) {
 			return errors.New("Docker host must be an absolute unix socket on the selected host")
 		}
-		if !idPattern.MatchString(s.Container) || !hostpath.IsAbs(t.HostOS, s.HostPath) || hostpath.IsRoot(t.HostOS, s.HostPath) || !filepath.IsAbs(s.CorePath) || s.CorePath == "/" || !hostpath.IsAbs(t.HostOS, s.Binary) || !hostpath.IsAbs(t.HostOS, s.Home) || hostpath.IsRoot(t.HostOS, s.Home) || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" {
+		if !idPattern.MatchString(s.Container) || !hostpath.IsAbs(t.HostOS, s.HostPath) || hostpath.IsRoot(t.HostOS, s.HostPath) || !path.IsAbs(s.CorePath) || s.CorePath == "/" || !hostpath.IsAbs(t.HostOS, s.Binary) || !hostpath.IsAbs(t.HostOS, s.Home) || hostpath.IsRoot(t.HostOS, s.Home) || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" {
 			return errors.New("Docker source requires container, host_path, core_path, binary and home; host/container paths are distinct")
 		}
 		if s.ConfigID != "" {
@@ -316,7 +317,7 @@ func ValidateController(endpoint string) error {
 			}
 		}
 	case "unix":
-		if u.Host != "" || !filepath.IsAbs(u.Path) || u.Path == "/" {
+		if u.Host != "" || !path.IsAbs(u.Path) || u.Path == "/" {
 			return errors.New("Unix controller must use unix:///absolute/socket")
 		}
 	default:

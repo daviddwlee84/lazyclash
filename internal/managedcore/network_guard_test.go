@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,9 @@ import (
 )
 
 func runGuardFixture(t *testing.T, body string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	t.Helper()
 	definitions, _, ok := strings.Cut(hostScript, "\n# MANAGED_ENTRYPOINT\n")
 	if !ok {

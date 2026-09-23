@@ -3,7 +3,7 @@ package config
 import (
 	"errors"
 	"net/url"
-	"path/filepath"
+	"path"
 	"regexp"
 	"strings"
 	"unicode"
@@ -13,7 +13,7 @@ import (
 
 func ValidDockerHost(value string) bool {
 	u, err := url.Parse(value)
-	return err == nil && u.Scheme == "unix" && u.Host == "" && u.RawQuery == "" && u.Fragment == "" && filepath.IsAbs(u.Path) && u.Path != "/" && u.RawPath == "" && !strings.ContainsAny(value, "\n\r\x00")
+	return err == nil && u.Scheme == "unix" && u.Host == "" && u.RawQuery == "" && u.Fragment == "" && path.IsAbs(u.Path) && u.Path != "/" && u.RawPath == "" && !strings.ContainsAny(value, "\n\r\x00")
 }
 
 func ValidateClientService(s *ClientService) error {
@@ -30,14 +30,14 @@ func ValidateClientService(s *ClientService) error {
 		if !ValidDockerHost(s.DockerHost) || !idPattern.MatchString(s.Container) || s.Image == "" || len(s.MountsSHA256) != 64 || s.Unit != "" || s.Scope != "" || s.FragmentPath != "" || s.UnitSHA256 != "" {
 			return errors.New("Docker service requires an explicit unix socket and inspected container/image/mount identity")
 		}
-		if s.ComposeFile != "" && (!filepath.IsAbs(s.ComposeFile) || !idPattern.MatchString(s.ComposeProject) || !idPattern.MatchString(s.ComposeService)) {
+		if s.ComposeFile != "" && (!path.IsAbs(s.ComposeFile) || !idPattern.MatchString(s.ComposeProject) || !idPattern.MatchString(s.ComposeService)) {
 			return errors.New("Compose service requires absolute source, project and service")
 		}
 		if s.ComposeFile == "" && (s.ComposeProject != "" || s.ComposeService != "") {
 			return errors.New("incomplete Compose service binding")
 		}
 	case "systemd":
-		if !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.@-]*\.service$`).MatchString(s.Unit) || (s.Scope != "user" && s.Scope != "system") || !filepath.IsAbs(s.FragmentPath) || len(s.UnitSHA256) != 64 || s.DockerHost != "" || s.Container != "" || s.Image != "" || s.MountsSHA256 != "" || s.ComposeFile != "" || s.ComposeProject != "" || s.ComposeService != "" {
+		if !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.@-]*\.service$`).MatchString(s.Unit) || (s.Scope != "user" && s.Scope != "system") || !path.IsAbs(s.FragmentPath) || len(s.UnitSHA256) != 64 || s.DockerHost != "" || s.Container != "" || s.Image != "" || s.MountsSHA256 != "" || s.ComposeFile != "" || s.ComposeProject != "" || s.ComposeService != "" {
 			return errors.New("systemd service requires unit, user/system scope and inspected unit-file identity")
 		}
 	default:

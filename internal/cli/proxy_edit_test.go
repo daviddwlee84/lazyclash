@@ -10,11 +10,15 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func sourceCLIFixture(t *testing.T) (string, string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	t.Helper()
 	dir := t.TempDir()
 	source := filepath.Join(dir, "source.yaml")

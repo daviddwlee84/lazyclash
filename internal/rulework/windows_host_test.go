@@ -25,7 +25,7 @@ type windowsRuleFixture struct {
 
 func newWindowsRuleFixture(t *testing.T) *windowsRuleFixture {
 	t.Helper()
-	f := &windowsRuleFixture{fixture: newFixture(t, true), files: map[string]HostFile{}}
+	f := &windowsRuleFixture{fixture: baseFixture(t, true), files: map[string]HostFile{}}
 	f.target.HostOS = "windows"
 	f.target.ManagedCoreID = "owned-windows"
 	f.target.SSHHost = "windows-fixture-must-not-contact"

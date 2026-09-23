@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -113,7 +114,7 @@ func TestInstallRegistersAfterAuthenticationAndPrivateState(t *testing.T) {
 		t.Fatal("public owner token")
 	}
 	info, _ := os.Stat(saved.Target.SecretFile)
-	if info.Mode().Perm() != 0600 {
+	if !info.Mode().IsRegular() || !privatefs.Private(saved.Target.SecretFile) {
 		t.Fatal(info.Mode())
 	}
 }

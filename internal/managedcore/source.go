@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/configwork"
+	"github.com/daviddwlee84/lazyclash/internal/hostpath"
 	"go.yaml.in/yaml/v3"
 	"path/filepath"
 	"reflect"
@@ -109,8 +110,10 @@ func SourceOperation(ctx context.Context, target config.Target, operation config
 }
 
 func validateOwnedResources(document any, instance Instance) error {
-	home := filepath.Join(instance.Root, "home")
+	osKind := instance.Target.HostOS
+	home := hostpath.Join(osKind, instance.Root, "home")
 	if instance.Backend == "docker" {
+		osKind = "linux"
 		home = "/root/.config/mihomo"
 	}
 	check := func(value string) error {
@@ -118,11 +121,11 @@ func validateOwnedResources(document any, instance Instance) error {
 			return nil
 		}
 		path := value
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(home, path)
+		if !hostpath.IsAbs(osKind, path) {
+			path = hostpath.Join(osKind, home, path)
 		}
-		relative, err := filepath.Rel(home, path)
-		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		relative, err := hostpath.Rel(osKind, home, path)
+		if err != nil || relative == ".." || strings.HasPrefix(relative, "../") {
 			return errors.New("candidate resource escapes the managed home")
 		}
 		return nil

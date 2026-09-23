@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -409,6 +410,9 @@ func TestCustomDialPreservesControllerHostAndTLSName(t *testing.T) {
 }
 
 func TestUnixSocketController(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("native POSIX socket endpoint")
+	}
 	// macOS limits sockaddr_un paths to 104 bytes, so use the short OS temp root.
 	dir, err := os.MkdirTemp("/tmp", "lc-core-")
 	if err != nil {

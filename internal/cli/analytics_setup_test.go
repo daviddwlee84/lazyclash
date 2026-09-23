@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -62,7 +63,7 @@ func TestAnalyticsWizardFormatsMatchStatsAndAccessValidation(t *testing.T) {
 		if err := analytics.ValidateSource(stats); err != nil {
 			t.Fatal("wizard offers unsupported Stats format", choice.Value, err)
 		}
-		access := analytics.SourceConfig{ID: "access", Kind: "xray-access", Path: "/var/log/access.log", Format: choice.Value}
+		access := analytics.SourceConfig{ID: "access", Kind: "xray-access", Path: filepath.Join(t.TempDir(), "access.log"), Format: choice.Value}
 		err := analytics.ValidateSource(access)
 		if (choice.Value == "v2ctl") != (err != nil) {
 			t.Fatal("v2ctl must remain Stats-only", choice.Value, err)

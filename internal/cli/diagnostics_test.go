@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -92,7 +94,7 @@ func TestProbeFlagsRoundTripAndCredentialExclusion(t *testing.T) {
 	path := isolated(t)
 	for _, args := range [][]string{
 		{"targets", "add", "a", "--controller", "http://127.0.0.1:9090", "--probe-proxy", "socks5h://127.0.0.1:7890", "--probe-password-env", "PROXY_PASS", "--probe-username", "user"},
-		{"targets", "edit", "a", "--probe-password-file", "/tmp/proxy.password", "--probe-ca-cert", "/tmp/proxy.ca"},
+		{"targets", "edit", "a", "--probe-password-file", filepath.Join(os.TempDir(), "proxy.password"), "--probe-ca-cert", filepath.Join(os.TempDir(), "proxy.ca")},
 	} {
 		if _, _, err := run(t, Dependencies{}, args...); err != nil {
 			t.Fatal(err)
@@ -103,7 +105,7 @@ func TestProbeFlagsRoundTripAndCredentialExclusion(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := cfg.Targets[0]
-	if got.ProbePasswordEnv != "" || got.ProbePasswordFile != "/tmp/proxy.password" || got.ProbeCAFile != "/tmp/proxy.ca" {
+	if got.ProbePasswordEnv != "" || got.ProbePasswordFile != filepath.Join(os.TempDir(), "proxy.password") || got.ProbeCAFile != filepath.Join(os.TempDir(), "proxy.ca") {
 		t.Fatalf("wrong fields: %+v", got)
 	}
 	if _, _, err := run(t, Dependencies{}, "targets", "edit", "a", "--probe-password-env", "A", "--probe-password-file", "/tmp/b"); err == nil {

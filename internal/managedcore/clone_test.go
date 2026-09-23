@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -129,6 +130,9 @@ func cloneFixtureWrite(t *testing.T, path string, data []byte) {
 }
 
 func TestCloneSnapshotsFlattenedVergeWithoutExecutingOrLeakingSource(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	f := newCloneFixture(t, true)
 	before, _ := os.ReadFile(f.profile)
 	snapshot, err := SnapshotTarget(context.Background(), f.target, f.opts)
@@ -175,6 +179,9 @@ func TestCloneSnapshotsFlattenedVergeWithoutExecutingOrLeakingSource(t *testing.
 }
 
 func TestCloneBuildRequestUsesPrivateBundleAndPinsOrigin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	f := newCloneFixture(t, false)
 	snapshot, err := SnapshotTarget(context.Background(), f.target, f.opts)
 	if err != nil {
@@ -221,6 +228,9 @@ func TestCloneBuildRequestUsesPrivateBundleAndPinsOrigin(t *testing.T) {
 }
 
 func TestCloneSourceHashesGuardOwnerUIDResourcesAndSelections(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	f := newCloneFixture(t, true)
 	initial, err := SnapshotTarget(context.Background(), f.target, f.opts)
 	if err != nil {
@@ -300,6 +310,9 @@ func TestCloneRejectsChangingSourcesMissingCachesAndEscapingResources(t *testing
 }
 
 func TestCloneRejectsMissingBundleAndSourceWindows(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	f := newCloneFixture(t, false)
 	snapshot, err := SnapshotTarget(context.Background(), f.target, f.opts)
 	if err != nil {
@@ -394,6 +407,9 @@ func TestCloneOwnedWindowsSourceUsesHostPathsAndPortableResources(t *testing.T) 
 }
 
 func TestCloneFixedRemoteReaderIsBoundedAndDoesNotExecuteFileContent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local POSIX host-helper fixture; native Windows adapter contracts are tested separately")
+	}
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 is unavailable")
 	}
