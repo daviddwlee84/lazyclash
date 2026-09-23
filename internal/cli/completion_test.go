@@ -175,6 +175,7 @@ path="/remote/second.yaml"
 
 func TestCompletionRelativeXDGAndConcurrentEmptyFile(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("XDG_DATA_HOME", "relative")
 	path, err := completionPath("")
 	if err != nil || path != filepath.Join(os.Getenv("HOME"), ".local", "share", "lazyclash", "completions", "zsh", "_lazyclash") {

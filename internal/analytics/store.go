@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daviddwlee84/lazyclash/internal/fileuri"
 	"io/fs"
 	"math"
 	"math/bits"
@@ -77,7 +78,7 @@ func OpenStore(path string, readOnly bool) (*Store, error) {
 		}
 		f.Close()
 	}
-	u := url.URL{Scheme: "file", Path: path}
+	u := url.URL{Scheme: "file", Path: fileuri.Path(path)}
 	q := u.Query()
 	if readOnly {
 		q.Set("mode", "ro")

@@ -113,6 +113,7 @@ else:sys.exit(44)
 	t.Setenv("DOCKER_HOST", "unix:///wrong")
 	t.Setenv("DOCKER_CONTEXT", "wrong")
 	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
 	target := config.Target{ID: "fixture", Controller: "http://127.0.0.1:9090"}
 	opts := Options{StateDir: filepath.Join(dir, "receipts")}
 	plan, err := PrepareBind(context.Background(), target, config.ClientService{Kind: "docker", DockerHost: "unix:///fixture", Container: "fixture"}, opts)

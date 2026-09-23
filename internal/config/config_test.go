@@ -14,6 +14,7 @@ import (
 func TestDefaultPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", "relative")
 	path, err := DefaultPath()
 	if err != nil || path != filepath.Join(home, ".config/lazyclash/config.toml") {
