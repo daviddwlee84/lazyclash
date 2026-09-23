@@ -100,7 +100,7 @@ func newWindowsFixture(t *testing.T) (Request, Options, *windowsFixture) {
 		case "source":
 			response.Source = configwork.HostResponse{File: configwork.HostFile{Path: r.Source.Path, Data: f.generated, SHA256: hashBytes(f.generated), Fingerprint: "guard"}}
 		case "takeover":
-			response.Manifest = map[string]any{"rollback_armed": true, "rollback_deadline": "2026-09-23T12:02:00Z", "gui_activated": true}
+			response.Manifest = map[string]any{"rollback_armed": true, "rollback_deadline": time.Now().Add(2 * time.Minute).UTC().Format(time.RFC3339), "gui_activated": true}
 		case "verify-runtime":
 			response.Manifest["loopback_listeners_verified"] = true
 			if r.VerifyGenerated {

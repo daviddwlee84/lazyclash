@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"os"
 	"path/filepath"
 	"time"
@@ -59,7 +60,7 @@ func readServerConnection(path string) (serverConnection, bool, error) {
 	if err != nil {
 		return record, false, err
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 1<<20 {
+	if !info.Mode().IsRegular() || !privatefs.Private(path) || info.Size() > 1<<20 {
 		return record, false, errors.New("saved server-client import record is not a private regular file")
 	}
 	data, err := os.ReadFile(path)
@@ -143,7 +144,7 @@ func recoverConnectionReceipt(record serverConnection, stateDir string) (string,
 		if err != nil {
 			continue
 		}
-		if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 1<<20 {
+		if !info.Mode().IsRegular() || !privatefs.Private(path) || info.Size() > 1<<20 {
 			continue
 		}
 		data, err := os.ReadFile(path)

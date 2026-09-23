@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -243,7 +244,7 @@ func newReceipt(o Options, r Receipt) (string, error) {
 		return "", err
 	}
 	info, err := os.Lstat(root)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0077 != 0 {
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || !privatefs.Private(root) {
 		return "", errors.New("service receipt directory must be private and not a symlink")
 	}
 	path := filepath.Join(root, r.ID+".json")
@@ -264,7 +265,7 @@ func newReceipt(o Options, r Receipt) (string, error) {
 }
 func saveReceipt(path string, r Receipt) error {
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+	if err != nil || !info.Mode().IsRegular() || !privatefs.Private(path) {
 		return errors.New("service receipt is absent or unsafe")
 	}
 	f, err := os.CreateTemp(filepath.Dir(path), ".service-receipt-")

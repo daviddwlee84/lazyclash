@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"os"
 	"path/filepath"
 )
@@ -53,7 +54,7 @@ func receiptDirectory(opts Options, id string, create bool) (string, error) {
 		}
 	}
 	info, err := os.Lstat(dir)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0077 != 0 {
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || !privatefs.Private(dir) {
 		return "", errors.New("receipt directory is absent or not private")
 	}
 	return dir, nil
@@ -123,7 +124,7 @@ func loadReceipt(opts Options, id string) (Receipt, error) {
 	}
 	path := filepath.Join(dir, "receipt.json")
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 64<<10 {
+	if err != nil || !info.Mode().IsRegular() || !privatefs.Private(path) || info.Size() > 64<<10 {
 		return r, errors.New("receipt metadata is absent or unsafe")
 	}
 	data, err := os.ReadFile(path)

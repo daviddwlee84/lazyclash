@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/daviddwlee84/lazyclash/internal/fileuri"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"io/fs"
 	"math"
 	"math/bits"
@@ -62,7 +63,7 @@ func OpenStore(path string, readOnly bool) (*Store, error) {
 		if !st.Mode().IsRegular() {
 			return nil, errors.New("analytics database must be a regular file")
 		}
-		if st.Mode().Perm()&0077 != 0 {
+		if !privatefs.Private(path) {
 			return nil, errors.New("analytics database must be private (0600)")
 		}
 	} else if !os.IsNotExist(err) || readOnly {

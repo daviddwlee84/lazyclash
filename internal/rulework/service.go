@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -346,7 +347,7 @@ func Restore(ctx context.Context, target config.Target, id string, opts Options)
 	}
 	backupPath := filepath.Join(directory, "before.yaml")
 	backupInfo, statErr := os.Lstat(backupPath)
-	if statErr != nil || !backupInfo.Mode().IsRegular() || backupInfo.Mode().Perm()&0077 != 0 || backupInfo.Size() > 8<<20 {
+	if statErr != nil || !backupInfo.Mode().IsRegular() || !privatefs.Private(backupPath) || backupInfo.Size() > 8<<20 {
 		return r, errors.New("receipt backup is absent or unsafe")
 	}
 	backup, err := os.ReadFile(backupPath)

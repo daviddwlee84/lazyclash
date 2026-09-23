@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"io"
 	"net"
 	"net/http"
@@ -240,7 +241,7 @@ func webhookAddress(c AlertConfig) (string, error) {
 		address = os.Getenv(c.WebhookEnv)
 	} else {
 		st, err := os.Lstat(c.WebhookFile)
-		if err != nil || !st.Mode().IsRegular() || st.Size() > 16384 || st.Mode().Perm()&0077 != 0 {
+		if err != nil || !st.Mode().IsRegular() || st.Size() > 16384 || !privatefs.Private(c.WebhookFile) {
 			return "", errors.New("alert webhook file must be a private regular file no larger than 16 KiB")
 		}
 		b, err := os.ReadFile(c.WebhookFile)

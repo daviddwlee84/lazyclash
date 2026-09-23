@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"net"
 	"os"
 	"os/exec"
@@ -440,7 +441,7 @@ func (s *Service) readOperation(id string) (operation, error) {
 	if err != nil {
 		return operation{}, err
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 2<<20 {
+	if !info.Mode().IsRegular() || !privatefs.Private(path) || info.Size() > 2<<20 {
 		return operation{}, fmt.Errorf("private operation must be a regular owner-only file smaller than 2 MiB")
 	}
 	b, err := os.ReadFile(path)

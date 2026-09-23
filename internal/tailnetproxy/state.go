@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/daviddwlee84/lazyclash/internal/privatefs"
 	"os"
 	"path/filepath"
 	"time"
@@ -42,7 +43,7 @@ func (s Service) load(id string) (journal, error) {
 	if err != nil {
 		return journal{}, err
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+	if !info.Mode().IsRegular() || !privatefs.Private(path) {
 		return journal{}, errors.New("tailnet proxy state must be a private regular file")
 	}
 	data, err := os.ReadFile(path)
