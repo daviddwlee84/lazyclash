@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/daviddwlee84/lazyclash/internal/scoopupgrade"
 	"io"
 
 	"github.com/daviddwlee84/lazyclash/internal/core"
@@ -47,7 +48,7 @@ envelope. Build progress is suppressed in JSON mode.`,
 	}
 	cmd.Flags().BoolVar(&request.Check, "check", false, "inspect versions and update method without writing files")
 	cmd.Flags().BoolVar(&request.Force, "force", false, "reinstall the latest stable release, including replacing a development build")
-	return cmd
+	return scoopupgrade.Wrap(cmd, scoopupgrade.Product{Binary: "lazyclash", Module: "github.com/daviddwlee84/lazyclash", Main: "github.com/daviddwlee84/lazyclash/cmd/lazyclash"}, scoopupgrade.CommandOptions{Promptless: true})
 }
 
 func printUpgrade(out io.Writer, r selfupdate.Result) error {

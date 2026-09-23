@@ -104,3 +104,8 @@ jobs:
           LAZYCLASH_SERVER_E2E: "1"
           LAZYCLASH_SERVER_NGINX: "1"
         run: go test ./internal/serverdeploy -run '^TestIntegration' -count=1 -v -timeout=18m
+
+  windows-distribution:
+    uses: ./.github/workflows/windows.yml
+    with:
+      ref: ${{ inputs.ref || github.ref }}
