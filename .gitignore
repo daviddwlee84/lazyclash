@@ -47,3 +47,6 @@
 # Release artifacts
 /dist/
 /completions/
+
+# Native Windows build output (fixtures remain scoped beneath their test directories).
+/*.exe
