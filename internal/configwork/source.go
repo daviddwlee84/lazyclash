@@ -13,12 +13,14 @@ import (
 	"strings"
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
+	"github.com/daviddwlee84/lazyclash/internal/managedrpi"
 	"github.com/daviddwlee84/lazyclash/internal/rulework"
 	"go.yaml.in/yaml/v3"
 )
 
 type source struct {
-	opts Options
+	opts            Options
+	managedIdentity managedrpi.Identity
 	Catalog
 	docs                                      map[string]*yaml.Node
 	files                                     map[string]rulework.HostFile
@@ -34,11 +36,12 @@ func hash(data []byte) string { v := sha256.Sum256(data); return hex.EncodeToStr
 func Binding(t config.Target) string {
 	v, _ := json.Marshal(struct {
 		ID, Controller, SSH, ManagedCoreID string
-		HostOS                             string `json:",omitempty"`
+		HostOS                             string             `json:",omitempty"`
+		ManagedRPi                         *config.ManagedRPi `json:",omitempty"`
 		Source                             *config.ConfigSource
 		Configs                            []config.CoreConfig
 		Service                            *config.ClientService `json:",omitempty"`
-	}{t.ID, t.Controller, t.SSHHost, t.ManagedCoreID, t.HostOS, t.ConfigSource, t.Configs, t.Service})
+	}{t.ID, t.Controller, t.SSHHost, t.ManagedCoreID, t.HostOS, t.ManagedRPi, t.ConfigSource, t.Configs, t.Service})
 	return hash(v)
 }
 func semantic(n *yaml.Node) string {
@@ -123,6 +126,30 @@ func inspectWithOptions(ctx context.Context, t config.Target, opts Options) (*so
 	c := t.ConfigSource
 	s := &source{opts: opts, Catalog: Catalog{Kind: c.Kind, ProfileUID: c.ProfileUID}, docs: map[string]*yaml.Node{}, files: map[string]rulework.HostFile{}}
 	switch c.Kind {
+	case managedrpi.Kind:
+		observed, e := managedrpi.Call(ctx, t, managedrpi.Request{Operation: "inspect"}, opts.Broker)
+		if e != nil {
+			return nil, e
+		}
+		raw, e := managedrpi.ReadProfile(t, observed)
+		if e != nil {
+			return nil, e
+		}
+		n, e := decode(raw)
+		if e != nil {
+			return nil, e
+		}
+		s.base, s.runtime = managedrpi.Profile, managedrpi.Profile
+		s.managedIdentity = observed.Identity
+		s.files[s.base] = rulework.HostFile{Path: s.base, Resolved: s.base, Data: raw, SHA256: hash(raw), Fingerprint: hashJSON(observed.Identity)}
+		s.docs[s.base] = n
+		s.Files = []string{s.base}
+		s.guards = []rulework.FileGuard{{Path: s.base, Fingerprint: hashJSON(observed.Identity)}}
+		s.Warnings = append(s.Warnings, "套用會暫停 Nikki，經 RPi-ImmortalWrt 驗證及重新確認後恢復代理；預覽不會停止服務。")
+		if e = s.refresh(); e != nil {
+			return nil, e
+		}
+		return s, nil
 	case "native", "mihomo":
 		s.Warnings = append(s.Warnings, "Applying this registered YAML reloads all its runtime settings; unrelated runtime-only changes may be replaced.")
 		for _, v := range t.Configs {

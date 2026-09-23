@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -274,7 +275,7 @@ func New(deps Dependencies) *cobra.Command {
 	root.AddCommand(o.skillCommand(), o.diagnosticsCommand(), o.upgradeCommand(), o.groupsCommand(), o.setupCommand(), o.coresCommand())
 	root.AddCommand(o.vpsCommand(), o.serversCommand(), o.tailnetCommand())
 	root.AddCommand(o.topologyCommand(), o.completionCommand(root))
-	root.AddCommand(o.analyticsCommand())
+	root.AddCommand(o.analyticsCommand(), o.inventoryCommand())
 	o.registerCompletions(root)
 	return root
 }
@@ -371,6 +372,13 @@ func (o *options) choose(cmd *cobra.Command, cfg config.Config) (config.Target, 
 	if temporary {
 		if !strings.Contains(endpoint, "://") {
 			endpoint = "http://" + endpoint
+		}
+		requested, _ := url.Parse(endpoint)
+		for _, saved := range cfg.Targets {
+			known, _ := url.Parse(saved.Controller)
+			if saved.ManagedRPi != nil && requested != nil && known != nil && strings.EqualFold(requested.Host, known.Host) {
+				return config.Target{}, false, usage("controller belongs to managed RPi target %q; use --target to preserve its owner boundary", saved.ID)
+			}
 		}
 		ephemeralID := "temporary"
 		for suffix := 2; ; suffix++ {

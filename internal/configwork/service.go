@@ -11,6 +11,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/managedrpi"
 	"github.com/daviddwlee84/lazyclash/internal/rulework"
 	"go.yaml.in/yaml/v3"
 )
@@ -66,6 +67,21 @@ func Preview(ctx context.Context, t config.Target, req Request, opts Options) (P
 	}
 	if e = checkCompatibility(version, p.expected); e != nil {
 		return Plan{}, e
+	}
+	if p.Owner == managedrpi.Kind {
+		raw, e := encode(p.source.docs[p.source.base])
+		if e != nil {
+			return Plan{}, e
+		}
+		prepared, e := managedrpi.Call(ctx, t, managedrpi.Request{Operation: "preview", Candidate: raw, BaseIdentity: &s.managedIdentity}, opts.Broker)
+		if e != nil {
+			return Plan{}, e
+		}
+		if prepared.State != "prepared" || prepared.ReceiptPath == "" || prepared.ProfileSHA256 != hash(raw) || prepared.BaseIdentity != s.managedIdentity || (!prepared.RequiresProxyInterruption && !prepared.NoChange) {
+			return Plan{}, errors.New("managed RPi preview identity mismatch")
+		}
+		p.brokerReceipt = prepared.ReceiptPath
+		return p, nil
 	}
 	if e = validate(ctx, t, p, opts); e != nil {
 		return Plan{}, e

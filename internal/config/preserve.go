@@ -242,6 +242,10 @@ func preserve(raw []byte, cfg Config) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		b, err = patchManagedRPi(b, t.ManagedRPi)
+		if err != nil {
+			return nil, err
+		}
 		b, err = patchRuleSource(b, t.RuleSource)
 		if err != nil {
 			return nil, err
@@ -428,4 +432,45 @@ func patchPreferences(raw []byte, p TUIPreferences) ([]byte, error) {
 		b = append(b, []byte("mouse = "+strconv.FormatBool(*p.Mouse)+"\n")...)
 	}
 	return applyEdits(raw, []edit{{start, end, b}}), nil
+}
+
+func patchManagedRPi(raw []byte, source *ManagedRPi) ([]byte, error) {
+	exprs, err := expressions(raw)
+	if err != nil {
+		return nil, err
+	}
+	start, end := -1, len(raw)
+	for _, e := range exprs {
+		if e.kind == unstable.KeyValue && e.table == "targets" && e.key == "managed_rpi" {
+			return nil, errors.New("inline managed_rpi cannot be edited while preserving comments; use [targets.managed_rpi]")
+		}
+		if e.kind != unstable.Table && e.kind != unstable.ArrayTable {
+			continue
+		}
+		if start >= 0 {
+			end = e.start
+			break
+		}
+		if e.table == "targets.managed_rpi" {
+			start = e.start
+		}
+	}
+	if source == nil {
+		if start < 0 {
+			return raw, nil
+		}
+		return applyEdits(raw, []edit{{start, end, nil}}), nil
+	}
+	block := []byte("\n[targets.managed_rpi]\n")
+	if start >= 0 {
+		block = raw[start:end]
+	}
+	block, err = patchFields(block, "targets.managed_rpi", []field{{"project_dir", source.ProjectDir}, {"connection_file", source.ConnectionFile}})
+	if err != nil {
+		return nil, err
+	}
+	if start < 0 {
+		return append(append(raw, '\n'), block...), nil
+	}
+	return applyEdits(raw, []edit{{start, end, block}}), nil
 }

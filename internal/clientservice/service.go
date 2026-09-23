@@ -47,6 +47,9 @@ func call(ctx context.Context, t config.Target, r Request, o Options) (Status, e
 	return s, nil
 }
 func validTarget(t config.Target) error {
+	if t.ManagedRPi != nil {
+		return errors.New("managed RPi service lifecycle belongs to the RPi-ImmortalWrt broker")
+	}
 	if t.Transient || t.TransportOverride || t.ID == "" {
 		return errors.New("existing service operations require a saved target endpoint and SSH host")
 	}

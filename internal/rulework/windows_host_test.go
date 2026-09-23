@@ -275,9 +275,10 @@ func TestRuleBindingHostOSPreservesLegacyEmptyBinding(t *testing.T) {
 	f := newFixture(t, false)
 	legacy, _ := json.Marshal(struct {
 		ID, Controller, SSH string
+		ManagedRPi          *config.ManagedRPi `json:",omitempty"`
 		Source              *config.RuleSource
 		ConfigPath          string
-	}{f.target.ID, f.target.Controller, f.target.SSHHost, f.target.RuleSource, f.target.Configs[0].Path})
+	}{f.target.ID, f.target.Controller, f.target.SSHHost, f.target.ManagedRPi, f.target.RuleSource, f.target.Configs[0].Path})
 	if binding(f.target) != sha(legacy) {
 		t.Fatal("empty host OS invalidated existing receipt bindings")
 	}

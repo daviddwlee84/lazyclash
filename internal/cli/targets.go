@@ -125,6 +125,7 @@ func (o *options) targetCommands() *cobra.Command {
 
 func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 	var draft config.Target
+	var managed config.ManagedRPi
 	verb, short := "add", "Register a controller; bare invocation opens a guided prompt"
 	if edit {
 		verb = "edit"
@@ -171,6 +172,20 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 				return usage("supply at least one field to edit, such as --name or --controller")
 			}
 			previous := cfg.Targets[index]
+			if cmd.Flags().Changed("rpi-project-dir") || cmd.Flags().Changed("rpi-connection-file") {
+				if previous.ManagedRPi != nil {
+					current := *previous.ManagedRPi
+					previous.ManagedRPi = &current
+				} else {
+					previous.ManagedRPi = &config.ManagedRPi{}
+				}
+				if cmd.Flags().Changed("rpi-project-dir") {
+					previous.ManagedRPi.ProjectDir = managed.ProjectDir
+				}
+				if cmd.Flags().Changed("rpi-connection-file") {
+					previous.ManagedRPi.ConnectionFile = managed.ConnectionFile
+				}
+			}
 			oldController, oldSSH, oldOS := previous.Controller, previous.SSHHost, previous.HostOS
 			for name, dst := range map[string]*string{"host-os": &previous.HostOS, "name": &previous.Name, "controller": &previous.Controller, "ssh": &previous.SSHHost, "secret-file": &previous.SecretFile, "secret-env": &previous.SecretEnv, "ca-cert": &previous.CAFile, "source-config": &previous.SourceConfig, "probe-proxy": &previous.ProbeProxy, "probe-username": &previous.ProbeUsername, "probe-password-env": &previous.ProbePasswordEnv, "probe-password-file": &previous.ProbePasswordFile, "probe-ca-cert": &previous.ProbeCAFile} {
 				if cmd.Flags().Changed(name) {
@@ -208,6 +223,9 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 			if draft.Controller == "" {
 				return usage("--controller URL is required")
 			}
+			if managed.ProjectDir != "" || managed.ConnectionFile != "" {
+				draft.ManagedRPi = &managed
+			}
 			cfg.Targets = append(cfg.Targets, draft)
 			if cfg.DefaultTarget == "" {
 				cfg.DefaultTarget = draft.ID
@@ -227,6 +245,8 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 		return o.result(cmd, "Saved target "+draft.ID)
 	}}
 	f := cmd.Flags()
+	f.StringVar(&managed.ProjectDir, "rpi-project-dir", "", "absolute local RPi-ImmortalWrt project directory")
+	f.StringVar(&managed.ConnectionFile, "rpi-connection-file", "", "private local managed RPi connection JSON")
 	f.StringVar(&draft.Name, "name", "", "display name")
 	f.StringVar(&draft.Controller, "controller", "", "controller URL (host:port implies HTTP)")
 	f.StringVar(&draft.SSHHost, "ssh", "", "SSH host alias")

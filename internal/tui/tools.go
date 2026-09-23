@@ -223,6 +223,10 @@ func (m *Model) toolAction(id string) tea.Cmd {
 	case "tool-servers":
 		return m.startServers()
 	case "tool-setup":
+		if m.target.ManagedRPi != nil {
+			m.status = "受管 RPi 安裝及服務生命週期由 RPi-ImmortalWrt 管理"
+			return nil
+		}
 		return m.runTool("Setup Mihomo", false, "setup", "--interactive")
 	case "tool-client-service":
 		if m.options.ReadOnly {

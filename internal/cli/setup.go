@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -220,6 +221,9 @@ func loadSetupInput(cmd *cobra.Command, request *managedcore.Request, path strin
 }
 
 func (o *options) runManagedPreviewApply(cmd *cobra.Command, request managedcore.Request, configureID string, yes bool, expect string) error {
+	if err := o.rejectRPiTakeover(cmd, request.ID, request.SSHHost); err != nil {
+		return err
+	}
 	opts := o.managedOptions(cmd)
 	var plan managedcore.Plan
 	var receipt managedcore.Receipt
@@ -412,6 +416,10 @@ func (o *options) runSetupWizard(cmd *cobra.Command, request managedcore.Request
 		} else {
 			request.Input = []byte(values["nodes"])
 		}
+		if err := o.rejectRPiTakeover(cmd, request.ID, request.SSHHost); err != nil {
+			message = err.Error()
+			continue
+		}
 		opts := o.managedOptions(cmd)
 		var plan managedcore.Plan
 		preparedCtx := cmd.Context()
@@ -568,6 +576,29 @@ func policyText(values map[string]string) string {
 func managedFlagChanged(cmd *cobra.Command, name string) bool {
 	return cmd.Flags().Changed(name) || cmd.InheritedFlags().Changed(name)
 }
+
+// Reject known owner collisions before setup or lifecycle code contacts a host.
+func (o *options) rejectRPiTakeover(cmd *cobra.Command, id, ssh string) error {
+	cfg, _, err := o.load(cmd)
+	if err != nil {
+		return err
+	}
+	sshHost := ssh
+	if i := strings.LastIndexByte(sshHost, '@'); i >= 0 {
+		sshHost = sshHost[i+1:]
+	}
+	for _, target := range cfg.Targets {
+		if target.ManagedRPi == nil {
+			continue
+		}
+		endpoint, _ := url.Parse(target.Controller)
+		if target.ID == id || ssh != "" && (target.SSHHost == ssh || endpoint != nil && endpoint.Hostname() == sshHost) {
+			return usage("target %q belongs to RPi-ImmortalWrt; generic setup and core lifecycle cannot take over its owner", target.ID)
+		}
+	}
+	return nil
+}
+
 func validateManagedOverrides(cmd *cobra.Command, allowSSH, allowTarget bool) error {
 	names := []string{"controller", "secret-env", "secret-file", "ca-cert"}
 	if !allowSSH {

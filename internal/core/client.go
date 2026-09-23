@@ -87,6 +87,8 @@ type Client struct {
 	http         *http.Client
 	transport    *http.Transport
 	secret       string
+	managedRPi   bool
+	selectOwner  func(context.Context, string, string) error
 	readOnly     bool
 	timeout      time.Duration
 	delayURL     string
@@ -166,15 +168,16 @@ func New(options Options) (*Client, error) {
 		delayTimeout = 5 * time.Second
 	}
 	return &Client{
-		base: base, secret: options.Secret, readOnly: options.ReadOnly,
+		base: base, secret: options.Secret, readOnly: options.ReadOnly, managedRPi: options.ManagedRPi, selectOwner: options.SelectOwner,
 		timeout: timeout, delayURL: delayURL, delayTimeout: delayTimeout,
 		transport: transport,
 		http:      &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	}, nil
 }
 
-func (c *Client) IsReadOnly() bool { return c.readOnly }
-func (c *Client) Close() error     { c.transport.CloseIdleConnections(); return nil }
+func (c *Client) IsReadOnly() bool   { return c.readOnly }
+func (c *Client) IsManagedRPi() bool { return c.managedRPi }
+func (c *Client) Close() error       { c.transport.CloseIdleConnections(); return nil }
 
 // Selectable matches the Mihomo adapters implementing outboundgroup.SelectAble.
 func (p Proxy) Selectable() bool {
@@ -207,6 +210,9 @@ func (c *Client) checkWrite(op string) error {
 
 func (c *Client) request(ctx context.Context, method string, segments []string, query url.Values, body any, write, stream bool, op string) (*http.Response, context.CancelFunc, error) {
 	if write {
+		if c.managedRPi && (len(segments) == 0 || segments[0] == "configs" || segments[0] == "providers" || segments[0] == "proxies" && method != http.MethodGet) {
+			return nil, nil, errors.New("managed RPi mutation must use the RPi-ImmortalWrt owner transaction")
+		}
 		if err := c.checkWrite(op); err != nil {
 			return nil, nil, err
 		}
@@ -364,6 +370,12 @@ func (c *Client) Select(ctx context.Context, group, member string) error {
 	const op = "select proxy"
 	if err := c.checkWrite(op); err != nil {
 		return err
+	}
+	if c.managedRPi {
+		if c.selectOwner == nil {
+			return errors.New("managed RPi selector broker unavailable")
+		}
+		return c.selectOwner(ctx, group, member)
 	}
 	proxies, err := c.Proxies(ctx)
 	if err != nil {

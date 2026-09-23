@@ -8,9 +8,11 @@ import (
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/managedrpi"
 )
 
 type Options struct {
+	Broker   managedrpi.Runner
 	ReadOnly bool
 	StateDir string
 	Open     func(context.Context, config.Target, bool) (*core.Client, io.Closer, error)
@@ -26,12 +28,13 @@ type Options struct {
 }
 
 type Source struct {
-	Kind       string   `json:"kind"`
-	File       string   `json:"file"`
-	ProfileUID string   `json:"profile_uid,omitempty"`
-	Warnings   []string `json:"warnings,omitempty"`
-	guards     []fileGuard
-	file       hostFile
+	Kind            string   `json:"kind"`
+	File            string   `json:"file"`
+	ProfileUID      string   `json:"profile_uid,omitempty"`
+	Warnings        []string `json:"warnings,omitempty"`
+	managedIdentity managedrpi.Identity
+	guards          []fileGuard
+	file            hostFile
 }
 
 type Plan struct {
@@ -45,11 +48,13 @@ type Plan struct {
 	Diff                string `json:"diff"`
 	NoChange            bool   `json:"no_change"`
 	CoreVersion         string `json:"core_version"`
+	brokerReceipt       string
 	after               []byte
 	beforeRuntimeDigest string
 }
 
 type Receipt struct {
+	BrokerReceipt       string    `json:"broker_receipt,omitempty"`
 	ID                  string    `json:"id"`
 	TargetID            string    `json:"target_id"`
 	Owner               string    `json:"owner"`

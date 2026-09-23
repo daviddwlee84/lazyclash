@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/core"
 	"github.com/daviddwlee84/lazyclash/internal/hostpath"
+	"github.com/daviddwlee84/lazyclash/internal/managedrpi"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -122,6 +124,23 @@ func inspectSource(ctx context.Context, target config.Target, opts Options) (Sou
 		return Source{}, err
 	}
 	source := Source{Kind: s.Kind, ProfileUID: s.ProfileUID}
+	if s.Kind == managedrpi.Kind {
+		observed, e := managedrpi.Call(ctx, target, managedrpi.Request{Operation: "inspect"}, opts.Broker)
+		if e != nil {
+			return source, e
+		}
+		raw, e := managedrpi.ReadProfile(target, observed)
+		if e != nil {
+			return source, e
+		}
+		encoded, _ := json.Marshal(observed.Identity)
+		source.File = managedrpi.Profile
+		source.managedIdentity = observed.Identity
+		source.file = hostFile{Path: source.File, Resolved: source.File, Data: raw, SHA256: sha(raw), Fingerprint: sha(encoded)}
+		source.guards = []fileGuard{{source.File, sha(encoded)}}
+		source.Warnings = []string{"套用會暫停 Nikki，透過 RPi-ImmortalWrt 完整交易驗證並重新確認；預覽不會停止服務。"}
+		return source, nil
+	}
 	if s.Kind == "mihomo" {
 		source.Warnings = append(source.Warnings, "Applying the registered YAML reloads all its settings; other runtime-only changes may be replaced by the persisted source.")
 		for _, item := range target.Configs {
@@ -322,6 +341,10 @@ func addRule(data []byte, kind, rule string) ([]byte, bool, error) {
 		return nil, false, errors.New("unsupported rule repair type")
 	}
 	ruleKind, payload := parts[0], parts[1]
+	insertion := 0
+	if kind == managedrpi.Kind && len(sequence.Content) > 0 && sequence.Content[0].Value == "RULE-SET,rpi-local-proxy,PROXY" {
+		insertion = 1
+	}
 	matching := 0
 	for _, item := range sequence.Content {
 		if item.Kind != yaml.ScalarNode || item.Tag != "!!str" {
@@ -331,12 +354,13 @@ func addRule(data []byte, kind, rule string) ([]byte, bool, error) {
 			matching++
 		}
 	}
-	if len(sequence.Content) > 0 && sequence.Content[0].Kind == yaml.ScalarNode && sequence.Content[0].Value == rule && matching == 1 {
+	if len(sequence.Content) > insertion && sequence.Content[insertion].Kind == yaml.ScalarNode && sequence.Content[insertion].Value == rule && matching == 1 {
 		return data, true, nil
 	}
 	newRule := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: rule}
-	items := []*yaml.Node{newRule}
-	for _, item := range sequence.Content {
+	items := append([]*yaml.Node{}, sequence.Content[:insertion]...)
+	items = append(items, newRule)
+	for _, item := range sequence.Content[insertion:] {
 		if item.Kind != yaml.ScalarNode || item.Tag != "!!str" {
 			return nil, false, errors.New("rule sequence must contain strings")
 		}
@@ -392,9 +416,13 @@ func ruleDiff(before []byte, kind, rule, payload string, noChange bool) string {
 		key = "prepend"
 	}
 	var lines []string
+	insertion := 0
 	lines = append(lines, "@@ "+key+" (zero-based order) @@")
 	if doc, err := decodeYAML(before); err == nil {
 		if seq := mappingValue(doc.Content[0], key); seq != nil {
+			if kind == managedrpi.Kind && len(seq.Content) > 0 && seq.Content[0].Value == "RULE-SET,rpi-local-proxy,PROXY" {
+				insertion = 1
+			}
 			for index, node := range seq.Content {
 				if sameRuleTarget(node.Value, ruleKind, payload) {
 					lines = append(lines, fmt.Sprintf("- [%d] %s", index, core.Sanitize(node.Value)))
@@ -402,7 +430,7 @@ func ruleDiff(before []byte, kind, rule, payload string, noChange bool) string {
 			}
 		}
 	}
-	lines = append(lines, "+ [0] "+rule, "All other entries retain their relative order.")
+	lines = append(lines, fmt.Sprintf("+ [%d] %s", insertion, rule), "All other entries retain their relative order.")
 	return strings.Join(lines, "\n")
 }
 func sha(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }

@@ -8,6 +8,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/clientservice"
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/managedrpi"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -16,6 +17,7 @@ const MaxDocument = 8 << 20
 type Options struct {
 	// ActivateOwner is available only for an explicitly managed GUI installation.
 	ActivateOwner  func(context.Context, config.Target) error
+	Broker         managedrpi.Runner
 	ClientServices clientservice.Options
 	ReadOnly       bool
 	StateDir       string
@@ -107,11 +109,13 @@ type Plan struct {
 	Summary        string        `json:"summary"`
 	Warnings       []string      `json:"warnings,omitempty"`
 	CoreVersion    string        `json:"core_version"`
+	brokerReceipt  string
 	source         *source
 	expected       []Definition
 	expectedGroups []Definition
 }
 type Receipt struct {
+	BrokerReceipt     string            `json:"broker_receipt,omitempty"`
 	ID                string            `json:"id"`
 	TargetID          string            `json:"target_id"`
 	Binding           string            `json:"binding"`

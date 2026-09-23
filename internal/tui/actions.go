@@ -28,11 +28,12 @@ func (m *Model) actions() []action {
 	selected, hasRow := m.selectedRow()
 	group, hasGroup := m.group()
 	cfg := m.configData()
-	modeWrite := write && m.knownRoutingMode() && m.state().snap("config").err == nil
+	genericWrite := write && m.target.ManagedRPi == nil
+	modeWrite := genericWrite && m.knownRoutingMode() && m.state().snap("config").err == nil
 	a := []action{
-		{"tool-setup", "Setup Mihomo client", nil, m.canRunTool() && !m.options.ReadOnly},
+		{"tool-setup", "Setup Mihomo client", nil, m.canRunTool() && !m.options.ReadOnly && m.target.ManagedRPi == nil},
 		{"tool-core", "Manage installed cores", nil, m.canRunTool()},
-		{"tool-client-service", "Existing target service: status / start / stop / autostart", nil, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride && m.target.ManagedCoreID == ""},
+		{"tool-client-service", "Existing target service: status / start / stop / autostart", nil, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride && m.target.ManagedCoreID == "" && m.target.ManagedRPi == nil},
 		{"tool-servers", "Servers / VPS / Tailnet: deploy, manage and share", nil, m.options.Workbench != nil && !m.toolPending},
 		{"tool-analytics", "Historical analytics: sources, domains, traffic and activity", nil, m.canRunTool()},
 		{"tool-analytics-setup", "Configure historical analytics collection", nil, m.canRunTool() && !m.options.ReadOnly},
@@ -40,6 +41,7 @@ func (m *Model) actions() []action {
 		{"tool-topology", "Routing topology: configuration / current selections", nil, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride},
 		{"tool-checks", "Saved connectivity checks: review / add / edit / run", []string{"C"}, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride},
 		{"tool-source", "Bind node / group configuration source", nil, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride},
+		{"work-inventory", "受管 RPi：查看區網裝置 inventory", nil, m.options.Workbench != nil && m.target.ManagedRPi != nil},
 		{"work-compare", "Compare targets / copy selected settings", nil, m.options.Workbench != nil && len(m.settings.Targets) > 1},
 		{"work-url", "Diagnose URL and inspect routing topology", nil, m.options.Workbench != nil && m.target.ID != ""},
 		{"work-rule", "Preview / add domain rule", nil, m.options.Workbench != nil && m.target.ID != ""},
@@ -58,8 +60,8 @@ func (m *Model) actions() []action {
 		{"mode-rule", "Set routing mode: Rule", nil, modeWrite && m.routingMode() != "rule"},
 		{"mode-global", "Set routing mode: Global", nil, modeWrite && m.routingMode() != "global"},
 		{"mode-direct", "Set routing mode: Direct", nil, modeWrite && m.routingMode() != "direct"},
-		{"tun", "Toggle TUN", []string{"u"}, write && knownBool(object(cfg["tun"]), "enable")},
-		{"lan", "Toggle Allow LAN", []string{"a"}, write && knownBool(cfg, "allow-lan")},
+		{"tun", "Toggle TUN", []string{"u"}, genericWrite && knownBool(object(cfg["tun"]), "enable")},
+		{"lan", "Toggle Allow LAN", []string{"a"}, genericWrite && knownBool(cfg, "allow-lan")},
 	}
 	switch m.page {
 	case overview:
@@ -75,9 +77,9 @@ func (m *Model) actions() []action {
 		a = append(a, action{"log-follow", "Toggle log follow", []string{"space"}, true}, action{"log-clear", "Clear displayed logs", []string{"c"}, true}, action{"log-level", "Cycle log level filter", []string{"v"}, true})
 	case providers:
 		r, _ := m.selectedRow()
-		a = append(a, action{"provider-update", "Update selected provider", []string{"U"}, write && hasRow}, action{"provider-health", "Healthcheck selected proxy provider", []string{"H"}, write && hasRow && r.kind == "proxies"})
+		a = append(a, action{"provider-update", "Update selected provider", []string{"U"}, genericWrite && hasRow}, action{"provider-health", "Healthcheck selected proxy provider", []string{"H"}, genericWrite && hasRow && r.kind == "proxies"})
 	case configs:
-		a = append(a, action{"config-apply", "Apply complete YAML", []string{"enter"}, write && hasRow}, action{"config-add", "Register complete YAML path", []string{"n"}, m.target.ID != "" && !m.target.Transient}, action{"config-edit", "Edit registered YAML", []string{"e"}, hasRow && !m.target.Transient}, action{"config-remove", "Remove registered YAML", []string{"x"}, hasRow && !m.target.Transient})
+		a = append(a, action{"config-apply", "Apply complete YAML", []string{"enter"}, genericWrite && hasRow}, action{"config-add", "Register complete YAML path", []string{"n"}, m.target.ID != "" && !m.target.Transient}, action{"config-edit", "Edit registered YAML", []string{"e"}, hasRow && !m.target.Transient}, action{"config-remove", "Remove registered YAML", []string{"x"}, hasRow && !m.target.Transient})
 	}
 	return a
 }
@@ -389,6 +391,8 @@ func (m *Model) runAction(id string) tea.Cmd {
 		return m.toolAction(id)
 	}
 	switch id {
+	case "work-inventory":
+		return m.launchWork(WorkRequest{Kind: "rpi-inventory", Source: m.target.ID})
 	case "work-compare":
 		return m.startCompare()
 	case "work-url":

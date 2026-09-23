@@ -12,6 +12,7 @@ The [changelog](../CHANGELOG.md) identifies the version that introduced a featur
 | Choosing a shell/data proxy, owning SSH forwards or configuring Docker consumers | [代理環境](proxy-environment.md) |
 | Sharing a local proxy with a remote shell/command and checking endpoint lifetime | [雙向 SSH 代理](ssh-proxy-sharing.md) |
 | Installing an owned native/Docker client or using offline China-routing presets | [Client setup](managed-cores.md) |
+| 透過 RPi-ImmortalWrt owner 編輯、切換節點或查看區網裝置 | [受管 Raspberry Pi](managed-rpi.md) |
 | Choosing protocols/VPSs, Azure/AWS and other cloud provisioning, deploying a server or public-IP homelab, exporting client configs | [Server deployment and VPS selection](server-deployment.md) |
 | Using a Tailscale Exit Node or sharing an HTTP/SOCKS proxy privately inside a tailnet | [Tailscale 出口與私有 proxy](tailnet.md) |
 | Inspecting Tailscale/other VPN conflicts, split DNS, service permissions or recovery | [VPN／TUN 共存](vpn-coexistence.md) |

@@ -31,6 +31,7 @@ type Target struct {
 	RuleSource        *RuleSource       `toml:"rule_source,omitempty" json:"rule_source,omitempty"`
 	ConfigSource      *ConfigSource     `toml:"config_source,omitempty" json:"config_source,omitempty"`
 	Service           *ClientService    `toml:"service,omitempty" json:"service,omitempty"`
+	ManagedRPi        *ManagedRPi       `toml:"managed_rpi,omitempty" json:"managed_rpi,omitempty"`
 	ManagedCoreID     string            `toml:"managed_core_id,omitempty" json:"managed_core_id,omitempty"`
 	Secret            string            `toml:"-" json:"-"`
 	Transient         bool              `toml:"-" json:"-"`
@@ -124,4 +125,10 @@ type ClientService struct {
 	Scope          string `toml:"scope,omitempty" json:"scope,omitempty"`
 	FragmentPath   string `toml:"fragment_path,omitempty" json:"fragment_path,omitempty"`
 	UnitSHA256     string `toml:"unit_sha256,omitempty" json:"unit_sha256,omitempty"`
+}
+
+// ManagedRPi is an owner capability boundary, independent of editable sources.
+type ManagedRPi struct {
+	ProjectDir     string `toml:"project_dir" json:"project_dir"`
+	ConnectionFile string `toml:"connection_file" json:"connection_file"`
 }

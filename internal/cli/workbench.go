@@ -8,6 +8,7 @@ import (
 
 	"github.com/daviddwlee84/lazyclash/internal/compare"
 	"github.com/daviddwlee84/lazyclash/internal/diagnostics"
+	"github.com/daviddwlee84/lazyclash/internal/managedrpi"
 	"github.com/daviddwlee84/lazyclash/internal/rulework"
 	"github.com/daviddwlee84/lazyclash/internal/tui"
 	"github.com/spf13/cobra"
@@ -24,6 +25,17 @@ func (o *options) runWorkbench(ctx context.Context, r tui.WorkRequest) (tui.Work
 	ownerCommand.SetContext(ctx)
 	rules := o.ruleOptions(ownerCommand)
 	switch r.Kind {
+	case "rpi-inventory":
+		observed, e := managedrpi.Call(ctx, r.Target, managedrpi.Request{Operation: "inventory"}, nil)
+		if e != nil {
+			return result, e
+		}
+		result.Title = "RPi 區網裝置 inventory"
+		result.Summary = fmt.Sprintf("LAN：%v；觀測完整：%t。租約／快取不代表目前在線；associated、reachable、failed 依證據列示。", observed.LAN, observed.Complete)
+		for i, device := range observed.Devices {
+			result.Rows = append(result.Rows, tui.WorkRow{ID: fmt.Sprint(i), Label: inventoryValue(device, "ipv4") + " · " + inventoryValue(device, "hostname") + " · " + inventoryValue(device, "presence"), Detail: workJSON(device)})
+		}
+		return result, nil
 	case "source-inspect":
 		source, e := rulework.InspectSourceWithOptions(ctx, r.Target, rules)
 		return tui.WorkResult{Title: "Persistent source", Summary: workJSON(source)}, e
