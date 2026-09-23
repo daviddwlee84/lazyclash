@@ -16,11 +16,6 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 - Windows process exits are confirmed by a fresh PID lookup, and default
   lifecycle website probes get one bounded warmup retry with per-site evidence.
 - Saved connectivity checks honor their full request budget.
-- Added `rpi-immortalwrt` rule and node/group sources that hand edits, Selector
-  switches and LAN device inventory to the RPi-ImmortalWrt project's broker.
-  Targets keep a `[targets.managed_rpi]` owner boundary, reviewed digests,
-  broker-referenced receipts and verify/restore; ad-hoc `--controller` access to
-  a managed endpoint is refused.
 
 ## 0.1.11 — 2026-09-23
 

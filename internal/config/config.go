@@ -87,9 +87,6 @@ func ValidateTarget(t Target) error {
 	if t.HostOS != "" && t.HostOS != "windows" && t.HostOS != "linux" && t.HostOS != "darwin" {
 		return errors.New("host_os must be windows, linux or darwin")
 	}
-	if err := ValidateManagedRPi(t); err != nil {
-		return err
-	}
 	for _, value := range []string{t.SourceConfig, t.SecretFile, t.CAFile, t.SSHHost, t.ProbePasswordFile, t.ProbeCAFile, t.ProbeUsername} {
 		if strings.IndexFunc(value, unicode.IsControl) >= 0 {
 			return errors.New("target paths and SSH host must not contain control characters")
@@ -151,9 +148,6 @@ func ValidateTarget(t Target) error {
 }
 
 func ValidateConfigSource(t Target) error {
-	if t.ManagedRPi != nil && t.ConfigSource != nil && t.ConfigSource.Kind != "rpi-immortalwrt" {
-		return errors.New("managed RPi sources must use the rpi-immortalwrt owner")
-	}
 	s := t.ConfigSource
 	if s == nil {
 		return nil
@@ -172,15 +166,6 @@ func ValidateConfigSource(t Target) error {
 		}
 	}
 	switch s.Kind {
-	case "rpi-immortalwrt":
-		if t.ManagedRPi == nil {
-			return errors.New("rpi-immortalwrt source requires target.managed_rpi")
-		}
-		if *s != (ConfigSource{Kind: "rpi-immortalwrt"}) {
-			return errors.New("managed RPi source accepts only kind; broker owns paths and validation")
-		}
-		return ValidateManagedRPi(t)
-
 	case "native", "mihomo":
 		if s.ConfigID == "" || !hostpath.IsAbs(t.HostOS, s.Binary) || !hostpath.IsAbs(t.HostOS, s.Home) || hostpath.IsRoot(t.HostOS, s.Home) || s.Container != "" || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" || s.HostPath != "" || s.CorePath != "" || s.DockerHost != "" {
 			return errors.New("native config source requires config_id, absolute binary/home, and no Docker/Verge fields")
@@ -221,9 +206,6 @@ func ValidateConfigSource(t Target) error {
 }
 
 func ValidateRuleSource(t Target) error {
-	if t.ManagedRPi != nil && t.RuleSource != nil && t.RuleSource.Kind != "rpi-immortalwrt" {
-		return errors.New("managed RPi sources must use the rpi-immortalwrt owner")
-	}
 	s := t.RuleSource
 	if s == nil {
 		return nil
@@ -234,15 +216,6 @@ func ValidateRuleSource(t Target) error {
 		}
 	}
 	switch s.Kind {
-	case "rpi-immortalwrt":
-		if t.ManagedRPi == nil {
-			return errors.New("rpi-immortalwrt source requires target.managed_rpi")
-		}
-		if *s != (RuleSource{Kind: "rpi-immortalwrt"}) {
-			return errors.New("managed RPi source accepts only kind; broker owns paths and validation")
-		}
-		return ValidateManagedRPi(t)
-
 	case "mihomo":
 		if s.ConfigID == "" || !hostpath.IsAbs(t.HostOS, s.Binary) || !hostpath.IsAbs(t.HostOS, s.Home) || hostpath.IsRoot(t.HostOS, s.Home) || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" {
 			return errors.New("mihomo rule source requires a registered config_id, absolute binary and home, and no Verge fields")
@@ -431,27 +404,6 @@ func Save(path string, cfg Config) error {
 	if dir, err := os.Open(filepath.Dir(abs)); err == nil {
 		_ = dir.Sync()
 		_ = dir.Close()
-	}
-	return nil
-}
-
-func ValidateManagedRPi(t Target) error {
-	if t.ManagedRPi == nil {
-		return nil
-	}
-	for _, p := range []string{t.ManagedRPi.ProjectDir, t.ManagedRPi.ConnectionFile} {
-		if !filepath.IsAbs(p) || filepath.Clean(p) != p || p == "/" || len(p) > 4096 || strings.IndexFunc(p, unicode.IsControl) >= 0 {
-			return errors.New("managed_rpi requires clean absolute project_dir and connection_file")
-		}
-	}
-	if t.ManagedCoreID != "" || t.Service != nil {
-		return errors.New("managed RPi cannot bind a generic core installation or service")
-	}
-	if t.TransportOverride || t.Transient {
-		return errors.New("managed RPi operations require the saved target endpoint")
-	}
-	if !strings.HasPrefix(t.Controller, "https://") || t.CAFile == "" {
-		return errors.New("managed RPi controller requires HTTPS and an explicit private CA")
 	}
 	return nil
 }

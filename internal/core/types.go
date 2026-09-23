@@ -27,8 +27,6 @@ type Options struct {
 	Endpoint     string
 	Secret       string
 	CAFile       string
-	ManagedRPi   bool
-	SelectOwner  func(context.Context, string, string) error
 	ReadOnly     bool
 	Timeout      time.Duration
 	DelayURL     string

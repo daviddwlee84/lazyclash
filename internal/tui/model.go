@@ -255,10 +255,6 @@ func New(options Options) *Model {
 func cloneSettings(c config.Config) config.Config {
 	c.Targets = append([]config.Target(nil), c.Targets...)
 	for i := range c.Targets {
-		if c.Targets[i].ManagedRPi != nil {
-			owner := *c.Targets[i].ManagedRPi
-			c.Targets[i].ManagedRPi = &owner
-		}
 		c.Targets[i].Configs = append([]config.CoreConfig(nil), c.Targets[i].Configs...)
 		c.Targets[i].Checks = append([]config.DiagnosticCheck(nil), c.Targets[i].Checks...)
 		for j := range c.Targets[i].Checks {

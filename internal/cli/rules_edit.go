@@ -48,7 +48,7 @@ func (o *options) ruleEditCommands() []*cobra.Command {
 		return o.output(cmd, map[string]any{"target_id": t.ID, "rule_source": t.RuleSource})
 	}})
 	var binding config.RuleSource
-	set := &cobra.Command{Use: "set --kind mihomo|verge|rpi-immortalwrt", Short: "Bind an existing standalone YAML or current Verge profile Rules companion", Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error {
+	set := &cobra.Command{Use: "set --kind mihomo|verge", Short: "Bind an existing standalone YAML or current Verge profile Rules companion", Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error {
 		defer connection.CloseAuthentications()
 		if globalChanged(cmd, "controller") || globalChanged(cmd, "ssh") {
 			return usage("rule source binding requires the registered endpoint and SSH host")
@@ -75,7 +75,7 @@ func (o *options) ruleEditCommands() []*cobra.Command {
 		}
 		return o.output(cmd, map[string]any{"target_id": cfg.Targets[i].ID, "rule_source": binding, "owner": owner})
 	}}
-	set.Flags().StringVar(&binding.Kind, "kind", "", "persistent owner: mihomo, verge or rpi-immortalwrt")
+	set.Flags().StringVar(&binding.Kind, "kind", "", "persistent owner: mihomo or verge")
 	set.Flags().StringVar(&binding.Version, "owner-version", "", "declared Verge compatibility version (supported: 2.5.2)")
 	set.Flags().StringVar(&binding.ConfigID, "config-id", "", "registered standalone config ID")
 	set.Flags().StringVar(&binding.Binary, "binary", "", "absolute Mihomo validator binary on the core host")
@@ -115,14 +115,12 @@ func (o *options) ruleEditCommands() []*cobra.Command {
 		if err != nil {
 			return err
 		}
-		if t.ManagedRPi == nil {
-			err = o.authenticatedDiagnostic(cmd, t, func() error {
-				_, e := rulework.InspectSourceWithOptions(cmd.Context(), t, o.ruleOptions(cmd))
-				return e
-			})
-			if err != nil {
-				return err
-			}
+		err = o.authenticatedDiagnostic(cmd, t, func() error {
+			_, e := rulework.InspectSourceWithOptions(cmd.Context(), t, o.ruleOptions(cmd))
+			return e
+		})
+		if err != nil {
+			return err
 		}
 		r, err := rulework.Restore(cmd.Context(), t, args[0], o.ruleOptions(cmd))
 		if r.ID != "" {

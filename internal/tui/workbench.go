@@ -402,13 +402,10 @@ func (m *Model) workMouseContext() string {
 }
 func (m *Model) startRuleSourceForm() tea.Cmd {
 	s := config.RuleSource{Kind: "mihomo"}
-	if m.target.ManagedRPi != nil {
-		s.Kind = "rpi-immortalwrt"
-	}
 	if m.target.RuleSource != nil {
 		s = *m.target.RuleSource
 	}
-	return m.startForm("work-source", "Bind persistent rule owner (explicit write source)", "", []field{{"Owner (mihomo/verge/rpi-immortalwrt)", s.Kind}, {"Mihomo registered config ID", s.ConfigID}, {"Mihomo binary: absolute host path", s.Binary}, {"Mihomo home: absolute host path", s.Home}, {"Verge data directory: absolute host path", s.DataDir}, {"Verge active profile UID", s.ProfileUID}, {"Declared Verge compatibility version (2.5.2)", s.Version}})
+	return m.startForm("work-source", "Bind persistent rule owner (explicit write source)", "", []field{{"Owner (mihomo/verge)", s.Kind}, {"Mihomo registered config ID", s.ConfigID}, {"Mihomo binary: absolute host path", s.Binary}, {"Mihomo home: absolute host path", s.Home}, {"Verge data directory: absolute host path", s.DataDir}, {"Verge active profile UID", s.ProfileUID}, {"Declared Verge compatibility version (2.5.2)", s.Version}})
 }
 func (m *Model) submitRuleSourceForm(value func(int) string) tea.Cmd {
 	c := cloneSettings(m.settings)

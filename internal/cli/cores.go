@@ -149,16 +149,6 @@ func (o *options) coresCommand() *cobra.Command {
 			if err := validateManagedOverrides(cmd, false, false); err != nil {
 				return err
 			}
-			if len(args) > 0 {
-				if err := o.rejectRPiTakeover(cmd, args[0], ""); err != nil {
-					return err
-				}
-				if instance, err := managedcore.GetInstance(args[0], o.managedOptions(cmd)); err == nil {
-					if err := o.rejectRPiTakeover(cmd, args[0], instance.Target.SSHHost); err != nil {
-						return err
-					}
-				}
-			}
 			return handler(cmd, args)
 		}
 	}

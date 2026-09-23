@@ -15,7 +15,6 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/clientservice"
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
-	"github.com/daviddwlee84/lazyclash/internal/managedrpi"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -132,9 +131,6 @@ func Apply(ctx context.Context, t config.Target, req Request, expected string, o
 	if p.Digest != expected {
 		return Receipt{}, errors.New("source/context changed; review a new preview")
 	}
-	if p.Owner == managedrpi.Kind {
-		return applyManaged(ctx, t, p, opts)
-	}
 	if e = checkSourceFiles(ctx, t, p.source.guards, opts); e != nil {
 		return Receipt{}, e
 	}
@@ -250,9 +246,6 @@ func Verify(ctx context.Context, t config.Target, id string, opts Options) (Rece
 	}
 	if r.Binding != Binding(t) {
 		return r, errors.New("receipt belongs to a different source binding")
-	}
-	if r.Owner == managedrpi.Kind {
-		return managedReceipt(ctx, t, r, "verify", opts)
 	}
 	s, e := inspectWithOptions(ctx, t, opts)
 	if e != nil {
@@ -463,9 +456,6 @@ func Restore(ctx context.Context, t config.Target, id string, opts Options) (Rec
 	}
 	if r.Restored {
 		return Verify(ctx, t, id, opts)
-	}
-	if r.Owner == managedrpi.Kind {
-		return managedReceipt(ctx, t, r, "restore", opts)
 	}
 	s, e := inspectWithOptions(ctx, t, opts)
 	if e != nil {

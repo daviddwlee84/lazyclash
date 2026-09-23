@@ -93,10 +93,7 @@ func (o *options) configSourceCommand() *cobra.Command {
 		if e != nil {
 			return e
 		}
-		if cfg.Targets[i].ManagedRPi != nil && s.Kind == "" {
-			s.Kind = "rpi-immortalwrt"
-		}
-		if ui && s.Kind != "rpi-immortalwrt" {
+		if ui {
 			kind := s.Kind
 			if kind == "" {
 				kind, e = wizard.Choose(cmd.Context(), "Persistent node/group owner", []wizard.Choice{{Value: "native", Label: "Standalone Mihomo"}, {Value: "docker", Label: "Docker bind-mounted configuration"}, {Value: "verge", Label: "Clash Verge Rev 2.5.2"}}, cmd.InOrStdin(), cmd.OutOrStdout())
@@ -181,7 +178,7 @@ func (o *options) configSourceCommand() *cobra.Command {
 		}
 		return o.output(cmd, map[string]any{"target_id": cfg.Targets[i].ID, "config_source": s})
 	}}
-	set.Flags().StringVar(&s.Kind, "kind", "", "native, docker, verge or rpi-immortalwrt")
+	set.Flags().StringVar(&s.Kind, "kind", "", "native, docker or verge")
 	set.Flags().StringVar(&s.ConfigID, "config-id", "", "registered complete YAML ID (native)")
 	set.Flags().StringVar(&s.HostPath, "host-path", "", "host path corresponding to a Docker bind mount")
 	set.Flags().StringVar(&s.CorePath, "core-path", "", "container config path used for API reload")
@@ -231,11 +228,9 @@ func (o *options) configWorkCommands() []*cobra.Command {
 		if e != nil {
 			return e
 		}
-		if t.ManagedRPi == nil {
-			e = o.authenticatedDiagnostic(cmd, t, func() error { _, err := configwork.Inspect(cmd.Context(), t, o.configWorkOptions(cmd)); return err })
-			if e != nil {
-				return e
-			}
+		e = o.authenticatedDiagnostic(cmd, t, func() error { _, err := configwork.Inspect(cmd.Context(), t, o.configWorkOptions(cmd)); return err })
+		if e != nil {
+			return e
 		}
 		r, e := configwork.Restore(cmd.Context(), t, args[0], o.configWorkOptions(cmd))
 		if r.ID != "" {

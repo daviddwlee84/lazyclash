@@ -15,7 +15,6 @@ import (
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
-	"github.com/daviddwlee84/lazyclash/internal/managedrpi"
 )
 
 func binding(target config.Target) string {
@@ -33,12 +32,11 @@ func binding(target config.Target) string {
 	}
 	data, _ := json.Marshal(struct {
 		ID, Controller, SSH string
-		HostOS              string             `json:",omitempty"`
-		WindowsOwner        string             `json:",omitempty"`
-		ManagedRPi          *config.ManagedRPi `json:",omitempty"`
+		HostOS              string `json:",omitempty"`
+		WindowsOwner        string `json:",omitempty"`
 		Source              *config.RuleSource
 		ConfigPath          string
-	}{target.ID, target.Controller, target.SSHHost, target.HostOS, windowsOwner, target.ManagedRPi, target.RuleSource, configPath})
+	}{target.ID, target.Controller, target.SSHHost, target.HostOS, windowsOwner, target.RuleSource, configPath})
 	return sha(data)
 }
 
@@ -111,16 +109,6 @@ func previewRule(ctx context.Context, target config.Target, domain, prefix, poli
 		Guards                                 []fileGuard
 	}{binding(target), rule, coreVersion, sha(after), beforeRuntimeDigest, source.guards})
 	plan.Digest = sha(data)
-	if source.Kind == managedrpi.Kind {
-		prepared, e := managedrpi.Call(ctx, target, managedrpi.Request{Operation: "preview", Candidate: after, BaseIdentity: &source.managedIdentity}, opts.Broker)
-		if e != nil {
-			return Plan{}, e
-		}
-		if prepared.State != "prepared" || prepared.ReceiptPath == "" || prepared.ProfileSHA256 != sha(after) || prepared.BaseIdentity != source.managedIdentity || (!prepared.RequiresProxyInterruption && !prepared.NoChange) {
-			return Plan{}, errors.New("managed RPi preview identity mismatch")
-		}
-		plan.brokerReceipt = prepared.ReceiptPath
-	}
 	return plan, nil
 }
 
@@ -151,9 +139,6 @@ func applyRule(ctx context.Context, target config.Target, value, policy, expecte
 	}
 	if plan.Digest != expected {
 		return Receipt{}, errors.New("rule preview changed; review a new preview before applying")
-	}
-	if plan.Owner.Kind == managedrpi.Kind {
-		return applyManaged(ctx, target, plan, opts)
 	}
 	if target.RuleSource.Kind == "mihomo" {
 		if err = validateCandidate(ctx, target, plan.after, plan.CoreVersion, opts); err != nil {
@@ -259,9 +244,6 @@ func Verify(ctx context.Context, target config.Target, id string, opts Options) 
 	if r.Binding != binding(target) {
 		return r, errors.New("receipt belongs to a different target or source binding")
 	}
-	if r.Owner == managedrpi.Kind {
-		return managedReceipt(ctx, target, r, "verify", opts)
-	}
 	source, err := inspectSource(ctx, target, opts)
 	if err != nil {
 		return r, err
@@ -344,9 +326,6 @@ func Restore(ctx context.Context, target config.Target, id string, opts Options)
 	}
 	if r.Binding != binding(target) {
 		return r, errors.New("receipt belongs to a different target or source binding")
-	}
-	if r.Owner == managedrpi.Kind {
-		return managedReceipt(ctx, target, r, "restore", opts)
 	}
 	source, err := inspectSource(ctx, target, opts)
 	if err != nil {

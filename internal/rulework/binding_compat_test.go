@@ -27,9 +27,4 @@ func TestBindingPreservesLegacyReceiptsWithoutNewOwnerMetadata(t *testing.T) {
 	if binding(target) == windows {
 		t.Fatal("changed Windows owner is not bound")
 	}
-	target.HostOS, target.ManagedCoreID = "", ""
-	target.ManagedRPi = &config.ManagedRPi{ProjectDir: "/owner", ConnectionFile: "/owner/connection.toml"}
-	if binding(target) == original {
-		t.Fatal("managed RPi owner is not bound")
-	}
 }

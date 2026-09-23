@@ -14,7 +14,6 @@ import (
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
-	"github.com/daviddwlee84/lazyclash/internal/managedrpi"
 )
 
 type closerFunc func() error
@@ -27,29 +26,11 @@ func Open(ctx context.Context, target config.Target, readOnly bool) (*core.Clien
 	if err := config.ValidateTarget(target); err != nil {
 		return nil, nil, err
 	}
-	if target.ManagedRPi != nil {
-		if err := managedrpi.ValidateTransport(ctx, target, nil); err != nil {
-			return nil, nil, err
-		}
-	}
 	secret, err := resolveSecret(ctx, target)
 	if err != nil {
 		return nil, nil, err
 	}
 	opts := core.Options{Endpoint: target.Controller, Secret: secret, CAFile: target.CAFile, ReadOnly: readOnly}
-	if target.ManagedRPi != nil {
-		opts.ManagedRPi = true
-		opts.SelectOwner = func(ctx context.Context, group, member string) error {
-			out, err := managedrpi.Call(ctx, target, managedrpi.Request{Operation: "select", Group: group, Member: member}, nil)
-			if err != nil {
-				return err
-			}
-			if out.State != "selected" || out.Group != group || out.Member != member || !managedrpi.ValidIdentity(out.Identity) {
-				return errors.New("managed RPi selector result is unconfirmed; inspect the owner before retrying")
-			}
-			return nil
-		}
-	}
 	var closer io.Closer = closerFunc(func() error { return nil })
 	if target.SSHHost != "" {
 		u, _ := url.Parse(target.Controller)
