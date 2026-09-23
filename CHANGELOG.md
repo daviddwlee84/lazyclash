@@ -6,6 +6,11 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 
 ## Unreleased
 
+## 0.2.0 — 2026-09-23
+
+- Add Windows amd64/arm64 ZIP releases, PowerShell completion and verified Scoop installation/upgrade support. Upgrades exit into a private helper with visible progress and queryable final results; checks remain read-only and manager failures never trigger source fallback.
+- Verify native Windows behavior in CI and refresh the canonical go-cli-tui development guidance.
+
 - Homebrew-owned `upgrade` now refreshes taps even within Homebrew's
   auto-update interval, so a just-published formula is not reported as current;
   `HOMEBREW_NO_AUTO_UPDATE` is still honored. Releases also ask the tap to sync

@@ -1,6 +1,6 @@
 # lazyclash
 
-A keyboard-first terminal console for **Mihomo clients and proxy servers**, including existing cores managed by Clash Verge Rev and explicitly lazyclash-owned installations. Works locally, over HTTPS, through SSH, or over a local Unix socket. macOS and Linux are supported.
+A keyboard-first terminal console for **Mihomo clients and proxy servers**, including existing cores managed by Clash Verge Rev and explicitly lazyclash-owned installations. Works locally, over HTTPS, through SSH, or over a local Unix socket. macOS, Linux and Windows releases are available; host-specific operations retain their platform requirements.
 
 Manage runtime state, edit and share source-backed nodes/groups, use a selected proxy from your shell or Docker, compare targets, and diagnose routing. `setup` installs native or Docker clients with an offline regional starter and optional reviewed TUN/system-proxy configuration. Clash Verge companion edits require native profile reactivation. See the [knowledge and operating guide](docs/README.md), [reference index](docs/references.md), and [future milestones](TODO.md).
 
@@ -18,9 +18,41 @@ plus private HTTP/SOCKS gateways over Serve TCP or a Tailnet IP. Saved ownership
 runtime TUN handoff and scoped lifecycle keep exit routing and proxy sharing
 separate. See [Tailscale exits and private proxies](docs/tailnet.md).
 
+## Windows installation and upgrades
+
+```powershell
+scoop bucket add daviddwlee84 https://github.com/daviddwlee84/scoop-bucket
+scoop install daviddwlee84/lazyclash
+lazyclash upgrade --check --json
+lazyclash upgrade
+```
+
+Windows v0.2.0+ releases include amd64/arm64 ZIPs and PowerShell completion.
+Scoop owns the installed executable. Upgrade verifies its receipt, current
+junction, product identity and manager, then starts a private helper outside the
+package and exits so Scoop can replace the executable. Interactive use opens a
+progress window. A `handed-off` result confirms acceptance; only the later
+`updated` or `up-to-date` result confirms successful completion.
+
+For automation, add `--json` and run the returned `status_command` to poll the
+private helper. Do not poll the installed executable during the update, because
+Scoop refuses to update a running package. Once finished,
+`lazyclash upgrade --status <operation-id> --json` reads the saved result.
+If the launching host retains process lifetime control, keep that terminal open
+until the final result. Interrupted, canceled, blocked and failed operations
+retain their status and log paths; none claims successful rollback or falls
+back to another installer. Close other instances before retrying.
+
+`--check` is read-only and does not refresh buckets or promise a remote latest
+version. Successful completion reports the version actually installed. Manually
+extracted Windows ZIPs need manual replacement while closed; package ownership and Windows process guards cannot be overridden. Installing the CLI does not
+configure its backends, services or credentials.
+
+Persistent shell proxy sessions and local POSIX source helpers remain Unix-only. Use explicit Windows controller targets and the managed Windows host adapter for supported source operations.
+
 ## Prebuilt releases
 
-Download the archive for your macOS/Linux amd64/arm64 platform from
+Download the archive for your macOS/Linux/Windows amd64/arm64 platform from
 [GitHub Releases](https://github.com/daviddwlee84/lazyclash/releases).
 Verify it against `checksums.txt` before extracting. Archives contain the
 `lazyclash` executable, MIT license, and Bash/Zsh completions. Go is only needed
