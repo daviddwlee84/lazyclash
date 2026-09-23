@@ -393,18 +393,28 @@ func runCommand(ctx context.Context, program string, args []string, progress io.
 	cmd.Stdout, cmd.Stderr = progress, progress
 	if query {
 		cmd.Stdout = &output
-		for _, entry := range os.Environ() {
-			if !strings.HasPrefix(entry, "HOMEBREW_NO_AUTO_UPDATE=") {
-				cmd.Env = append(cmd.Env, entry)
-			}
-		}
-		cmd.Env = append(cmd.Env, "HOMEBREW_NO_AUTO_UPDATE=1")
+		cmd.Env = withEnv("HOMEBREW_NO_AUTO_UPDATE", "1")
+	} else if len(args) > 0 && args[0] == "upgrade" {
+		// Homebrew skips its tap refresh for HOMEBREW_AUTO_UPDATE_SECS after the
+		// last one, which would report a just-published formula as current. An
+		// explicit HOMEBREW_NO_AUTO_UPDATE still wins.
+		cmd.Env = withEnv("HOMEBREW_AUTO_UPDATE_SECS", "0")
 	}
 	err := cmd.Run()
 	if ctx.Err() != nil {
 		return "", ctx.Err()
 	}
 	return output.String(), err
+}
+
+func withEnv(key, value string) []string {
+	var env []string
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, key+"=") {
+			env = append(env, entry)
+		}
+	}
+	return append(env, key+"="+value)
 }
 
 type limitedOutput struct{ buffer bytes.Buffer }

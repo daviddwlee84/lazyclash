@@ -6,6 +6,11 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 
 ## Unreleased
 
+- Homebrew-owned `upgrade` now refreshes taps even within Homebrew's
+  auto-update interval, so a just-published formula is not reported as current;
+  `HOMEBREW_NO_AUTO_UPDATE` is still honored. Releases also ask the tap to sync
+  immediately when a dispatch token is configured.
+
 ## 0.1.12 — 2026-09-23
 
 - Targets accept Windows source paths (`C:/...`) and owned native activation.

@@ -21,7 +21,9 @@ release binaries and retained symlinks are supported. Destination changes,
 concurrent updates and failed candidate validation preserve the original.
 
 Provenance is evidence, not perfect installer detection. Homebrew-owned copies
-delegate to the installed formula's `brew upgrade`. The keg receipt and owning
+delegate to the installed formula's `brew upgrade`, which refreshes taps even
+inside Homebrew's auto-update interval unless `HOMEBREW_NO_AUTO_UPDATE` is set.
+The keg receipt and owning
 Cellar determine the target; a different Homebrew on PATH is rejected.
 `upgrade --check` only previews this command and does not need GitHub metadata.
 After success, the updater verifies the stable `opt` executable and reports its

@@ -61,3 +61,16 @@ jobs:
         run: go test ./internal/selfupdate -run '^TestReleaseArtifact$' -count=1 -v
       - name: Publish only a complete, verified release
         run: python3 "$RUNNER_TEMP/release-publisher.py" publish --project lazyclash --binary lazyclash --repo "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG"
+      - name: Request Homebrew tap formula sync
+        # The tap's hourly schedule is delayed by GitHub; ask it to sync now.
+        # github.token cannot dispatch another repository's workflow, so this
+        # needs a fine-grained token with Actions write on homebrew-tap only.
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::notice::HOMEBREW_TAP_DISPATCH_TOKEN is not set; the tap syncs on its hourly schedule"
+            exit 0
+          fi
+          GH_TOKEN="$TAP_TOKEN" gh workflow run sync.yml -R daviddwlee84/homebrew-tap -f tool=lazyclash \
+            || echo "::warning::Homebrew tap sync dispatch failed; the tap syncs on its hourly schedule"
