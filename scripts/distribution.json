@@ -10,7 +10,9 @@
     "internal/tailnet/host.py",
     "internal/tailnetproxy/helper.py",
     "internal/serverdeploy/helper.py",
-    "internal/proxyenv/shell.sh"
+    "internal/proxyenv/shell.sh",
+    "internal/connection/powershell_rpc.ps1",
+    "internal/managedcore/windows_host.ps1"
   ],
   "smoke": [
     [

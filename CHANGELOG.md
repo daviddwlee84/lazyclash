@@ -6,6 +6,16 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 
 ## Unreleased
 
+## 0.1.12 — 2026-09-23
+
+- Targets accept Windows source paths (`C:/...`) and owned native activation.
+  Clone an active target into an independent Windows Verge or background Mihomo
+  client with its resources, manual selections and saved connectivity checks,
+  using user-logon tasks, guarded proxy handoff and resumable receipts over
+  verified SFTP.
+- Windows process exits are confirmed by a fresh PID lookup, and default
+  lifecycle website probes get one bounded warmup retry with per-site evidence.
+- Saved connectivity checks honor their full request budget.
 - Added `rpi-immortalwrt` rule and node/group sources that hand edits, Selector
   switches and LAN device inventory to the RPi-ImmortalWrt project's broker.
   Targets keep a `[targets.managed_rpi]` owner boundary, reviewed digests,
