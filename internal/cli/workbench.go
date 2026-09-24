@@ -18,6 +18,9 @@ func (o *options) runWorkbench(ctx context.Context, r tui.WorkRequest) (tui.Work
 	if strings.HasPrefix(r.Kind, "servers-") {
 		return o.runServerWorkbench(ctx, r)
 	}
+	if r.Kind == "rule-diff" || r.Kind == "rule-find" || r.Kind == "rule-lookup" {
+		return o.runRuleInspectWorkbench(ctx, r)
+	}
 	if strings.HasPrefix(r.Kind, "quick-rule-") || r.Kind == "rule-healthcheck" {
 		return o.runQuickRuleWorkbench(ctx, r)
 	}

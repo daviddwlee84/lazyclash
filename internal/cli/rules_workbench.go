@@ -23,6 +23,7 @@ func (o *options) runQuickRuleWorkbench(ctx context.Context, req tui.WorkRequest
 	switch req.Kind {
 	case "quick-rule-preview":
 		plan, err := rulework.PreviewRules(ctx, req.Targets, req.Rule, req.All, opts)
+		o.ruleGuidanceContext(cmd, &plan)
 		result := quickRulePreviewResult(req, plan)
 		if err != nil {
 			result.Apply = nil
@@ -45,6 +46,13 @@ func quickRulePreviewResult(req tui.WorkRequest, plan rulework.QuickPlan) tui.Wo
 		label := target.TargetID + " · " + target.Status
 		lines = append(lines, label)
 		detail := []string{label, target.Message}
+		if target.ReasonCode != "" {
+			detail = append(detail, "Reason: "+target.ReasonCode)
+		}
+		if len(target.NextCommands) > 0 {
+			detail = append(detail, "Suggested commands:")
+			detail = append(detail, target.NextCommands...)
+		}
 		if target.Owner != nil {
 			detail = append(detail, "Owner: "+target.Owner.Kind, "File: "+target.Owner.File)
 			detail = append(detail, target.Owner.Warnings...)
@@ -94,6 +102,19 @@ func ruleHealthResult(report rulework.HealthReport) tui.WorkResult {
 		if target.Owner != nil {
 			detail = append(detail, "Owner: "+target.Owner.Kind, "File: "+target.Owner.File)
 		}
+		if target.Snapshot != nil {
+			if target.Snapshot.SourceBinding != "" {
+				detail = append(detail, "Source binding: "+target.Snapshot.SourceBinding)
+			}
+			for _, lane := range []struct {
+				name string
+				view *rulework.RulesView
+			}{{"Runtime", target.Snapshot.Runtime}, {"Source", target.Snapshot.Source}} {
+				if lane.view != nil {
+					detail = append(detail, lane.name+" snapshot: "+lane.view.Status+" · "+lane.view.Message)
+				}
+			}
+		}
 		detail = append(detail, ruleFindingLines(target.Findings)...)
 		for _, source := range []struct {
 			label  string
@@ -112,6 +133,10 @@ func ruleHealthResult(report rulework.HealthReport) tui.WorkResult {
 		}
 		for _, limitation := range target.Limitations {
 			detail = append(detail, "Coverage: "+limitation)
+		}
+		if target.Drift != nil {
+			detail = append(detail, "\nPersistent source (-) → runtime (+) drift:")
+			detail = append(detail, ruleDiffLines(*target.Drift)...)
 		}
 		result.Rows = append(result.Rows, tui.WorkRow{ID: target.TargetID, Label: label, Detail: strings.Join(detail, "\n")})
 	}

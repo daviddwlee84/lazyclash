@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
+	"strings"
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
-	"github.com/daviddwlee84/lazyclash/internal/core"
 	"github.com/daviddwlee84/lazyclash/internal/rulecheck"
 	"go.yaml.in/yaml/v3"
 )
@@ -27,6 +26,9 @@ func Healthcheck(ctx context.Context, targets []config.Target, all bool, opts Op
 		}
 		h := healthTarget(ctx, t, opts)
 		report.Targets = append(report.Targets, h)
+		if err := ctx.Err(); err != nil {
+			return report, err
+		}
 		if h.Runtime != nil || h.Source != nil {
 			usable++
 		}
@@ -49,90 +51,163 @@ func Healthcheck(ctx context.Context, targets []config.Target, all bool, opts Op
 }
 
 func healthTarget(ctx context.Context, t config.Target, opts Options) TargetHealth {
-	h := TargetHealth{TargetID: t.ID, Status: "checked", ObservedAt: time.Now().UTC().Format(time.RFC3339), Findings: []rulecheck.Finding{}}
-	var sourceRules []rulecheck.Rule
-	if t.RuleSource != nil {
-		source, err := inspectSource(ctx, t, opts)
-		if err == nil {
-			h.Owner = &source
-			sourceRules, err = sourceRuleList(source)
-			if err == nil {
-				r := rulecheck.Analyze(sourceRules, nil)
-				r.Findings = append(r.Findings, sourceReferenceFindings(source, sourceRules, nil)...)
-				h.Source = &r
+	snapshot, _ := ReadRulesSnapshot(ctx, t, "both", opts)
+	h := TargetHealth{TargetID: t.ID, Status: "checked", ObservedAt: snapshot.ObservedAt, Owner: snapshot.Owner, Mode: snapshot.Mode, Providers: snapshot.Providers, Snapshot: &snapshot, Findings: []rulecheck.Finding{}}
+	h.Limitations = append(h.Limitations, snapshot.Limitations...)
+	if snapshot.Source != nil {
+		h.Limitations = append(h.Limitations, snapshot.Source.Limitations...)
+		if snapshot.Source.Status == "available" {
+			rules := activeSnapshotRules(snapshot.Source.Entries)
+			report := rulecheck.Analyze(rules, snapshot.Policies)
+			if snapshot.source != nil {
+				report.Findings = append(report.Findings, sourceReferenceFindings(*snapshot.source, rules, snapshot.Policies)...)
 			}
-			for _, w := range source.Warnings {
-				h.Findings = append(h.Findings, finding("warning", "owner_context", w))
+			h.Source = &report
+			for _, warning := range snapshot.Owner.Warnings {
+				h.Findings = append(h.Findings, finding("warning", "owner_context", warning))
 			}
-			if source.Kind == "verge" {
-				h.Limitations = append(h.Limitations, "Source analysis covers the bound Rules companion prepend/append; base profile, Merge and Script composition is represented only by the separate runtime snapshot.")
-			}
-		}
-		if err != nil {
-			severity := "error"
-			if errors.Is(err, ErrSourceUnavailable) {
-				severity = "warning"
-				h.Status = "partial"
-			}
-			h.Findings = append(h.Findings, finding(severity, "source_unavailable", err.Error()))
-		}
-	} else {
-		h.Limitations = append(h.Limitations, "No persistent rule source is bound; original configuration syntax cannot be verified.")
-	}
-	client, cleanup, err := openCore(ctx, t, true, opts)
-	if err != nil {
-		h.Message = core.Sanitize(err.Error())
-		h.Status = "skipped_unavailable"
-		if h.Source != nil {
+		} else if snapshot.Source.Status == "error" {
+			h.Findings = append(h.Findings, finding("error", "source_unavailable", snapshot.Source.Message))
+		} else if snapshot.SourceBinding != "" {
 			h.Status = "partial"
+			h.Findings = append(h.Findings, finding("warning", "source_unavailable", snapshot.Source.Message))
 		}
-		return finalizeHealth(h)
 	}
-	defer cleanup()
-	var policies map[string]bool
-	if proxies, e := client.Proxies(ctx); e == nil {
-		policies = policyNames(proxies)
-	} else {
-		h.Limitations = append(h.Limitations, "Policy availability could not be checked.")
-	}
-	if h.Source != nil {
-		r := rulecheck.Analyze(sourceRules, policies)
-		r.Findings = append(r.Findings, sourceReferenceFindings(*h.Owner, sourceRules, policies)...)
-		h.Source = &r
-	}
-	if object, e := client.Rules(ctx); e == nil {
-		list, e := runtimeRuleList(object)
-		if e != nil {
-			h.Findings = append(h.Findings, finding("error", "invalid_runtime", e.Error()))
+	if snapshot.Runtime != nil {
+		h.Limitations = append(h.Limitations, snapshot.Runtime.Limitations...)
+		if snapshot.Runtime.Status == "available" {
+			report := rulecheck.Analyze(activeSnapshotRules(snapshot.Runtime.Entries), snapshot.Policies)
+			h.Runtime = &report
 		} else {
-			r := rulecheck.Analyze(list, policies)
-			h.Runtime = &r
-			h.Limitations = append(h.Limitations, "Runtime rules do not expose all source options (including no-resolve); matching entries do not prove identical source semantics.")
-			for _, rule := range sourceRules {
-				if rule.Invalid == "" && !rule.Opaque && !runtimeHasRule(list, rule) {
-					h.Findings = append(h.Findings, rulecheck.Finding{Severity: "warning", Code: "source_runtime_drift", Index: rule.Index, Message: "Source rule is absent or disabled in runtime: " + rule.String()})
+			h.Message = snapshot.Runtime.Message
+			h.Status = "partial"
+			if snapshot.Runtime.Status == "error" {
+				h.Findings = append(h.Findings, finding("error", "invalid_runtime", snapshot.Runtime.Message))
+			}
+		}
+	}
+	if snapshot.Source != nil && snapshot.Runtime != nil && snapshot.Source.Status == "available" && snapshot.Runtime.Status == "available" {
+		drift := snapshotDrift(snapshot)
+		h.Drift = &drift
+		h.Limitations = append(h.Limitations, drift.Limitations...)
+		for _, change := range drift.Changes {
+			index := -1
+			if change.Left != nil {
+				index = change.Left.Rule.Index
+			}
+			message := "Source/runtime rule difference: " + change.Kind
+			if change.Kind == "removed" {
+				message = "Declared in the inspected source but not present in runtime"
+			}
+			if change.Kind == "added" {
+				message = "Present in runtime but not declared in the inspected source"
+			}
+			if change.Left != nil {
+				message += ": " + change.Left.Rule.String()
+			} else if change.Right != nil {
+				message += ": " + change.Right.Rule.String()
+			}
+			if len(change.Fields) > 0 {
+				message += " (" + strings.Join(change.Fields, ", ") + ")"
+			}
+			f := rulecheck.Finding{Severity: "warning", Code: "source_runtime_drift", Index: index, Message: message}
+			if change.Left != nil {
+				f.Rule = change.Left.Rule.String()
+			}
+			if change.Right != nil {
+				if change.Left == nil {
+					f.Rule = change.Right.Rule.String()
+					f.Index = change.Right.Rule.Index
+				} else {
+					related := change.Right.Rule.Index
+					f.RelatedIndex = &related
+					f.RelatedRule = change.Right.Rule.String()
+				}
+			}
+			h.Findings = append(h.Findings, f)
+		}
+	}
+	if h.Mode != "" && h.Mode != "rule" {
+		h.Findings = append(h.Findings, finding("warning", "runtime_mode", "Runtime mode is "+h.Mode+"; routing rules may not determine traffic."))
+	}
+	return finalizeHealth(h)
+}
+
+func activeSnapshotRules(entries []rulecheck.Entry) []rulecheck.Rule {
+	rules := []rulecheck.Rule{}
+	for _, entry := range entries {
+		if entry.Section == "delete" {
+			continue
+		}
+		rule := entry.Rule
+		rule.Index = len(rules)
+		rules = append(rules, rule)
+	}
+	return rules
+}
+
+func snapshotDrift(snapshot RulesSnapshot) rulecheck.DiffReport {
+	project := func(entries []rulecheck.Entry) []rulecheck.Entry {
+		out := []rulecheck.Entry{}
+		for _, entry := range entries {
+			if entry.Section == "delete" {
+				continue
+			}
+			entry.Section = "rules"
+			out = append(out, entry)
+		}
+		return out
+	}
+	left, right := project(snapshot.Source.Entries), project(snapshot.Runtime.Entries)
+	if snapshot.Source.Shape != "verge-companion" {
+		return rulecheck.CompareEntries(left, right, true)
+	}
+	// A companion owns declarations inserted around an otherwise unknown base.
+	// Match only those declarations, preserving multiplicity and ignoring normal
+	// runtime baseline additions and source/runtime absolute index differences.
+	selected := []rulecheck.Entry{}
+	used := make([]bool, len(right))
+	for _, want := range left {
+		match := -1
+		for j, actual := range right {
+			if !used[j] && sameSnapshotSelector(want.Rule, actual.Rule) && want.Rule.Policy == actual.Rule.Policy && want.Rule.Disabled == actual.Rule.Disabled {
+				match = j
+				break
+			}
+		}
+		if match < 0 {
+			for j, actual := range right {
+				if !used[j] && sameSnapshotSelector(want.Rule, actual.Rule) {
+					match = j
+					break
 				}
 			}
 		}
-	} else {
-		h.Message = core.Sanitize(e.Error())
-		h.Status = "partial"
-		h.Limitations = append(h.Limitations, "Runtime rules could not be read.")
-	}
-	if c, e := client.Config(ctx); e == nil {
-		h.Mode, _ = c["mode"].(string)
-		if h.Mode != "" && h.Mode != "rule" {
-			h.Findings = append(h.Findings, finding("warning", "runtime_mode", "Runtime mode is "+h.Mode+"; routing rules may not determine traffic."))
+		if match >= 0 {
+			used[match] = true
+			selected = append(selected, right[match])
 		}
 	}
-	if object, e := client.Providers(ctx, "rules"); e == nil {
-		if providers, ok := object["providers"].(map[string]any); ok {
-			h.Providers = len(providers)
+	report := rulecheck.CompareEntries(left, selected, true)
+	// Presence checks cannot establish the complete native ordering of a Verge
+	// profile; absolute baseline offsets must not be reported as moved rules.
+	filtered := report.Changes[:0]
+	for _, change := range report.Changes {
+		if change.Kind != "moved" {
+			filtered = append(filtered, change)
 		}
-	} else {
-		h.Limitations = append(h.Limitations, "Rule provider metadata could not be read.")
 	}
-	return finalizeHealth(h)
+	report.Changes = filtered
+	report.Equal = len(report.Changes) == 0
+	report.Limitations = append(report.Limitations, "Verge drift checks only declared active companion entries; runtime baseline additions, delete directives and complete profile/Merge/Script ordering are not compared.")
+	return report
+}
+
+func sameSnapshotSelector(a, b rulecheck.Rule) bool {
+	// Keep the same known aliases and literal-only boundary as exact queries.
+	// Empty opaque selector fields are never evidence that two rules match.
+	report := rulecheck.FindEntries([]rulecheck.Entry{{Section: "rules", Rule: b}}, a, true)
+	return len(report.Matches) > 0
 }
 
 // These references have a known flat grammar even though the provider/geodata
@@ -188,6 +263,9 @@ func FormatQuickPlan(p QuickPlan) string {
 	text := fmt.Sprintf("Rule: %s\nStatus: %s\nDigest: %s\n", p.Rule, p.Status, p.Digest)
 	for _, t := range p.Targets {
 		text += fmt.Sprintf("\n%s: %s\n", t.TargetID, t.Status)
+		if t.ReasonCode != "" {
+			text += "Reason: " + t.ReasonCode + "\n"
+		}
 		if t.Owner != nil {
 			text += "Source: " + t.Owner.File + " (" + t.Owner.Kind + ")\n"
 		}
@@ -196,6 +274,9 @@ func FormatQuickPlan(p QuickPlan) string {
 		}
 		if t.Message != "" {
 			text += t.Message + "\n"
+		}
+		for _, command := range t.NextCommands {
+			text += "Next: " + command + "\n"
 		}
 		for _, f := range t.Findings {
 			where := ""

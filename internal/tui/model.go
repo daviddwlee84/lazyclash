@@ -132,6 +132,7 @@ type Model struct {
 	workSerial        uint64
 	quickRuleDraft    string
 	quickRuleScope    string
+	ruleInspectDrafts map[string]WorkRequest
 	options           Options
 	settings          config.Config
 	target            config.Target

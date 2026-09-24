@@ -15,6 +15,8 @@ type QuickTargetPlan struct {
 	TargetID        string              `json:"target_id"`
 	Status          string              `json:"status"`
 	Message         string              `json:"message,omitempty"`
+	ReasonCode      string              `json:"reason_code,omitempty"`
+	NextCommands    []string            `json:"next_commands,omitempty"`
 	Digest          string              `json:"digest,omitempty"`
 	Diff            string              `json:"diff,omitempty"`
 	Owner           *Source             `json:"owner,omitempty"`
@@ -56,15 +58,17 @@ type HealthReport struct {
 }
 
 type TargetHealth struct {
-	TargetID    string              `json:"target_id"`
-	Status      string              `json:"status"`
-	Message     string              `json:"message,omitempty"`
-	ObservedAt  string              `json:"observed_at"`
-	Owner       *Source             `json:"owner,omitempty"`
-	Mode        string              `json:"mode,omitempty"`
-	Providers   int                 `json:"providers"`
-	Source      *rulecheck.Report   `json:"source,omitempty"`
-	Runtime     *rulecheck.Report   `json:"runtime,omitempty"`
-	Findings    []rulecheck.Finding `json:"findings"`
-	Limitations []string            `json:"limitations,omitempty"`
+	Snapshot    *RulesSnapshot        `json:"snapshot,omitempty"`
+	Drift       *rulecheck.DiffReport `json:"drift,omitempty"`
+	TargetID    string                `json:"target_id"`
+	Status      string                `json:"status"`
+	Message     string                `json:"message,omitempty"`
+	ObservedAt  string                `json:"observed_at"`
+	Owner       *Source               `json:"owner,omitempty"`
+	Mode        string                `json:"mode,omitempty"`
+	Providers   int                   `json:"providers"`
+	Source      *rulecheck.Report     `json:"source,omitempty"`
+	Runtime     *rulecheck.Report     `json:"runtime,omitempty"`
+	Findings    []rulecheck.Finding   `json:"findings"`
+	Limitations []string              `json:"limitations,omitempty"`
 }

@@ -128,8 +128,12 @@ func TestQuickRuleCLIHealthAndSourceReuse(t *testing.T) {
 	}
 	out, _, err := run(t, Dependencies{}, "rules", "healthcheck", "--json")
 	var report rulework.HealthReport
-	if err != nil || json.Unmarshal([]byte(out), &report) != nil || report.Targets[0].Runtime == nil || report.Targets[0].Source != nil {
+	if err != nil || json.Unmarshal([]byte(out), &report) != nil || report.Targets[0].Runtime == nil || report.Targets[0].Source == nil || report.Targets[0].Snapshot == nil || report.Targets[0].Snapshot.SourceBinding != "config_source" {
 		t.Fatal(out, err)
+	}
+	unchanged, e := config.Load(settings, true)
+	if e != nil || unchanged.Targets[0].RuleSource != nil {
+		t.Fatal("read-only inspection created a rule binding", e)
 	}
 	if _, _, err = run(t, Dependencies{}, "rules", "source", "set", "--from-config-source", "--kind", "verge"); err == nil {
 		t.Fatal("mixed source flags accepted")

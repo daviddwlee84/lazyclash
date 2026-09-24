@@ -13,7 +13,7 @@ func TestQuickWorkbenchPreviewPreservesBlockedFindingsAndGuardsApply(t *testing.
 	proposed := -1
 	plan := rulework.QuickPlan{Status: "blocked", Rule: "DOMAIN,example.com,DIRECT", Targets: []rulework.QuickTargetPlan{
 		{TargetID: "ready", Status: "ready", Diff: "+ DOMAIN,example.com,DIRECT"},
-		{TargetID: "bad", Status: "blocked", Findings: []rulecheck.Finding{{Index: 4, RelatedIndex: &proposed, Severity: "error", Code: "conflict", Rule: "DOMAIN,example.com,PROXY", RelatedRule: "DOMAIN,example.com,DIRECT", Message: "different action"}}, Limitations: []string{"provider members opaque"}},
+		{TargetID: "bad", Status: "blocked", ReasonCode: "source_unbound", NextCommands: []string{"lazyclash --target bad rules source show"}, Findings: []rulecheck.Finding{{Index: 4, RelatedIndex: &proposed, Severity: "error", Code: "conflict", Rule: "DOMAIN,example.com,PROXY", RelatedRule: "DOMAIN,example.com,DIRECT", Message: "different action"}}, Limitations: []string{"provider members opaque"}},
 	}}
 	result := quickRulePreviewResult(tui.WorkRequest{}, plan)
 	if result.Apply != nil || len(result.Rows) != 2 || !strings.Contains(result.Rows[1].Detail, "rule #5 / proposed rule: different action") || !strings.Contains(result.Rows[1].Detail, "provider members opaque") || !strings.Contains(result.Rows[0].Detail, plan.Targets[0].Diff) {
@@ -21,6 +21,9 @@ func TestQuickWorkbenchPreviewPreservesBlockedFindingsAndGuardsApply(t *testing.
 	}
 	if !strings.Contains(result.Rows[1].Detail, "Rule: DOMAIN,example.com,PROXY") || !strings.Contains(result.Rows[1].Detail, "Related: DOMAIN,example.com,DIRECT") {
 		t.Fatal("conflict omitted concrete expressions")
+	}
+	if !strings.Contains(result.Rows[1].Detail, "Reason: source_unbound") || !strings.Contains(result.Rows[1].Detail, "lazyclash --target bad rules source show") {
+		t.Fatal("preview omitted actionable source binding guidance")
 	}
 	plan.Status, plan.Digest, plan.Targets = "ready", "approved", plan.Targets[:1]
 	result = quickRulePreviewResult(tui.WorkRequest{All: true}, plan)

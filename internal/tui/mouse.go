@@ -111,7 +111,7 @@ func (m *Model) toolbar(width int) (string, []hitRegion) {
 	case logs:
 		wanted = []string{"log-follow", "log-level", "log-clear"}
 	case rules:
-		wanted = []string{"work-rule-quick", "work-rule-health", "refresh", "targets"}
+		wanted = []string{"work-rule-quick", "work-rule-health", "work-rule-diff", "work-rule-find", "work-rule-lookup", "refresh", "targets"}
 	case providers:
 		wanted = []string{"provider-update", "provider-health"}
 	case configs:
@@ -124,6 +124,7 @@ func (m *Model) toolbar(width int) (string, []hitRegion) {
 	short["authenticate"], short["reconnect"] = "Authenticate", "Reconnect"
 	short["tool-checks"] = "Checks"
 	short["work-rule-quick"], short["work-rule-health"] = "Quick apply", "Healthcheck"
+	short["work-rule-diff"], short["work-rule-find"], short["work-rule-lookup"] = "Diff", "Find", "Lookup"
 	short["tool-proxy-add"], short["tool-proxy-edit"], short["tool-proxy-export"] = "Add", "Edit", "Share"
 	if m.page == overview {
 		short["mode"] = "Mode: " + defaultString(m.routingMode(), "?")

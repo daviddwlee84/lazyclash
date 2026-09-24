@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"runtime"
 	"strings"
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
@@ -79,6 +80,7 @@ func (o *options) quickRuleCommands() []*cobra.Command {
 		} else {
 			err = o.authenticatedDiagnostic(cmd, targets[0], preview)
 		}
+		o.ruleGuidanceContext(cmd, &p)
 		interactive := !o.json && o.deps.Terminal(cmd.InOrStdin(), cmd.OutOrStdout())
 		if !yes || err != nil {
 			if o.json {
@@ -148,6 +150,24 @@ func (o *options) quickRuleCommands() []*cobra.Command {
 	}}
 	health.Flags().BoolVar(&healthAll, "all", false, "inspect all saved targets and report unavailable sources")
 	return []*cobra.Command{apply, health}
+}
+
+// Suggested binding commands must retain an explicitly selected settings file;
+// otherwise the same target ID could refer to a different registered machine.
+func (o *options) ruleGuidanceContext(cmd *cobra.Command, p *rulework.QuickPlan) {
+	path, explicit, err := o.settingsPath(cmd)
+	if err != nil || (!explicit && o.path == "") {
+		return
+	}
+	quoted := "'" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
+	if runtime.GOOS == "windows" {
+		quoted = "'" + strings.ReplaceAll(path, "'", "''") + "'"
+	}
+	for i := range p.Targets {
+		for j, next := range p.Targets[i].NextCommands {
+			p.Targets[i].NextCommands[j] = strings.Replace(next, "lazyclash ", "lazyclash --config "+quoted+" ", 1)
+		}
+	}
 }
 
 // Keep canonical terminal line editing and a negative default. Only the command

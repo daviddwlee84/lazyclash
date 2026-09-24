@@ -269,7 +269,7 @@ func New(deps Dependencies) *cobra.Command {
 	f.StringVar(&o.secretEnv, "secret-env", "", "environment variable containing the controller secret")
 	f.StringVar(&o.caFile, "ca-cert", "", "PEM CA certificate for HTTPS")
 	f.BoolVar(&o.json, "json", false, "JSON data output; logs emit NDJSON")
-	f.BoolVar(&o.readOnly, "read-only", false, "disable control actions, latency tests and healthchecks")
+	f.BoolVar(&o.readOnly, "read-only", false, "disable control actions and active probes; passive rule inspection remains available")
 	root.AddCommand(o.targetCommands(), o.configCommands(), o.statusCommand(), o.proxyCommands(), o.proxyCommand(), o.connectionCommands(), o.logsCommand(), o.rulesCommand(), o.providerCommands(), o.modeCommand(), o.tunCommand(), o.allowLANCommand(), o.settingsCommand())
 	root.AddCommand(o.skillCommand(), o.diagnosticsCommand(), o.upgradeCommand(), o.groupsCommand(), o.setupCommand(), o.coresCommand())
 	root.AddCommand(o.vpsCommand(), o.serversCommand(), o.tailnetCommand())

@@ -9,6 +9,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/rulework"
 	"github.com/daviddwlee84/lazyclash/internal/sourceowner"
 	"github.com/spf13/cobra"
+	"strings"
 )
 
 func (o *options) ruleOptions(cmd *cobra.Command) rulework.Options {
@@ -177,6 +178,13 @@ func (o *options) ruleAddCommand(ip bool) *cobra.Command {
 	var yes bool
 	add := &cobra.Command{Use: use, Short: short, Args: argsExact(1), RunE: func(cmd *cobra.Command, args []string) error {
 		defer connection.CloseAuthentications()
+		if strings.Contains(args[0], ",") || strings.HasPrefix(strings.TrimSpace(args[0]), "- ") {
+			value := "a hostname"
+			if ip {
+				value = "an IP address or prefix"
+			}
+			return usage("%s accepts %s, not a complete rule; use rules apply --dry-run -- %s (keep your --target selection)", cmd.Name(), value, "'"+strings.ReplaceAll(args[0], "'", "'\"'\"'")+"'")
+		}
 		if policy == "" {
 			return usage("--%s must select an existing proxy or group", flag)
 		}

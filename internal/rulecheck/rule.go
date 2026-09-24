@@ -27,9 +27,12 @@ type Rule struct {
 	SourceIP  bool     `json:"source_ip,omitempty"`
 	NoResolve bool     `json:"no_resolve,omitempty"`
 	Opaque    bool     `json:"opaque,omitempty"`
-	Invalid   string   `json:"invalid,omitempty"`
-	Disabled  bool     `json:"disabled,omitempty"`
-	Raw       string   `json:"raw,omitempty"`
+	// LiteralOnly identifies a query whose outer grammar is unknown. Its
+	// apparent payload/policy must never become a reported selector key.
+	LiteralOnly bool   `json:"literal_only,omitempty"`
+	Invalid     string `json:"invalid,omitempty"`
+	Disabled    bool   `json:"disabled,omitempty"`
+	Raw         string `json:"raw,omitempty"`
 }
 
 // Parse accepts one raw scalar or one YAML string item. It only accepts the
@@ -85,11 +88,8 @@ func parse(raw string, index int, existing bool) Rule {
 	if strings.TrimSpace(raw) == "" || strings.IndexFunc(raw, unicode.IsControl) >= 0 {
 		return fail("rule must be nonempty and contain no control characters")
 	}
-	parts, balanced := split(raw)
-	if len(parts) == 0 {
-		return fail("rule is empty")
-	}
-	r.Type = strings.ToUpper(parts[0])
+	head, _, _ := strings.Cut(raw, ",")
+	r.Type = strings.ToUpper(strings.TrimSpace(head))
 	if r.Type == "" {
 		return fail("rule type must be nonempty")
 	}
@@ -98,15 +98,18 @@ func parse(raw string, index int, existing bool) Rule {
 		common, r.SourceIP, r.NoResolve = true, true, true
 	}
 	if !common {
-		r.Opaque = true
-		// Preserve familiar outer fields for policy counts and reference checks;
-		// nested expressions and unknown syntax remain deliberately unvalidated.
-		if balanced && len(parts) >= 3 {
-			r.Payload, r.Policy = parts[1], parts[2]
-			r.Options = append([]string(nil), parts[3:]...)
+		if existing {
+			if parsed, err := parseQueryValue(raw); err == nil {
+				parsed.Index = index
+				return parsed
+			}
 		}
+		// Unknown grammar or malformed opaque outer shape must not fabricate
+		// exposed fields or block unrelated edits as a claimed syntax error.
+		r.Opaque, r.LiteralOnly = true, true
 		return r
 	}
+	parts, balanced := split(raw)
 	if !balanced {
 		return fail("rule contains unbalanced parentheses")
 	}
@@ -250,7 +253,7 @@ func (r Rule) String() string {
 // SelectorKey excludes policy and DNS-resolution behavior, but source and
 // destination IPs are different selectors. Opaque/invalid rules have no key.
 func (r Rule) SelectorKey() string {
-	if r.Opaque || r.Invalid != "" || r.Type == "" {
+	if r.Opaque || r.LiteralOnly || r.Invalid != "" || r.Type == "" {
 		return ""
 	}
 	return fmt.Sprintf("%s\x00%s\x00%t", r.Type, r.Payload, r.SourceIP)

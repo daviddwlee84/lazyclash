@@ -96,6 +96,7 @@ func (m *Model) formKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case "esc":
 		m.retainQuickRuleDraft()
+		m.retainRuleInspectionDraft()
 		m.invalidateTargetTest()
 		m.overlay = ""
 		m.form = nil
@@ -128,6 +129,16 @@ func (m *Model) submitForm() tea.Cmd {
 	f := m.form
 	value := func(i int) string { return strings.TrimSpace(f.fields[i].value) }
 	switch f.kind {
+	case "work-rule-find", "work-rule-lookup":
+		kind := strings.TrimPrefix(f.kind, "work-")
+		req := m.ruleInspectionRequest(kind)
+		req.Query = value(0)
+		m.rememberRuleInspection(req)
+		if req.Query == "" {
+			f.err = "Enter a rule or a host/IP to inspect"
+			return nil
+		}
+		return m.startRuleInspectionScope(req)
 	case "work-rule-quick":
 		m.quickRuleDraft = value(0)
 		if m.quickRuleDraft == "" {

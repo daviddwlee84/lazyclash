@@ -46,6 +46,9 @@ func (m *Model) actions() []action {
 		{"work-rule", "Preview / add domain rule", nil, m.options.Workbench != nil && m.target.ID != ""},
 		{"work-rule-quick", "Quick apply routing rule · target / all", ruleKeys(m.page, "n"), m.options.Workbench != nil && len(m.settings.Targets) > 0},
 		{"work-rule-health", "Rules healthcheck · target / all", ruleKeys(m.page, "H"), m.options.Workbench != nil && len(m.settings.Targets) > 0},
+		{"work-rule-diff", "Compare rules · baseline / target / all", ruleKeys(m.page, "d"), m.options.Workbench != nil && len(m.savedRuleInspectionTargets("")) > 1},
+		{"work-rule-find", "Find exact rule · runtime / source", ruleKeys(m.page, "f"), m.options.Workbench != nil && len(m.savedRuleInspectionTargets("")) > 0},
+		{"work-rule-lookup", "Look up host / IP · static rule candidates", ruleKeys(m.page, "L"), m.options.Workbench != nil && len(m.savedRuleInspectionTargets("")) > 0},
 		{"work-source", "Bind persistent rule source", nil, m.options.Workbench != nil && m.target.ID != ""},
 		{"work-source-reuse", "Bind rule source from node / group source", nil, m.options.Workbench != nil && m.options.SaveTargets != nil && m.target.ConfigSource != nil && !m.target.Transient && !m.target.TransportOverride && !m.options.ReadOnly},
 		{"work-receipt", "Verify / restore rule receipt", nil, m.options.Workbench != nil && m.target.ID != ""},
@@ -403,6 +406,8 @@ func (m *Model) runAction(id string) tea.Cmd {
 		return m.startQuickRuleForm()
 	case "work-rule-health":
 		return m.startQuickRuleTargets(WorkRequest{Kind: "rule-healthcheck"})
+	case "work-rule-diff", "work-rule-find", "work-rule-lookup":
+		return m.startRuleInspection(strings.TrimPrefix(id, "work-"))
 	case "work-source-reuse":
 		return m.startRuleSourceReuse()
 	case "work-source":

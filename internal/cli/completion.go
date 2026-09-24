@@ -321,6 +321,13 @@ func (o *options) registerCompletions(root *cobra.Command) {
 			cmd.ValidArgsFunction = values("on", "off")
 		case "targets edit", "targets remove", "targets default", "targets test", "targets diff", "targets copy-settings", "targets service", "targets service bind", "targets service status", "targets service start", "targets service stop", "targets service restart", "targets service enable", "targets service disable":
 			cmd.ValidArgsFunction = local("targets")
+		case "rules diff":
+			cmd.ValidArgsFunction = func(c *cobra.Command, a []string, s string) ([]string, cobra.ShellCompDirective) {
+				if len(a) < 2 {
+					return local("targets")(c, a, s)
+				}
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
 		case "targets move":
 			cmd.ValidArgsFunction = func(c *cobra.Command, a []string, s string) ([]string, cobra.ShellCompDirective) {
 				if len(a) == 0 {
@@ -380,6 +387,9 @@ func (o *options) registerCompletions(root *cobra.Command) {
 		}
 		if cmd.LocalNonPersistentFlags().Lookup("ssh") != nil {
 			_ = cmd.RegisterFlagCompletionFunc("ssh", local("ssh"))
+		}
+		if strings.HasPrefix(path, "rules ") && cmd.Flags().Lookup("scope") != nil {
+			_ = cmd.RegisterFlagCompletionFunc("scope", values("both", "runtime", "source"))
 		}
 		if path == "servers deploy" {
 			_ = cmd.RegisterFlagCompletionFunc("host", serverIDs(true))

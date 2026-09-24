@@ -8,6 +8,9 @@ Apply one routing rule to a saved target or all targets with `rules apply`;
 existing rules are skipped and conflicting policies block the batch. Use
 `rules healthcheck` for read-only syntax, overlap and coverage findings. See
 [quick rules and persistent ownership](docs/rules-and-ownership.md).
+`rules diff` compares ordered declarations between targets, `rules find` checks
+whether a declaration is present, and `rules lookup` shows static hostname/IP
+matching candidates. Source and runtime evidence stay separate.
 
 `servers deploy` adds owned proxy servers on Ubuntu VPSs or SSH-accessible
 homelabs, with native systemd or Docker Compose: VLESS/REALITY/Vision,
@@ -298,6 +301,10 @@ lazyclash rules list --filter example
 lazyclash --target server rules apply 'DOMAIN,api.enterprise.githubcopilot.com,DIRECT' --dry-run
 lazyclash rules apply 'DOMAIN-SUFFIX,api.enterprise.githubcopilot.com,DIRECT' --all --yes
 lazyclash rules healthcheck --all --json
+lazyclash rules diff desktop server --scope both
+lazyclash rules diff desktop --all --scope runtime --json
+lazyclash --target server rules find 'DOMAIN,api.enterprise.githubcopilot.com,DIRECT'
+lazyclash --target server rules lookup api.enterprise.githubcopilot.com
 lazyclash providers list proxies
 lazyclash providers update rules NAME
 lazyclash providers healthcheck NAME
@@ -340,6 +347,7 @@ early disconnection, broken output and caller cancellation remain failures.
 
 ```sh
 lazyclash targets diff desktop server
+lazyclash rules diff desktop server
 lazyclash targets copy-settings desktop server --field mode --group PROXY
 lazyclash --target server diagnostics url https://example.com --via PROXY
 lazyclash --target server --read-only diagnostics url https://example.com --observe-only
@@ -357,6 +365,14 @@ same-selector policy conflicts are errors that `--yes` cannot bypass.
 `--all` reports unavailable/unbound targets as skips; rule errors block the
 batch before writes. Partial availability can succeed with exit 0 and
 `completed_with_skips`; no usable targets returns nonzero.
+
+Read-only `rules diff`, `find` and `lookup` default to `--scope both`; choose
+`runtime` or `source` explicitly when needed. Diff preserves duplicate counts
+and relative order. Find reports listed rules separately from disabled state
+or policy alternatives. Lookup performs no DNS or traffic probes and retains
+unknown outcomes instead of claiming an observed route. Missing views are
+reported as incomplete; successful differences or absence return exit 0.
+The Rules page offers **d Diff**, **f Find** and **L Lookup**.
 
 The TUI action menu provides quick rules, passive rule healthchecks, target comparison,
 checkbox selection, URL topology/evidence inspection, rule-source binding,

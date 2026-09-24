@@ -1,4 +1,4 @@
-# Quick rules, healthchecks and persistent ownership
+# Rule inspection, quick changes and persistent ownership
 
 Saving a source file, loading it into a core and observing a request use its
 rule are separate outcomes. A runtime `PUT /configs` does not regenerate a
@@ -107,6 +107,93 @@ retains those literals, so they cannot be rewritten or treated as duplicates
 of a new normalized hostname. Large lists can reach the documented overlap-analysis
 limit while exact-selector checks still cover the full list. Counts describe
 what was inspected, not a percentage of internet traffic covered.
+
+## Compare rules between targets
+
+```sh
+lazyclash rules diff desktop server
+lazyclash rules diff desktop --all --scope runtime --json
+lazyclash rules diff desktop server --scope source
+```
+
+The first positional target is the baseline; `--all` compares it with every
+other saved target. Each uses its own connection settings. Do not combine
+`rules diff` with global `--target`, controller, SSH or credential overrides.
+`--scope` is `both` by default, or `runtime`/`source` when only that view matters.
+
+Diff retains order and duplicate occurrences. It distinguishes rules added or
+removed relative to the baseline, same-selector changes to policy/options or
+enabled state, and relative reordering. An insertion at the top does not mark
+every later rule as moved. Supported source rules compare their canonical
+declarations; opaque source expressions and Verge delete directives compare
+literal text. Runtime compares exposed fields and known rule-type aliases,
+without inferring source modifiers that the API omits. Provider contents and
+the implementation behind a named policy are outside this comparison.
+
+Source and runtime have separate results. A complete standalone YAML and a
+Verge Rules companion are different shapes: their source result is
+`incomparable`, rather than treating absent baseline rules as drift. Companion
+prepend, append and delete sections retain their own positions. Delete entries
+are directives, not active routing rules. Differences prove that inspected
+declarations differ; they cannot establish which target is older or whether
+either contains the newest upstream data.
+
+## Find a declaration or inspect destination coverage
+
+```sh
+lazyclash --target server rules find 'DOMAIN-SUFFIX,api.enterprise.githubcopilot.com,DIRECT'
+lazyclash rules find 'DOMAIN,api.enterprise.githubcopilot.com,DIRECT' --all --scope both --json
+lazyclash --target server rules lookup api.enterprise.githubcopilot.com
+lazyclash rules lookup 203.0.113.7 --all --scope runtime --json
+```
+
+`find` searches for a complete rule declaration and also shows same-selector
+alternatives with different policies/options. All matching positions and
+disabled state are retained; a disabled runtime rule can be present without
+being enabled. A runtime match means only its reported fields agree, including
+known runtime names such as ProcessName versus PROCESS-NAME. Opaque source
+expressions use literal matching. Unlike new-rule input, a query preserves
+existing literals such as a trailing dot or underscore label, so finding
+`DOMAIN,example.com.,DIRECT` does not silently search for `example.com`.
+Known regex/logical query kinds preserve their full comma-bearing payload and
+use the final field as the policy, following the core's outer grammar. Unknown
+query grammars compare only the complete serialized expression; they never
+infer a selector or policy from a truncated payload. Runtime literal matches
+are labeled `reported_literal`, with only known type-name aliases normalized.
+Raw `TYPE,...` queries treat `: ` and ` # ` as literal text and must be one line.
+Explicit quoted scalars or `- ` list items use YAML decoding; quote a YAML item's
+whole expression when its payload contains YAML comment or mapping markers.
+
+`lookup` takes one hostname or IP, without a URL, port or CIDR, and traces the
+inspected rules with match, miss or unknown outcomes. It retains later coverage
+even after the first supported candidate. Disabled rules and delete directives
+are skipped; literal PASS/PASS-RULE actions continue evaluation. An earlier
+unknown matcher prevents a first candidate from being inferred. A later unknown
+does not erase a candidate already established within that list.
+
+Lookup performs no DNS resolution or test requests. Hostnames leave IP rules
+unknown; an IP alone leaves hostname-based rules unknown because sniffed/domain
+metadata was not supplied. Providers, GEO data, processes, source IP and complex
+rules can likewise remain unknown. The JSON `first_candidate` is a static
+candidate, not a verified traffic route: groups may select PASS, UDP can fall
+through, and Verge composition can replace companion declarations. Incomplete
+Verge source composition therefore does not produce a first candidate. Use
+URL diagnosis when actual request evidence is needed.
+
+All three inspection commands support `--json` and `--read-only` and never save,
+reload or refresh a target. Find/lookup use the selected/default target or
+`--all`; an explicit `--target` and `--all` are mutually exclusive. Reads use
+the explicit rule binding when present, otherwise an existing node/group
+`ConfigSource` may provide read access without creating a rule write binding.
+Credential-discovery `source_config` is not silently promoted to either role.
+
+Unavailable requested views are reported with their own reasons and
+`complete: false`/`incomplete`, rather than becoming empty lists or false
+absence. Successful inspection, differences, not-found results and partial
+views return exit 0; malformed input or no usable requested data returns
+nonzero. Even `complete: true` describes requested-view availability, not
+complete matcher semantics. On the Rules page, **d** opens diff, **f** opens
+find and **L** opens lookup; all are also in the action palette.
 
 ## Bind the persistent owner
 

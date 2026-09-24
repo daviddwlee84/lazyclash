@@ -55,7 +55,7 @@ the request is only to inspect.
   noninteractive errors, exit codes, uncertain-write recovery and local CLI upgrades.
 
 - [URL diagnosis](references/diagnosis.md), also `lazyclash skill print diagnosis`: separate observation contexts, confidence, DNS/TUN and tentative recommendations.
-- [Cross-target and rule workflows](references/workflows.md), also `lazyclash skill print workflows`: quick add-if-absent rules, ERROR/WARNING handling, all-target skips, passive rule healthchecks, reviewed repairs and persistent native/Docker/Verge owners.
+- [Cross-target and rule workflows](references/workflows.md), also `lazyclash skill print workflows`: ordered rule diffs, exact declaration search, static host/IP coverage, quick add-if-absent rules, ERROR/WARNING handling, passive rule healthchecks and persistent native/Docker/Verge owners.
 - [Nodes and groups](references/sources.md), also `lazyclash skill print sources`: bind the actual owner, preserve raw definitions, review field changes, copy between targets and intentionally export credentials.
 - [Proxy environments](references/environment.md), also `lazyclash skill print environment`: current-shell versus child scope, both SSH forwarding directions, remote shells, service lifetime checks, Docker namespaces and consumer tests.
 - [Managed setup and network ownership](references/setup.md), also `lazyclash skill print setup`: native/Docker installation, offline starter data, privilege, TUN/VPN conflicts, receipts and host rollback.

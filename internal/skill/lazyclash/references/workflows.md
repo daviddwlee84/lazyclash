@@ -17,6 +17,58 @@ from that preview. Stale state fails. Partial receipts describe applied, failed,
 unknown and unattempted steps; there is no automatic rollback or safe blind retry.
 Restart or a native client can replace runtime choices.
 
+## Compare rules, find declarations and inspect coverage
+
+```sh
+lazyclash rules diff desktop server --json
+lazyclash rules diff desktop --all --scope runtime --json
+lazyclash --target server rules find 'DOMAIN-SUFFIX,api.enterprise.githubcopilot.com,DIRECT' --json
+lazyclash rules find 'DOMAIN,api.enterprise.githubcopilot.com,DIRECT' --all --json
+lazyclash --target server rules lookup api.enterprise.githubcopilot.com --json
+lazyclash rules lookup 203.0.113.7 --all --scope source --json
+```
+
+All are read-only. Scope defaults to `both`; `runtime` and `source` are explicit
+alternatives. Diff takes a baseline and destination, or baseline plus `--all`
+for every other saved target. It rejects global target/transport/credential
+overrides. Find/lookup use the selected/default target or `--all`, never both an
+explicit `--target` and `--all`.
+
+Diff compares ordered declarations, preserving duplicates and distinguishing
+policy/options/enabled changes from relative reorder. Source canonical equality
+is limited to understood rules; opaque expressions and delete directives use
+literal text. Runtime exposes fewer fields, with known type-name aliases.
+Different declarations do not establish which target is older. Identical
+RULE-SET names do not prove identical provider data or policy implementations.
+
+Find reports complete matches and same-selector alternatives. Disabled entries
+remain present but are labeled. Runtime matches are reported-only; no-resolve
+cannot be inferred from that API. Query parsing preserves existing unusual
+domain literals and trailing dots. Delete directives are not active matches.
+Known regex/logical outer syntax retains comma-bearing payloads before the final
+policy. Unknown query grammar is literal-only, including runtime
+`reported_literal` matches; do not infer selector alternatives from its commas.
+Raw one-line `TYPE,...` queries keep `: ` and ` # ` literal. Explicit quoted
+scalars or `- ` items are YAML; quote the full item to preserve such markers.
+
+Lookup is a hypothetical coverage trace with match/miss/unknown steps, retaining
+later matches after the first candidate. No DNS is requested: a hostname leaves
+IP matchers unknown, and an IP leaves unspecified domain metadata unknown.
+Providers/GEO/process/source-IP/complex rules can remain unknown. Earlier
+unknown entries prevent a first candidate; disabled rules are skipped and
+literal PASS/PASS-RULE continues. `first_candidate` is not an observed route:
+groups, UDP fallback and incomplete Verge composition can change evaluation.
+Use the existing URL diagnosis for request evidence.
+
+Source reads prefer RuleSource, then may use existing ConfigSource strictly for
+read access; no write binding is created. A complete YAML and a Verge Rules
+companion are `incomparable` source shapes, while their runtime views can still
+be compared. Companion sections keep their own provenance. Unavailable views
+remain unavailable, not empty or not-found. Check `complete` and per-view
+statuses: successful partial inspection, differences and absence return exit 0;
+no usable requested data or malformed input returns nonzero. Never interpret
+exit 0 alone as all targets equal or the rule present everywhere.
+
 ## Quick rules and healthchecks
 
 For an authorized one-rule change, use a saved target and one raw scalar:

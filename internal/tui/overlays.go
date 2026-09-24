@@ -147,6 +147,9 @@ func (m *Model) formLayout(width, height int) ([]string, []hitRegion, int) {
 	if f.kind == "work-rule-quick" {
 		caption = "Review · choose a target or all saved targets, then preview"
 	}
+	if f.kind == "work-rule-find" || f.kind == "work-rule-lookup" {
+		caption = "Read-only · next choose runtime/source scope and targets"
+	}
 	if !review {
 		caption = fmt.Sprintf("Field %d/%d · Tab next / Shift+Tab back", f.index+1, len(f.fields))
 	}
@@ -186,6 +189,8 @@ func (m *Model) formLayout(width, height int) ([]string, []hitRegion, int) {
 			label = "Preview"
 		case "work-rule-quick":
 			label = "Choose targets"
+		case "work-rule-find", "work-rule-lookup":
+			label = "Choose scope"
 		case "work-receipt":
 			label = "Continue"
 		}
@@ -234,6 +239,7 @@ func (m *Model) overlayButton(id string) tea.Cmd {
 		return m.quickSaveForm()
 	case "cancel":
 		m.retainQuickRuleDraft()
+		m.retainRuleInspectionDraft()
 		if m.overlay == "confirm" && m.confirm != nil && m.confirm.back != "" {
 			m.overlay = m.confirm.back
 			m.confirm = nil

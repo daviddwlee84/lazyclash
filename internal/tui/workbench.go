@@ -22,6 +22,7 @@ type WorkRequest struct {
 	Rule                                                 string
 	All                                                  bool
 	Targets                                              []config.Target
+	Scope, Query                                         string
 }
 type WorkRow struct {
 	ID, Label, Detail string
@@ -87,6 +88,9 @@ func (m *Model) launchWork(req WorkRequest) tea.Cmd {
 			req.Targets = []config.Target{req.Target}
 		}
 	}
+	if ruleInspectionKind(req.Kind) {
+		req = m.prepareRuleInspection(req)
+	}
 	if m.work != nil && m.work.pending {
 		return nil
 	}
@@ -97,6 +101,9 @@ func (m *Model) launchWork(req WorkRequest) tea.Cmd {
 	m.workSerial++
 	ctx, cancel := context.WithTimeout(m.ctx, 90*time.Second)
 	m.work = &workState{request: req, phase: "result", checked: map[string]bool{}, pending: true, serial: m.workSerial, cancel: cancel, result: WorkResult{Title: "Working · " + req.Kind, Summary: "Esc requests cancellation. An interrupted write can have an unknown result."}}
+	if ruleInspectionKind(req.Kind) {
+		m.work.result.Summary = "Reading rule snapshots… Esc cancels this inspection."
+	}
 	m.overlay = "work"
 	m.input.Blur()
 	m.form = nil
@@ -162,7 +169,7 @@ func (m *Model) receiveWork(msg workMsg) tea.Cmd {
 func (m *Model) closeWork() tea.Cmd {
 	if m.work != nil && m.work.pending {
 		m.work.cancel()
-		if m.serverWork() {
+		if m.serverWork() || ruleInspectionKind(m.work.request.Kind) {
 			m.workSerial++
 			m.work = nil
 			m.overlay = ""
@@ -182,6 +189,9 @@ func (m *Model) chooseWorkTarget() tea.Cmd {
 		return nil
 	}
 	id := w.result.Rows[min(w.index, len(w.result.Rows)-1)].ID
+	if ruleInspectionKind(w.request.Kind) {
+		return m.chooseRuleInspection(id)
+	}
 	if w.phase == "rule-target" {
 		m.quickRuleScope = id
 		req := w.request
@@ -230,6 +240,11 @@ func (m *Model) workButton(id string) tea.Cmd {
 		return m.chooseWorkTarget()
 	case "work-edit":
 		req := w.request
+		if ruleInspectionKind(req.Kind) {
+			m.rememberRuleInspection(req)
+			m.work = nil
+			return m.startRuleInspection(req.Kind)
+		}
 		if strings.HasPrefix(req.Kind, "quick-rule-") {
 			m.quickRuleDraft = req.Rule
 			m.work = nil
@@ -410,7 +425,7 @@ func (m *Model) workLayout(width, height int) ([]string, []hitRegion) {
 	if w.phase != "result" {
 		buttons = append(buttons, button{"work-choose", "Enter Choose", len(w.result.Rows) > 0})
 	}
-	if w.request.Kind == "url" || w.request.Kind == "rule-preview" || strings.HasPrefix(w.request.Kind, "quick-rule-") {
+	if w.request.Kind == "url" || w.request.Kind == "rule-preview" || strings.HasPrefix(w.request.Kind, "quick-rule-") || ruleInspectionKind(w.request.Kind) {
 		buttons = append(buttons, button{"work-edit", "e Edit", !w.pending})
 	}
 	if w.request.Kind == "diff" {

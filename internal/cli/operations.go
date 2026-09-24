@@ -180,7 +180,7 @@ func (o *options) logsCommand() *cobra.Command {
 
 func (o *options) rulesCommand() *cobra.Command {
 	var filter string
-	group := &cobra.Command{Use: "rules", Short: "Inspect runtime rules in matching order"}
+	group := &cobra.Command{Use: "rules", Short: "Inspect, compare, query and apply routing rules"}
 	list := &cobra.Command{Use: "list", Short: "List ordered rules", Args: argsExact(0), RunE: func(cmd *cobra.Command, args []string) error {
 		return o.withClient(cmd, func(c *core.Client, t config.Target) error {
 			v, e := c.Rules(cmd.Context())
@@ -205,6 +205,7 @@ func (o *options) rulesCommand() *cobra.Command {
 	group.AddCommand(list)
 	group.AddCommand(o.ruleEditCommands()...)
 	group.AddCommand(o.quickRuleCommands()...)
+	group.AddCommand(o.ruleInspectCommands()...)
 	group.AddCommand(o.rulePresetCommand())
 	return group
 }

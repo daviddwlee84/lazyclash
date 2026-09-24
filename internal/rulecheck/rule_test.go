@@ -102,3 +102,19 @@ func TestExistingDomainLiteralsPreserveCoreSemantics(t *testing.T) {
 		}
 	}
 }
+
+func TestExistingOpaqueScalarIsNotDecodedAsYAMLAgain(t *testing.T) {
+	for _, payload := range []string{"^a # literal", "^prefix: value", `^a"quote`, "^a{1,2}\\)$"} {
+		raw := "DOMAIN-REGEX," + payload + ",PROXY"
+		rule := ParseExisting(raw, 7)
+		if rule.Invalid != "" || !rule.Opaque || rule.LiteralOnly || rule.Payload != payload || rule.Policy != "PROXY" || rule.Raw != raw || rule.Index != 7 {
+			t.Fatalf("already-extracted scalar was reinterpreted: %+v", rule)
+		}
+	}
+	for _, raw := range []string{"FUTURE-RULE,compound,with,commas,PROXY", "RULE-SET,missing-policy", "AND,((DOMAIN,example.com),PROXY"} {
+		rule := ParseExisting(raw, 9)
+		if rule.Invalid != "" || !rule.Opaque || !rule.LiteralOnly || rule.Payload != "" || rule.Policy != "" || rule.Raw != raw {
+			t.Fatalf("unknown/malformed opaque shape fabricated fields: %+v", rule)
+		}
+	}
+}

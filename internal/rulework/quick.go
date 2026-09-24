@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,16 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/rulecheck"
 	"go.yaml.in/yaml/v3"
 )
+
+// Keep typed causes for authentication/error classification without printing
+// the same per-target diagnostic again after the rendered preview.
+type PreflightError struct {
+	Message string
+	Causes  []error
+}
+
+func (e *PreflightError) Error() string   { return e.Message }
+func (e *PreflightError) Unwrap() []error { return e.Causes }
 
 func quickTargets(targets []config.Target, all bool) ([]config.Target, error) {
 	if len(targets) == 0 || !all && len(targets) != 1 {
@@ -80,13 +91,13 @@ func PreviewRules(ctx context.Context, targets []config.Target, raw string, all 
 	p.Digest = hashQuick(ids)
 	if blocked {
 		p.Status = "blocked"
-		causes := []error{errors.New("rule preflight found errors; no targets were changed")}
+		causes := []error{}
 		for _, t := range p.Targets {
 			if t.Status == "blocked" && t.cause != nil {
 				causes = append(causes, t.cause)
 			}
 		}
-		return p, errors.Join(causes...)
+		return p, &PreflightError{Message: "Rule preflight blocked; inspect the per-target reasons and next commands. No targets were changed.", Causes: causes}
 	}
 	if usable == 0 {
 		p.Status = "unavailable"
@@ -99,19 +110,33 @@ func PreviewRules(ctx context.Context, targets []config.Target, raw string, all 
 }
 
 func previewQuickTarget(ctx context.Context, t config.Target, rule rulecheck.Rule, opts Options) QuickTargetPlan {
-	p := QuickTargetPlan{TargetID: t.ID, Status: "blocked", Findings: []rulecheck.Finding{}}
+	p := QuickTargetPlan{TargetID: t.ID, Status: "blocked", ReasonCode: "invalid_source", Findings: []rulecheck.Finding{}}
 	fail := func(err error, unavailable bool) QuickTargetPlan {
 		p.cause = err
 		p.Message = core.Sanitize(err.Error())
 		if unavailable {
 			p.Status = "skipped_unavailable"
+			if p.ReasonCode == "invalid_source" {
+				p.ReasonCode = "source_unavailable"
+			}
+			if p.ReasonCode == "invalid_runtime" {
+				p.ReasonCode = "runtime_unavailable"
+			}
 		} else {
 			p.Findings = append(p.Findings, finding("error", "preflight_failed", p.Message))
 		}
 		return p
 	}
 	if t.RuleSource == nil {
-		return fail(errors.New("bind a persistent rule source with rules source set (or --from-config-source)"), true)
+		p.ReasonCode = "unbound_rule_source"
+		command := "lazyclash --target " + strconv.Quote(t.ID) + " rules source set "
+		if t.ConfigSource != nil {
+			command += "--from-config-source"
+		} else {
+			command += "--help"
+		}
+		p.NextCommands = []string{command}
+		return fail(errors.New("No persistent rule source is bound. Rule checks have not run; bind a source before previewing or applying."), true)
 	}
 	source, err := inspectSource(ctx, t, opts)
 	if err != nil {
@@ -122,6 +147,7 @@ func previewQuickTarget(ctx context.Context, t config.Target, rule rulecheck.Rul
 	if err != nil {
 		return fail(err, false)
 	}
+	p.ReasonCode = "invalid_runtime"
 	client, cleanup, err := openCore(ctx, t, true, opts)
 	if err != nil {
 		return fail(err, unavailableCore(err))
@@ -214,6 +240,7 @@ func previewQuickTarget(ctx context.Context, t config.Target, rule rulecheck.Rul
 	}
 	for _, f := range p.Findings {
 		if f.Severity == "error" {
+			p.ReasonCode = f.Code
 			p.Message = "Resolve rule errors before applying."
 			return p
 		}
@@ -221,15 +248,18 @@ func previewQuickTarget(ctx context.Context, t config.Target, rule rulecheck.Rul
 	coreVersion, _ := version["version"].(string)
 	after := source.file.Data
 	if !duplicate {
+		p.ReasonCode = "invalid_source"
 		after, err = prependQuickRule(source, rule.String())
 		if err != nil {
 			return fail(err, false)
 		}
+		p.ReasonCode = "validation_failed"
 		if err = validateOwnerCandidate(ctx, t, source, after, coreVersion, opts); err != nil {
 			return fail(err, false)
 		}
 	}
 	p.plan = Plan{TargetID: t.ID, Owner: source, Rule: rule.String(), Policy: rule.Policy, CoreVersion: coreVersion, NoChange: duplicate, after: after, beforeRuntimeDigest: runtimeDigest}
+	p.ReasonCode = ""
 	if rule.Type == "IP-CIDR" || rule.Type == "IP-CIDR6" {
 		p.plan.Prefix = rule.Payload
 	} else {
@@ -368,7 +398,15 @@ func runtimeRuleList(object core.Object) ([]rulecheck.Rule, error) {
 		if kind == "srcipcidr" {
 			expression += ",src"
 		}
-		r := rulecheck.ParseExisting(expression, i)
+		var r rulecheck.Rule
+		switch typ {
+		case "DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "IP-CIDR", "IP-CIDR6", "MATCH":
+			r = rulecheck.ParseExisting(expression, i)
+		default:
+			// Runtime already separates these fields. Re-parsing opaque payloads
+			// as CSV can truncate regex/logical expressions containing commas.
+			r = rulecheck.Rule{Index: i, Type: typ, Payload: row["payload"].(string), Policy: row["proxy"].(string), Opaque: true, Raw: expression}
+		}
 		if extra, ok := row["extra"].(map[string]any); ok {
 			if d, present := extra["disabled"]; present && d != false {
 				r.Disabled = true
