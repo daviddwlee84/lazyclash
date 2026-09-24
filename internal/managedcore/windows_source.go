@@ -23,21 +23,23 @@ func windowsValidateSourceWrite(ctx context.Context, instance Instance, request 
 	}
 	isBase := sameWindowsPath(source.Path, base)
 	allowed := isBase
+	isMerge := false
 	if instance.Client == "verge" {
-		for _, kind := range []string{"rules", "proxies", "groups"} {
+		for _, kind := range []string{"rules", "proxies", "groups", "merge"} {
 			if sameWindowsPath(source.Path, winJoin(home, "profiles", instance.ProfileUID+"_"+kind+".yaml")) {
 				allowed = true
+				isMerge = kind == "merge"
 			}
 		}
 	}
 	if !allowed {
-		return errors.New("Windows source edits are limited to the owned native profile and Rules/Proxies/Groups companions")
+		return errors.New("Windows source edits are limited to the owned native profile and existing Rules/Proxies/Groups/Merge companions")
 	}
 	var candidate map[string]any
 	if yaml.Unmarshal(source.Data, &candidate) != nil || candidate == nil {
 		return errors.New("Windows source must be a YAML mapping")
 	}
-	if !isBase {
+	if !isBase && !isMerge {
 		for k := range candidate {
 			if k != "prepend" && k != "append" && k != "delete" {
 				return errors.New("Windows companion source has an unsupported field")
@@ -53,13 +55,20 @@ func windowsValidateSourceWrite(ctx context.Context, instance Instance, request 
 		return err
 	}
 	var original map[string]any
-	if yaml.Unmarshal(before.Source.File.Data, &original) != nil || original == nil {
+	if yaml.Unmarshal(before.Source.File.Data, &original) != nil || (original == nil && !isMerge) {
 		return errors.New("owned Windows profile is not a YAML mapping")
+	}
+	if original == nil {
+		original = map[string]any{}
 	}
 	if err = validateWindowsOwnedResources(candidate, instance); err != nil {
 		return err
 	}
-	for _, field := range []string{"proxies", "proxy-groups", "proxy-providers", "rule-providers", "rules"} {
+	fields := []string{"proxies", "proxy-groups", "proxy-providers", "rule-providers", "rules"}
+	if isMerge {
+		fields = []string{"proxy-providers", "rule-providers", "rules"}
+	}
+	for _, field := range fields {
 		delete(original, field)
 		delete(candidate, field)
 	}

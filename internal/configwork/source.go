@@ -24,6 +24,8 @@ type source struct {
 	files                                     map[string]rulework.HostFile
 	guards                                    []rulework.FileGuard
 	base, proxies, groups, runtime, applyPath string
+	rules, profileMerge                       string
+	mergePaths, scriptPaths                   []string
 	blockedProxies, blockedGroups             bool
 	dockerID, dockerImage                     string
 	dockerSourceSHA                           string
@@ -241,6 +243,7 @@ func inspectWithOptions(ctx context.Context, t config.Target, opts Options) (*so
 					return nil, e
 				}
 				s.files[p] = f
+				s.scriptPaths = append(s.scriptPaths, p)
 				s.guards = append(s.guards, rulework.FileGuard{Path: p, Fingerprint: f.Fingerprint})
 				warning := "Verge Scripts can transform this source; native reactivation and generated-config verification are required."
 				if automaticActivation {
@@ -250,9 +253,16 @@ func inspectWithOptions(ctx context.Context, t config.Target, opts Options) (*so
 			} else {
 				var d *yaml.Node
 				if scalar(item, "type") == "merge" {
+					s.mergePaths = append(s.mergePaths, p)
+					if uid == scalar(option, "merge") {
+						s.profileMerge = p
+					}
 					d, e = s.readMerge(ctx, t, p)
 				} else {
 					d, e = s.read(ctx, t, p)
+				}
+				if scalar(item, "type") == "rules" {
+					s.rules = p
 				}
 				if e != nil {
 					return nil, e

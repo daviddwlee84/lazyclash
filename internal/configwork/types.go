@@ -112,6 +112,7 @@ type Plan struct {
 	expectedGroups []Definition
 }
 type Receipt struct {
+	Composite         *ChangeSetRecord  `json:"composite,omitempty"`
 	ID                string            `json:"id"`
 	TargetID          string            `json:"target_id"`
 	Binding           string            `json:"binding"`

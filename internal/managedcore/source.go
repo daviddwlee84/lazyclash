@@ -9,6 +9,7 @@ import (
 	"go.yaml.in/yaml/v3"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 )
 
@@ -51,7 +52,7 @@ func SourceOperation(ctx context.Context, target config.Target, operation config
 	if target.HostOS == "windows" {
 		return WindowsSourceOperation(ctx, target, operation, opts)
 	}
-	if operation.Op == "write" {
+	if sourceMutation(operation.Op) {
 		if opts.ReadOnly {
 			return configwork.HostResponse{}, errors.New("managed source writes are disabled in read-only mode")
 		}
@@ -72,7 +73,10 @@ func SourceOperation(ctx context.Context, target config.Target, operation config
 	if err != nil {
 		return configwork.HostResponse{}, err
 	}
-	if operation.Op == "write" && opts.ReadOnly {
+	if err = validateSourceResourceOperation(instance, operation); err != nil {
+		return configwork.HostResponse{}, err
+	}
+	if sourceMutation(operation.Op) && opts.ReadOnly {
 		return configwork.HostResponse{}, errors.New("managed source writes are disabled in read-only mode")
 	}
 	if operation.Op == "write" && filepath.Clean(operation.Path) == filepath.Join(instance.Root, "home", "config.yaml") {
@@ -93,6 +97,9 @@ func SourceOperation(ctx context.Context, target config.Target, operation config
 		}
 	}
 	if operation.Op == "validate" || operation.Op == "docker-validate" {
+		if _, err := stagedSourceInventory(instance, operation.Resources); err != nil {
+			return configwork.HostResponse{}, err
+		}
 		if err := validateOwnedResources(operation.Document, instance); err != nil {
 			return configwork.HostResponse{}, err
 		}
@@ -104,8 +111,11 @@ func SourceOperation(ctx context.Context, target config.Target, operation config
 	if err != nil {
 		return configwork.HostResponse{}, err
 	}
-	if operation.Op == "write" {
+	if sourceMutation(operation.Op) {
 		instance.Digest = response.Digest
+		if err = updateSourceResourceInventory(&instance, operation); err != nil {
+			return response.Source, err
+		}
 		if value, ok := response.Manifest["profile_sha256"].(string); ok {
 			instance.ProfileSHA256 = value
 		}
@@ -134,12 +144,93 @@ func SourceOperation(ctx context.Context, target config.Target, operation config
 				return response.Source, e
 			}
 		}
+		instance.ResourceInventory = sortedResourceNames(saved.Resources)
 		request.Input, request.InputKind, request.InputBaseDir, request.Preset = saved.Profile, "yaml", dir, "preserve"
 		if e = saveInstance(instance, request, opts); e != nil {
 			return response.Source, e
 		}
 	}
 	return response.Source, nil
+}
+
+func sourceMutation(op string) bool {
+	return op == "write" || op == "resource-write" || op == "resource-remove"
+}
+
+func sourceResourceHome(instance Instance) string {
+	if instance.Client == "verge" && instance.Target.ConfigSource != nil {
+		return instance.Target.ConfigSource.DataDir
+	}
+	return hostpath.Join(instance.Target.HostOS, instance.Root, "home")
+}
+
+func sourceResourceName(instance Instance, path string, corePath bool) (string, error) {
+	osKind, home := instance.Target.HostOS, sourceResourceHome(instance)
+	if corePath && instance.Backend == "docker" {
+		osKind, home = "linux", "/root/.config/mihomo"
+	}
+	root := hostpath.Join(osKind, home, "lazyclash-resources")
+	rel, err := hostpath.Rel(osKind, root, path)
+	if err != nil || !hostpath.IsAbs(osKind, path) || rel == "" || rel == "." || rel == ".." || strings.ContainsAny(rel, `/\\`) {
+		return "", errors.New("migrated resource must be a direct child of the owned lazyclash-resources directory")
+	}
+	return "lazyclash-resources/" + rel, nil
+}
+
+func validateSourceResourceOperation(instance Instance, request configwork.HostRequest) error {
+	if request.Op != "resource-inspect" && request.Op != "resource-write" && request.Op != "resource-remove" {
+		return nil
+	}
+	if _, err := sourceResourceName(instance, request.Path, false); err != nil {
+		return err
+	}
+	osKind := instance.Target.HostOS
+	want := hostpath.Join(osKind, sourceResourceHome(instance), "lazyclash-resources")
+	if rel, err := hostpath.Rel(osKind, want, request.ResourceRoot); err != nil || rel != "." {
+		return errors.New("resource operation root differs from owned migration directory")
+	}
+	return nil
+}
+
+func stagedSourceInventory(instance Instance, resources map[string][]byte) (Instance, error) {
+	total := 0
+	for path, data := range resources {
+		name, err := sourceResourceName(instance, path, true)
+		if err != nil {
+			return instance, err
+		}
+		total += len(data)
+		if len(data) == 0 || len(data) > 8<<20 || total > 16<<20 {
+			return instance, errors.New("staged provider resources exceed their size limits")
+		}
+		instance.ResourceInventory = append(append([]string(nil), instance.ResourceInventory...), name)
+	}
+	return instance, nil
+}
+
+func updateSourceResourceInventory(instance *Instance, request configwork.HostRequest) error {
+	if request.Op != "resource-write" && request.Op != "resource-remove" {
+		return nil
+	}
+	name, err := sourceResourceName(*instance, request.Path, false)
+	if err != nil {
+		return err
+	}
+	items := map[string]bool{}
+	for _, n := range instance.ResourceInventory {
+		items[n] = true
+	}
+	if request.Op == "resource-write" {
+		items[name] = true
+	} else {
+		delete(items, name)
+	}
+	instance.ResourceInventory = nil
+	for n := range items {
+		instance.ResourceInventory = append(instance.ResourceInventory, n)
+	}
+	sort.Strings(instance.ResourceInventory)
+	return nil
 }
 
 func validateOwnedResources(document any, instance Instance) error {

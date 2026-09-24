@@ -327,7 +327,8 @@ function CopyValidationResource($m,[string]$Value,[bool]$Required=$true){
  NoReparse $source
  $script:ValidationIndex++
  $dest=Join-Path $script:ValidationStage ('resources\'+$script:ValidationIndex+'\'+[IO.Path]::GetFileName($source))
- if(Test-Path -LiteralPath $source){SafeACL $source;$bytes=ReadBytes $source 33554432;$script:ValidationBytes+=$bytes.Length;if($script:ValidationBytes -gt 134217728){Fail 'Validation resources exceed 128 MiB'};Atomic $dest $bytes}
+ if($script:ValidationSupplied -and $script:ValidationSupplied.ContainsKey($source)){$bytes=[Convert]::FromBase64String($script:ValidationSupplied[$source]);$script:ValidationBytes+=$bytes.Length;if($bytes.Length -gt 8388608 -or $script:ValidationBytes -gt 134217728){Fail 'Validation resources exceed limits'};Atomic $dest $bytes}
+ elseif(Test-Path -LiteralPath $source){SafeACL $source;$bytes=ReadBytes $source 33554432;$script:ValidationBytes+=$bytes.Length;if($script:ValidationBytes -gt 134217728){Fail 'Validation resources exceed 128 MiB'};Atomic $dest $bytes}
  elseif($Required){Fail 'Owned validation resource is missing'}
  else{PrivateDir ([IO.Path]::GetDirectoryName($dest))}
  return $dest
@@ -341,20 +342,22 @@ function ValidationCertificates($m,$node){
  }elseif($node -is [array]){foreach($v in $node){ValidationCertificates $m $v}}
 }
 
-function ValidateProfile($m,$Document){
+function ValidateProfile($m,$Document,$Supplied=$null){
  if(-not($Document -is [System.Collections.IDictionary])){Fail 'Validation requires a parsed profile document'}
  foreach($key in @('post-up','post-down','interface-name','routing-mark')){if($Document.ContainsKey($key) -and $null -ne $Document[$key] -and [string]$Document[$key] -notin @('','0')){Fail 'Windows validation rejects host-specific executable and routing hooks'}}
  if($Document.tun -and $Document.tun.enable){Fail 'Owned Windows validation requires TUN disabled'}
  $stage=Join-Path $r.root ('validation-'+[Guid]::NewGuid().ToString('N'));PrivateDir $stage
- $script:ValidationStage=$stage;$script:ValidationBytes=0;$script:ValidationIndex=0
+ $script:ValidationStage=$stage;$script:ValidationBytes=0;$script:ValidationIndex=0;$script:ValidationSupplied=@{}
  try{
+  $total=0
+  if($Supplied){foreach($name in $Supplied.Keys){$p=Full $name;$root=Join-Path $m.home 'lazyclash-resources';if(-not(Same ([IO.Path]::GetDirectoryName($p)) $root)){Fail 'Staged resource is outside owned migration directory'};NoReparse $p;$bytes=[Convert]::FromBase64String($Supplied[$name]);$total+=$bytes.Length;if($bytes.Length -eq 0 -or $bytes.Length -gt 8388608 -or $total -gt 16777216){Fail 'Staged provider resources exceed limits'};$script:ValidationSupplied[$p]=$Supplied[$name]}}
   foreach($name in $m.resources){ResourceName $name;$src=Join-Path $m.home $name;SafeACL $src;$bytes=ReadBytes $src 33554432;$script:ValidationBytes+=$bytes.Length;if($script:ValidationBytes -gt 134217728){Fail 'Validation resources exceed 128 MiB'};Atomic (Join-Path $stage $name) $bytes}
   foreach($section in @('proxy-providers','rule-providers')){if($Document[$section] -is [System.Collections.IDictionary]){foreach($provider in $Document[$section].Values){if($provider -is [System.Collections.IDictionary] -and $provider.path -is [string] -and $provider.path){$provider.path=CopyValidationResource $m $provider.path ($provider.type -eq 'file')}}}}
   ValidationCertificates $m $Document
   # This is a private resource copy, not an OS sandbox. Never give -d the live owner's directory.
   Atomic (Join-Path $stage 'config.yaml') ([Text.Encoding]::UTF8.GetBytes((JSON $Document)))
   [void](CoreCommand $m.core_path ('-t -d "'+$stage+'" -f "'+(Join-Path $stage 'config.yaml')+'"') $stage 30)
- }finally{if(Test-Path -LiteralPath $stage){Remove-Item -LiteralPath $stage -Recurse -Force};$script:ValidationStage=$null}
+ }finally{if(Test-Path -LiteralPath $stage){Remove-Item -LiteralPath $stage -Recurse -Force};$script:ValidationStage=$null;$script:ValidationSupplied=$null}
 }
 function Install(){
  if($null -eq $r.resources){$r.resources=@{}};if($null -eq $r.files){$r.files=@{}};if($null -eq $r.before_cfw){$r.before_cfw=@()}
@@ -576,7 +579,7 @@ function SourceAllowed($m,[string]$Path,[bool]$Write=$false){
  if($m.client -eq 'mihomo'){$allowed=Same $Path (Join-Path $m.home 'config.yaml')}
  elseif($Write){
   $allowed=Same $Path (Join-Path $m.home ('profiles\'+$m.profile_uid+'.yaml'))
-  foreach($kind in @('rules','proxies','groups')){if(Same $Path (Join-Path $m.home ('profiles\'+$m.profile_uid+'_'+$kind+'.yaml'))){$allowed=$true}}
+  foreach($kind in @('rules','proxies','groups','merge')){if(Same $Path (Join-Path $m.home ('profiles\'+$m.profile_uid+'_'+$kind+'.yaml'))){$allowed=$true}}
  }else{
   $allowed=Same $Path (Join-Path $m.home 'clash-verge.yaml')
   foreach($name in @($m.source_files)+@($m.resources)){ResourceName $name;if(Same $Path (Join-Path $m.home $name)){$allowed=$true}}
@@ -609,6 +612,27 @@ function WriteSource($m,$s,[byte[]]$Bytes){
 function Source($m){
  $s=$r.source;$result=@{}
  if($s.op -eq 'read'){$result.file=SourceRead $m $s.path}
+ elseif($s.op -eq 'source-resource-read'){
+  if(-not(Within $s.path $m.home)){Fail 'Provider resource is outside owned home'};NoReparse $s.path;SafeACL $s.path
+  $bytes=ReadBytes $s.path 8388608;$result.file=@{path=$s.path;resolved=(Full $s.path);data=[Convert]::ToBase64String($bytes);sha256=(HashBytes $bytes)}
+ }
+ elseif($s.op -in @('resource-inspect','resource-write','resource-remove')){
+  $p=Full $s.path;$root=Join-Path $m.home 'lazyclash-resources'
+  if(-not(Same $s.resource_root $root) -or -not(Same ([IO.Path]::GetDirectoryName($p)) $root)){Fail 'Resource operation is outside owned migration directory'}
+  NoReparse $p;$exists=Test-Path -LiteralPath $p;$before=$null
+  if($exists){SafeACL $p;$before=ReadBytes $p 8388608}
+  $result.exists=[bool]$exists
+  if($s.op -eq 'resource-write'){
+   $bytes=[Convert]::FromBase64String($s.data);if($bytes.Length -eq 0 -or $bytes.Length -gt 8388608 -or (HashBytes $bytes) -ne $s.expected_sha256){Fail 'Resource bytes differ from reviewed digest'}
+   if($exists){if((HashBytes $before) -ne $s.expected_sha256){Fail 'Resource path contains different bytes'}}
+   else{PrivateDir $root;$tmp=Join-Path $root ('.lazyclash-'+[Guid]::NewGuid().ToString('N'));try{Atomic $tmp $bytes;NoReparse $p;[IO.File]::Move($tmp,$p)}finally{if(Test-Path -LiteralPath $tmp){Remove-Item -LiteralPath $tmp -Force}}}
+   $name='lazyclash-resources/'+[IO.Path]::GetFileName($p);$m.resources=@(@($m.resources)+@($name)|Sort-Object -Unique);SaveManifest $m
+   $result.created=-not $exists;$result.exists=$true;$result.file=SourceRead $m $p
+  }elseif($s.op -eq 'resource-remove'){
+   if($exists){if((HashBytes $before) -ne $s.expected_sha256){Fail 'Resource changed; removal refused'};Remove-Item -LiteralPath $p -Force}
+   $name='lazyclash-resources/'+[IO.Path]::GetFileName($p);$m.resources=@($m.resources|Where-Object {$_ -ne $name});SaveManifest $m;$result.exists=$false
+  }elseif($exists){$result.file=@{path=$p;resolved=$p;data=[Convert]::ToBase64String($before);sha256=(HashBytes $before)}}
+ }
  elseif($s.op -in @('check','write')){
   SourceGuards $m $s.guards
   if($s.op -eq 'write'){
@@ -620,7 +644,7 @@ function Source($m){
   }
  }elseif($s.op -eq 'validate'){
   if(-not(Same $s.binary $m.core_path) -or -not(Same $s.home $m.home) -or $s.version -ne $m.core_version -or (CoreVersion $m.core_path $m.home) -ne $m.core_version){Fail 'Source validator differs from the owned running core identity'}
-  ValidateProfile $m $s.document
+  ValidateProfile $m $s.document $s.resources
  }else{Fail 'Unsupported Windows source operation'}
  $out=Result $m;$out.source=$result;return $out
 }

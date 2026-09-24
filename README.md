@@ -12,6 +12,11 @@ existing rules are skipped and conflicting policies block the batch. Use
 whether a declaration is present, and `rules lookup` shows static hostname/IP
 matching candidates. Source and runtime evidence stay separate.
 
+`configs diff` compares persistent proxies, groups, providers and rules across
+targets. `configs sync --interactive` selects whole objects, resolves their
+dependencies and previews one combined change per destination. See
+[configuration comparison and selective sync](docs/config-sync.md).
+
 `servers deploy` adds owned proxy servers on Ubuntu VPSs or SSH-accessible
 homelabs, with native systemd or Docker Compose: VLESS/REALITY/Vision,
 Hysteria2, and the historical VMess/WebSocket/TLS recipe. `vps` compares and
@@ -200,6 +205,8 @@ lazyclash vps guide --provider oracle --format agent  # offline CLI setup + agen
 lazyclash --target desktop configs source set --interactive
 lazyclash --target desktop proxies export 'My node' --interactive
 lazyclash --target desktop groups edit PROXY --interactive
+lazyclash configs diff desktop server --format unified
+lazyclash configs sync desktop server --interactive
 eval "$(lazyclash proxy shell-init zsh)"
 proxy-on desktop                                    # shell integration
 lazyclash --target desktop proxy ssh server           # remote shell uses this local proxy

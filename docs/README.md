@@ -8,6 +8,7 @@ The [changelog](../CHANGELOG.md) identifies the version that introduced a featur
 |---|---|
 | Connecting a local/remote core, comparing servers or copying runtime choices | [Targets and configuration](targets-and-config.md) |
 | Adding/editing nodes, configuring groups, copying credentials or sharing QR | [節點與群組](proxies-and-groups.md) |
+| Comparing configuration drift and selectively transferring objects between targets | [Configuration diff and sync](config-sync.md) |
 | Drawing a YAML routing graph, inspecting group relationships or current selections | [配置拓樸](routing-topology.md) |
 | Choosing a shell/data proxy, owning SSH forwards or configuring Docker consumers | [代理環境](proxy-environment.md) |
 | Sharing a local proxy with a remote shell/command and checking endpoint lifetime | [雙向 SSH 代理](ssh-proxy-sharing.md) |
@@ -57,6 +58,8 @@ harnesses in `scripts/pty_smoke.py`, `scripts/auth_pty_smoke.py`,
 `scripts/tools_pty_smoke.py` and `scripts/connectivity_checks_pty_smoke.py`. `scripts/reverse_pty_smoke.py` uses an isolated sshd
 for reverse forwarding, remote shells and cleanup. `scripts/analytics_pty_smoke.py`
 checks opt-in collection and the historical report browser against a disposable core.
+`scripts/config_sync_pty_smoke.py` checks per-target object selection, dependency
+decisions, review and composite apply against disposable Verge source fixtures.
 Tests use disposable state and controllers.
 Keep actual OS execution, cross-builds, fixture checks and real-host observations
 distinct in verification reports.

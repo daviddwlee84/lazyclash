@@ -196,7 +196,7 @@ func (o *options) configSourceCommand() *cobra.Command {
 	return parent
 }
 func (o *options) configWorkCommands() []*cobra.Command {
-	verify := &cobra.Command{Use: "verify RECEIPT", Short: "Verify persisted node/group bytes and owner/runtime observations", Args: argsExact(1), RunE: func(cmd *cobra.Command, args []string) error {
+	verify := &cobra.Command{Use: "verify RECEIPT", Short: "Verify persisted configuration/resources and owner/runtime observations", Args: argsExact(1), RunE: func(cmd *cobra.Command, args []string) error {
 		defer connection.CloseAuthentications()
 		t, e := o.configWorkTarget(cmd)
 		if e != nil {

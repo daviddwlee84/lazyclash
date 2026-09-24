@@ -189,6 +189,9 @@ func (m *Model) chooseWorkTarget() tea.Cmd {
 		return nil
 	}
 	id := w.result.Rows[min(w.index, len(w.result.Rows)-1)].ID
+	if w.request.Kind == "config-sync-launch" {
+		return m.chooseConfigSyncTarget(id)
+	}
 	if ruleInspectionKind(w.request.Kind) {
 		return m.chooseRuleInspection(id)
 	}

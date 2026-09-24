@@ -77,7 +77,11 @@ func fullHostScript() string {
 	if !ok {
 		panic("source helper entrypoint changed")
 	}
-	return compactHostScript("source_api={}\nexec(" + strconv.Quote(defs) + ",source_api)\n" + networkGuardPrelude(hostScript) + hostScript)
+	resourceDefs, _, ok := strings.Cut(configwork.ResourceHostScript(), "# RESOURCE_ENTRYPOINT")
+	if !ok {
+		panic("resource helper entrypoint changed")
+	}
+	return compactHostScript("source_api={}\nexec(" + strconv.Quote(defs) + ",source_api)\nresource_api={}\nexec(" + strconv.Quote(resourceDefs) + ",resource_api)\n" + networkGuardPrelude(hostScript) + hostScript)
 }
 
 func callHost(ctx context.Context, host string, privileged bool, request hostRequest, opts Options) (hostResponse, error) {

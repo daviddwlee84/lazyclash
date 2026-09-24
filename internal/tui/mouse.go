@@ -115,7 +115,7 @@ func (m *Model) toolbar(width int) (string, []hitRegion) {
 	case providers:
 		wanted = []string{"provider-update", "provider-health"}
 	case configs:
-		wanted = []string{"config-apply", "config-add", "config-edit", "config-remove"}
+		wanted = []string{"config-apply", "config-add", "config-edit", "config-remove", "tool-config-sync"}
 	}
 	if m.currentAuth() {
 		wanted = []string{"authenticate", "targets", "reconnect"}
@@ -123,6 +123,7 @@ func (m *Model) toolbar(width int) (string, []hitRegion) {
 	short := map[string]string{"overview-inspect": "Inspect", "refresh": "Refresh", "targets": "Targets", "select": "Choose", "delay": "Delay", "delay-group": "Group delay", "close-connection": "Close", "close-all": "Close all", "log-follow": "Follow", "log-level": "Level", "log-clear": "Clear", "provider-update": "Update", "provider-health": "Healthcheck", "config-apply": "Apply", "config-add": "Register", "config-edit": "Edit", "config-remove": "Remove", "probe-ip": "IP.SB", "probe-latency": "Websites", "mode": "Mode", "tun": "TUN", "history-window": "Window", "graph-style": "Style"}
 	short["authenticate"], short["reconnect"] = "Authenticate", "Reconnect"
 	short["tool-checks"] = "Checks"
+	short["tool-config-sync"] = "Sync"
 	short["work-rule-quick"], short["work-rule-health"] = "Quick apply", "Healthcheck"
 	short["work-rule-diff"], short["work-rule-find"], short["work-rule-lookup"] = "Diff", "Find", "Lookup"
 	short["tool-proxy-add"], short["tool-proxy-edit"], short["tool-proxy-export"] = "Add", "Edit", "Share"

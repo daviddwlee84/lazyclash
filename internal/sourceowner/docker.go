@@ -23,17 +23,22 @@ type DockerSource struct {
 }
 type DockerRequest struct {
 	DockerSource
-	Op       string `json:"op"`
-	Version  string `json:"version,omitempty"`
-	Document any    `json:"document,omitempty"`
+	Op           string            `json:"op"`
+	Version      string            `json:"version,omitempty"`
+	Document     any               `json:"document,omitempty"`
+	ResourcePath string            `json:"resource_path,omitempty"`
+	Resources    map[string][]byte `json:"resources,omitempty"`
 }
 type DockerInfo struct {
-	ContainerID  string `json:"container_id"`
-	Image        string `json:"image"`
-	Error        string `json:"error,omitempty"`
-	ErrorKind    string `json:"error_kind,omitempty"`
-	SourceSHA256 string `json:"source_sha256"`
-	SingleFile   bool   `json:"single_file"`
+	ContainerID      string `json:"container_id"`
+	Image            string `json:"image"`
+	Error            string `json:"error,omitempty"`
+	ErrorKind        string `json:"error_kind,omitempty"`
+	SourceSHA256     string `json:"source_sha256"`
+	SingleFile       bool   `json:"single_file"`
+	ResourceData     []byte `json:"resource_data,omitempty"`
+	ResourceSHA256   string `json:"resource_sha256,omitempty"`
+	ResourceHomeHost string `json:"resource_home_host,omitempty"`
 }
 
 var ErrUnavailable = errors.New("Docker source owner is unavailable")
@@ -44,7 +49,7 @@ var dockerScript string
 func DockerHostScript() string { return dockerScript }
 
 func DockerOperation(ctx context.Context, host string, req DockerRequest) (DockerInfo, error) {
-	if req.Op != "inspect" && req.Op != "validate" {
+	if req.Op != "inspect" && req.Op != "validate" && req.Op != "read-resource" && req.Op != "resource-home" {
 		return DockerInfo{}, errors.New("invalid Docker source operation")
 	}
 	input, err := json.Marshal(req)
@@ -53,7 +58,11 @@ func DockerOperation(ctx context.Context, host string, req DockerRequest) (Docke
 	}
 	ctx, cancel := context.WithTimeout(ctx, 50*time.Second)
 	defer cancel()
-	out, err := connection.ExecutePython(ctx, host, dockerScript, input, 1<<20)
+	limit := 1 << 20
+	if req.Op == "read-resource" {
+		limit = 16 << 20
+	}
+	out, err := connection.ExecutePython(ctx, host, dockerScript, input, limit)
 	if err != nil {
 		return DockerInfo{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}

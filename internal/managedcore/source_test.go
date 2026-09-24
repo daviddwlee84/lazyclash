@@ -70,6 +70,40 @@ func TestManagedSourceBridgeKeepsOwnershipAndPrivateSnapshot(t *testing.T) {
 	if value, e := os.ReadFile(filepath.Join(saved.InputBaseDir, "rules/test.list")); e != nil || string(value) != "DOMAIN,example.test" {
 		t.Fatal("provider snapshot missing", e)
 	}
+	resourceRoot := filepath.Join(instance.Root, "home", "lazyclash-resources")
+	resource := filepath.Join(resourceRoot, "new-provider.yaml")
+	resourceData := []byte("payload: [example.test]\n")
+	document := map[string]any{"rule-providers": map[string]any{"new": map[string]any{"type": "file", "behavior": "domain", "path": resource}}}
+	if _, e = SourceOperation(context.Background(), target, configwork.HostRequest{Op: "validate", Document: document, Version: DefaultVersion, Resources: map[string][]byte{resource: resourceData}}, opts); e != nil {
+		t.Fatal("staged resource preview failed", e)
+	}
+	if _, e = os.Stat(resourceRoot); !os.IsNotExist(e) {
+		t.Fatal("preview wrote permanent resources", e)
+	}
+	if _, e = SourceOperation(context.Background(), target, configwork.HostRequest{Op: "resource-write", Path: resource, ResourceRoot: resourceRoot, Data: resourceData, ExpectedSHA256: hashBytes(resourceData)}, opts); e != nil {
+		t.Fatal(e)
+	}
+	owned, e := loadInstance("demo", opts)
+	if e != nil || !strings.Contains(strings.Join(owned.ResourceInventory, "\n"), "lazyclash-resources/new-provider.yaml") {
+		t.Fatal("new resource inventory was lost", owned.ResourceInventory, e)
+	}
+	saved, e = LoadRequest("demo", opts)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if data, e := os.ReadFile(filepath.Join(saved.InputBaseDir, "lazyclash-resources/new-provider.yaml")); e != nil || !bytes.Equal(data, resourceData) {
+		t.Fatal("migrated resource missing from configure snapshot", e)
+	}
+	if _, e = SourceOperation(context.Background(), target, configwork.HostRequest{Op: "resource-remove", Path: resource, ResourceRoot: resourceRoot, ExpectedSHA256: strings.Repeat("0", 64)}, opts); e == nil {
+		t.Fatal("changed resource removal accepted")
+	}
+	if _, e = SourceOperation(context.Background(), target, configwork.HostRequest{Op: "resource-remove", Path: resource, ResourceRoot: resourceRoot, ExpectedSHA256: hashBytes(resourceData)}, opts); e != nil {
+		t.Fatal(e)
+	}
+	owned, _ = loadInstance("demo", opts)
+	if strings.Contains(strings.Join(owned.ResourceInventory, "\n"), "lazyclash-resources/new-provider.yaml") {
+		t.Fatal("removed resource retained in inventory")
+	}
 	target.RuleSource, e = config.RuleSourceFromConfigSource(target)
 	if e != nil {
 		t.Fatal(e)

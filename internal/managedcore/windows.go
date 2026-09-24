@@ -739,10 +739,10 @@ func ResumeWindows(ctx context.Context, id string, opts Options) (Receipt, error
 	return finishWindowsActivation(ctx, instance, request, receipt, opts)
 }
 func WindowsSourceOperation(ctx context.Context, target config.Target, source configwork.HostRequest, opts Options) (configwork.HostResponse, error) {
-	if source.Op == "write" && opts.ReadOnly {
+	if sourceMutation(source.Op) && opts.ReadOnly {
 		return configwork.HostResponse{}, errors.New("Windows source writes disabled in read-only mode")
 	}
-	if source.Op == "write" {
+	if sourceMutation(source.Op) {
 		unlock, e := mutationLock(target.ManagedCoreID, opts)
 		if e != nil {
 			return configwork.HostResponse{}, e
@@ -760,6 +760,9 @@ func WindowsSourceOperation(ctx context.Context, target config.Target, source co
 	if err != nil {
 		return configwork.HostResponse{}, err
 	}
+	if err = validateSourceResourceOperation(instance, source); err != nil {
+		return configwork.HostResponse{}, err
+	}
 
 	if source.Op == "write" {
 		if err = windowsValidateSourceWrite(ctx, instance, request, &source, opts); err != nil {
@@ -767,7 +770,11 @@ func WindowsSourceOperation(ctx context.Context, target config.Target, source co
 		}
 	}
 	if source.Op == "validate" {
-		if err = validateWindowsOwnedResources(source.Document, instance); err != nil {
+		staged, e := stagedSourceInventory(instance, source.Resources)
+		if e != nil {
+			return configwork.HostResponse{}, e
+		}
+		if err = validateWindowsOwnedResources(source.Document, staged); err != nil {
 			return configwork.HostResponse{}, err
 		}
 	}
@@ -775,8 +782,11 @@ func WindowsSourceOperation(ctx context.Context, target config.Target, source co
 	r.Expected = ""
 	r.Source = &source
 	response, err := callWindows(ctx, instance.SSHHost, r, opts)
-	if err == nil && source.Op == "write" {
+	if err == nil && sourceMutation(source.Op) {
 		instance.Digest = response.Digest
+		if err = updateSourceResourceInventory(&instance, source); err != nil {
+			return response.Source, err
+		}
 		err = saveInstance(instance, request, opts)
 	}
 	return response.Source, err

@@ -45,3 +45,13 @@ func ValidateSourceCandidateWithSandbox(ctx context.Context, t config.Target, da
 	}
 	return validateCandidateWithSandbox(ctx, t, data, version, sandbox)
 }
+
+// ValidateSourceDocumentWithResources stages selected provider snapshots in the
+// private validator home before any destination resource is installed.
+func ValidateSourceDocumentWithResources(ctx context.Context, t config.Target, document any, version string, sandbox ValidationSandbox, resources map[string][]byte) error {
+	if t.RuleSource == nil || t.RuleSource.Kind != "mihomo" {
+		return errors.New("standalone validation requires a bound Mihomo owner")
+	}
+	_, err := hostCall(ctx, t.SSHHost, hostRequest{Op: "validate", Binary: t.RuleSource.Binary, Home: t.RuleSource.Home, Version: version, Document: document, ValidationDockerHost: sandbox.DockerHost, ValidationImage: sandbox.Image, Resources: resources})
+	return err
+}

@@ -52,6 +52,29 @@ group cycles, missing references, dialer dependencies and host-local files.
 credentials. The selected-target interactive form is `proxies copy NAME
 --interactive`. A preview does not move or delete the source node.
 
+For structural drift use `configs diff SOURCE DEST --json` or
+`configs diff SOURCE --all --format unified`. This compares persistent
+proxies/groups/providers/rules and comparison-only host settings. Values are
+compared before masking, so hidden credential differences remain visible.
+File-provider data participates in comparison; HTTP cache refreshes are not
+configuration drift. An unavailable source is not an empty configuration.
+
+`configs sync SOURCE DEST --interactive` selects complete objects and individual
+rule occurrences. For automation, copy IDs from diff into a selection file:
+`{"objects":[{"id":"/proxies/NAME","replace":true}]}`. Preview with
+`configs sync SOURCE DEST --selection FILE --json`, then apply the exact reviewed
+digest with `--yes --expect DIGEST`. `--all` requires
+`{"destinations":[{"target":"ID","selection":{"objects":[...]}}]}`;
+omitted destinations remain unselected. Never put raw credentials in selections.
+Dependencies are included automatically only when missing; conflicting existing
+dependencies require an explicit `reuse` or `replace` decision. Destination-only
+objects remain. Rule positions default to common anchors; ambiguous placements
+block unless explicit prepend is selected. Verge full Merge.rules replacement
+requires `allow_verge_rules_override` and masks future subscription rule updates.
+One complete candidate is validated/saved/activated per destination, with a
+composite receipt through the same configs verify/restore commands. All selected
+destinations are preflighted; failures after writing starts retain earlier writes.
+
 Owner behavior:
 
 - Native: validate with the bound actual core version in isolated storage, save

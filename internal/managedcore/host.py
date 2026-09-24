@@ -522,36 +522,82 @@ def source_operation(request):
         for parent in [path,*path.parents]:
             if parent==root:break
             if parent.exists() and stat.S_ISLNK(os.lstat(parent).st_mode):fail("configuration source cannot traverse symbolic links")
-    if source.get("path"):owned(source["path"])
+    if source.get("path") and op!="docker-read-resource":owned(source["path"])
     for guard in source.get("guards",[]):owned(guard["path"])
     result={}
     if op=="read":result["file"]=source_api["read"](source["path"])
+    elif op=="source-resource-read":
+        source=dict(source,resource_root=str(root/"home"))
+        result=resource_api["resource_operation"](source)
+    elif op in ("resource-inspect","resource-write","resource-remove"):
+        if pathlib.Path(source.get("resource_root",""))!=root/"home/lazyclash-resources":fail("resource migration is outside the owned directory")
+        result=resource_api["resource_operation"](source)
     elif op=="check":source_api["guards_match"](source["guards"])
     elif op=="write":
         result["file"]=source_api["write"](source)
         if pathlib.Path(source["path"])==root/"home/config.yaml":info["profile_sha256"]=digest(read_regular(root/"home/config.yaml"))
         atomic(root/"instance.json",json.dumps(info,sort_keys=True).encode(),0o644)
-    elif op in ("validate","docker-validate","docker-inspect"):
+    elif op in ("validate","docker-validate","docker-inspect","docker-read-resource","docker-resource-home"):
         if source.get("version") and source["version"]!=request["version"]:fail("validator version does not match owned artifact")
-        if op in ("docker-inspect","docker-validate"):
+        if op in ("docker-inspect","docker-validate","docker-read-resource","docker-resource-home"):
             if request["backend"]!="docker":fail("Docker source is not owned by this backend")
             expected="lazyclash_"+request["id"]+"-mihomo-1"
-            if source.get("container")!=expected:fail("Docker source container does not match managed instance")
+            if source.get("container",expected)!=expected:fail("Docker source container does not match managed instance")
             inspected=run(docker_command(request)+["inspect",expected],ok=True)
             if inspected is None:raise SourceUnavailable("managed Docker daemon or container is unavailable")
             items=json.loads(inspected);item=items[0]
             if item.get("Config",{}).get("Labels",{}).get("io.lazyclash.owner")!=request["owner_token"]:fail("Docker source owner label changed")
+            home_mounts=[m for m in item.get("Mounts",[]) if m.get("Destination")=="/root/.config/mihomo"]
+            if len(home_mounts)!=1 or home_mounts[0].get("Type")!="bind" or pathlib.Path(home_mounts[0].get("Source",""))!=root/"home" or not home_mounts[0].get("RW"):fail("managed Docker source home mount changed")
+            if any(m.get("Destination","").startswith('/root/.config/mihomo/') for m in item.get("Mounts",[])):fail("managed Docker home contains an untracked overlay mount")
             if not item.get("State",{}).get("Running"):raise SourceUnavailable("managed Docker container is not running")
             output=run(docker_command(request)+["exec",item["Id"],"sha256sum","/root/.config/mihomo/config.yaml"],ok=True)
             if output is None:raise SourceUnavailable("managed Docker source is unavailable inside its container")
             visible=output.split()[0]
             if not re.fullmatch(r"[a-f0-9]{64}",visible):fail("managed container source hash is invalid")
             result.update(container_id=item["Id"],image=item["Image"],source_sha256=visible,single_file=False)
-        if op!="docker-inspect":
+            if op=="docker-resource-home":result["file"]={"path":str(root/"home")}
+            if op=="docker-read-resource":
+                corepath=pathlib.PurePosixPath(source["path"])
+                if not corepath.is_absolute() or '..' in corepath.parts:fail("provider path is outside the owned Docker home")
+                try:relative=str(corepath.relative_to('/root/.config/mihomo'))
+                except ValueError:fail("provider path is outside the owned Docker home")
+                resource=resource_path(root/"home",relative);owned(resource)
+                result["file"]=resource_api["resource_operation"]({"op":"source-resource-read","path":str(resource),"resource_root":str(root/"home")})["file"]
+        if op in ("validate","docker-validate"):
             with tempfile.TemporaryDirectory(prefix=".source-check-",dir=root.parent) as temporary:
                 stage=pathlib.Path(temporary);shutil.copytree(root/"home",stage/"home");(stage/"bin").mkdir()
                 if request["backend"]=="native":shutil.copy2(root/"bin/mihomo",stage/"bin/mihomo")
-                atomic(stage/"home/config.yaml",json.dumps(source["document"]).encode())
+                core_home=pathlib.PurePosixPath('/root/.config/mihomo') if request["backend"]=="docker" else root/"home"
+                total=0
+                for resource,encoded in source.get("resources",{}).items():
+                    p=pathlib.PurePosixPath(resource)
+                    try:relative=p.relative_to(core_home)
+                    except ValueError:fail("staged provider resource escapes owned home")
+                    if len(relative.parts)!=2 or relative.parts[0]!='lazyclash-resources' or '..' in relative.parts:fail("staged provider resource is outside dedicated directory")
+                    data=base64.b64decode(encoded,validate=True);total+=len(data)
+                    if not data or len(data)>8<<20 or total>16<<20:fail("staged provider resources exceed limits")
+                    atomic(resource_path(stage/"home",str(relative)),data)
+                document=source["document"]
+                def staged_path(value):
+                    p=pathlib.Path(value)
+                    if not p.is_absolute():return value
+                    try:relative=p.relative_to(core_home)
+                    except ValueError:fail("validation resource escapes owned home")
+                    resource_path(root/"home",str(relative))
+                    return str(stage/"home"/relative) if request["backend"]=="native" else str(p)
+                for section in ("proxy-providers","rule-providers"):
+                    for provider in (document.get(section) or {}).values():
+                        if isinstance(provider,dict) and provider.get('path'):provider['path']=staged_path(provider['path'])
+                def certificates(value):
+                    if isinstance(value,dict):
+                        for key,item in value.items():
+                            if (key in ('certificate','ca','certificate-path','private-key-path') or (key=='private-key' and 'certificate' in value)) and isinstance(item,str) and item and not item.startswith('-----') and '\n' not in item:value[key]=staged_path(item)
+                            else:certificates(item)
+                    elif isinstance(value,list):
+                        for item in value:certificates(item)
+                certificates(document)
+                atomic(stage/"home/config.yaml",json.dumps(document).encode())
                 validate_profile(root,request,stage)
     else:fail("unsupported managed source operation")
     return {"source":result,"manifest":info,"digest":digest(read_regular(root/"instance.json"))}

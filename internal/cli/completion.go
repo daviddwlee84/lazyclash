@@ -321,7 +321,7 @@ func (o *options) registerCompletions(root *cobra.Command) {
 			cmd.ValidArgsFunction = values("on", "off")
 		case "targets edit", "targets remove", "targets default", "targets test", "targets diff", "targets copy-settings", "targets service", "targets service bind", "targets service status", "targets service start", "targets service stop", "targets service restart", "targets service enable", "targets service disable":
 			cmd.ValidArgsFunction = local("targets")
-		case "rules diff":
+		case "rules diff", "configs diff", "configs sync":
 			cmd.ValidArgsFunction = func(c *cobra.Command, a []string, s string) ([]string, cobra.ShellCompDirective) {
 				if len(a) < 2 {
 					return local("targets")(c, a, s)

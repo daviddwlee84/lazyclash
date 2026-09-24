@@ -17,16 +17,17 @@ import (
 var hostScript string
 
 type hostRequest struct {
-	Op                   string      `json:"op"`
-	Path                 string      `json:"path,omitempty"`
-	Data                 []byte      `json:"data,omitempty"`
-	Guards               []fileGuard `json:"guards,omitempty"`
-	Binary               string      `json:"binary,omitempty"`
-	Home                 string      `json:"home,omitempty"`
-	Version              string      `json:"version,omitempty"`
-	Document             any         `json:"document,omitempty"`
-	ValidationDockerHost string      `json:"validation_docker_host,omitempty"`
-	ValidationImage      string      `json:"validation_image,omitempty"`
+	Op                   string            `json:"op"`
+	Path                 string            `json:"path,omitempty"`
+	Data                 []byte            `json:"data,omitempty"`
+	Guards               []fileGuard       `json:"guards,omitempty"`
+	Binary               string            `json:"binary,omitempty"`
+	Home                 string            `json:"home,omitempty"`
+	Version              string            `json:"version,omitempty"`
+	Document             any               `json:"document,omitempty"`
+	ValidationDockerHost string            `json:"validation_docker_host,omitempty"`
+	ValidationImage      string            `json:"validation_image,omitempty"`
+	Resources            map[string][]byte `json:"resources,omitempty"`
 }
 
 func hostCall(ctx context.Context, host string, req hostRequest) (hostFile, error) {

@@ -30,6 +30,10 @@ func (m *Model) actions() []action {
 	group, hasGroup := m.group()
 	cfg := m.configData()
 	modeWrite := write && m.knownRoutingMode() && m.state().snap("config").err == nil
+	var configSyncKeys []string
+	if m.page == configs {
+		configSyncKeys = []string{"S"}
+	}
 	a := []action{
 		{"tool-setup", "Setup Mihomo client", nil, m.canRunTool() && !m.options.ReadOnly},
 		{"tool-core", "Manage installed cores", nil, m.canRunTool()},
@@ -42,6 +46,7 @@ func (m *Model) actions() []action {
 		{"tool-checks", "Saved connectivity checks: review / add / edit / run", []string{"C"}, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride},
 		{"tool-source", "Bind node / group configuration source", nil, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride},
 		{"work-compare", "Compare targets / copy selected settings", nil, m.options.Workbench != nil && len(m.settings.Targets) > 1},
+		{"tool-config-sync", "Sync selected source configuration objects", configSyncKeys, m.canRunTool() && len(m.savedRuleInspectionTargets("")) > 1},
 		{"work-url", "Diagnose URL and inspect routing topology", nil, m.options.Workbench != nil && m.target.ID != ""},
 		{"work-rule", "Preview / add domain rule", nil, m.options.Workbench != nil && m.target.ID != ""},
 		{"work-rule-quick", "Quick apply routing rule · target / all", ruleKeys(m.page, "n"), m.options.Workbench != nil && len(m.settings.Targets) > 0},

@@ -188,7 +188,14 @@ def validate(request):
                 source = value if os.path.isabs(value) else os.path.join(source_home,value)
                 index += 1
                 destination = os.path.join(stage,'resources',str(index),os.path.basename(source))
-                copy_resource(source,destination,required)
+                supplied=request.get('resources',{}).get(source)
+                if supplied is not None:
+                    payload=base64.b64decode(supplied,validate=True)
+                    if len(payload)>LIMIT:fail('staged validation resource exceeds 8 MiB')
+                    os.makedirs(os.path.dirname(destination),mode=0o700,exist_ok=True)
+                    with open(destination,'xb') as stream:stream.write(payload)
+                    os.chmod(destination,0o600)
+                else:copy_resource(source,destination,required)
                 return destination
             # Rewrite resource-bearing paths in a JSON representation (valid
             # YAML), never by text substitution in the user's original YAML.

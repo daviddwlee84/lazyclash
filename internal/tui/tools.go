@@ -115,7 +115,7 @@ func (m *Model) receiveTool(msg toolMsg) tea.Cmd {
 	m.toolPending = false
 	m.overlay = ""
 	m.pressed = nil
-	if msg.label == "Import proxies" || msg.label == "Add proxy" {
+	if msg.label == "Import proxies" || msg.label == "Add proxy" || msg.label == "Sync configurations" {
 		// The shared wizard may write several targets. Invalidate cached data
 		// even after a partial result, then refresh the visible target normally.
 		for _, state := range m.states {
@@ -205,6 +205,9 @@ func (m *Model) receiveToolSettings(msg toolSettingsMsg) tea.Cmd {
 	return command
 }
 func (m *Model) toolAction(id string) tea.Cmd {
+	if id == "tool-config-sync" {
+		return m.startConfigSync()
+	}
 	if m.options.ReadOnly {
 		switch id {
 		case "tool-setup", "tool-proxy-add", "tool-proxy-import", "tool-proxy-edit", "tool-proxy-copy", "tool-proxy-duplicate", "tool-group-add", "tool-group-edit":

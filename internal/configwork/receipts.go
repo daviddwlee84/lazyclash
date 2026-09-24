@@ -245,6 +245,9 @@ func Verify(ctx context.Context, t config.Target, id string, opts Options) (Rece
 	if e != nil {
 		return r, e
 	}
+	if r.Composite != nil {
+		return verifyChangeSetReceipt(ctx, t, r, opts)
+	}
 	if r.Binding != Binding(t) {
 		return r, errors.New("receipt belongs to a different source binding")
 	}
@@ -451,6 +454,9 @@ func Restore(ctx context.Context, t config.Target, id string, opts Options) (Rec
 	r, e := loadReceipt(opts, id)
 	if e != nil {
 		return r, e
+	}
+	if r.Composite != nil {
+		return restoreChangeSetReceipt(ctx, t, r, opts)
 	}
 	if r.Binding != Binding(t) {
 		return r, errors.New("receipt belongs to a different source binding")

@@ -1,4 +1,4 @@
-import hashlib, json, os, subprocess, sys, tempfile
+import base64, hashlib, json, os, subprocess, sys, tempfile
 class SourceUnavailable(Exception): pass
 def unavailable(s): raise SourceUnavailable(s)
 def fail(s): raise ValueError(s)
@@ -31,13 +31,49 @@ try:
             if os.path.realpath(candidate)==os.path.realpath(r['host_path']): matched=True; single_file=(rel=='.')
     if not matched: fail('host_path does not map to core_path through a container bind mount')
     if not item.get('State',{}).get('Running'): unavailable('bound Docker container is not running')
+    resource_data=None;resource_sha='';resource_home=''
+    if r['op']=='resource-home':
+        home=os.path.normpath(r['home']);dedicated=os.path.join(home,'lazyclash-resources');covering=[]
+        for mount in item.get('Mounts',[]):
+            dest=os.path.normpath(mount.get('Destination',''));rel=os.path.relpath(home,dest)
+            if dest==dedicated or dest.startswith(dedicated+'/'):fail('Docker resource directory has an overlapping mount; explicit migration is required')
+            if rel!='..' and not rel.startswith('../'):covering.append((len(dest),mount,rel))
+        covering.sort(key=lambda entry:entry[0],reverse=True)
+        if len(covering)>1 and covering[0][0]==covering[1][0]:fail('Docker resource home has ambiguous mounts')
+        if covering:
+            _,mount,rel=covering[0]
+            if mount.get('Type')=='bind' and mount.get('RW',True) and os.path.isdir(mount['Source']):
+                candidate=os.path.normpath(os.path.join(mount['Source'],rel))
+                if os.path.isdir(candidate):resource_home=candidate
+        if not resource_home:fail('Docker resource migration requires a writable directory bind covering the core home')
+    if r['op']=='read-resource':
+        p=r.get('resource_path','')
+        if not os.path.isabs(p) or os.path.commonpath([os.path.normpath(p),os.path.normpath(r['home'])])!=os.path.normpath(r['home']):fail('source resource escapes Docker owner home')
+        home=run(['exec',cid,'readlink','-f',r['home']]).decode().strip()
+        resolved=run(['exec',cid,'readlink','-f',p]).decode().strip()
+        if not home or not resolved or os.path.commonpath([home,resolved])!=home or home==resolved:fail('source resource resolves outside Docker owner home')
+        run(['exec',cid,'test','-f',resolved])
+        data=run(['exec',cid,'head','-c',str(8*1024*1024+1),resolved])
+        repeated=run(['exec',cid,'head','-c',str(8*1024*1024+1),resolved])
+        if len(data)>8*1024*1024 or repeated!=data or run(['exec',cid,'readlink','-f',p]).decode().strip()!=resolved:fail('Docker source resource changed or exceeds 8 MiB')
+        resource_data=base64.b64encode(data).decode();resource_sha=hashlib.sha256(data).hexdigest()
     if r['op']=='validate':
         with tempfile.TemporaryDirectory(prefix='lazyclash-config-check-') as stage:
             os.chmod(stage,0o700);doc=r['document']; copies=[]
             def resource(value,required=True):
                 src=value if os.path.isabs(value) else os.path.join(r['home'],value)
                 dst='/lazyclash-validation/resources/'+str(len(copies))
-                copies.append((src,dst,required));return dst
+                supplied=r.get('resources',{}).get(src)
+                if supplied is not None:
+                    payload=base64.b64decode(supplied,validate=True)
+                    if len(payload)>8*1024*1024:fail('staged Docker resource exceeds 8 MiB')
+                    target=os.path.join(stage,'resources',str(len(copies)))
+                    os.makedirs(os.path.dirname(target),mode=0o700,exist_ok=True)
+                    with open(target,'xb') as stream:stream.write(payload)
+                    os.chmod(target,0o600)
+                    copies.append((dst,dst,False))
+                else:copies.append((src,dst,required))
+                return dst
             for section in ('proxy-providers','rule-providers'):
                 for p in doc.get(section,{}).values():
                     if isinstance(p,dict) and isinstance(p.get('path'),str):
@@ -65,7 +101,7 @@ for p in "$home"/*.dat "$home"/*.mmdb "$home"/*.metadb; do
 done
 while [ "$#" -ge 3 ]; do
   src=$1; dst=$2; required=$3; shift 3
-  if [ -f "$src" ]; then cp "$src" "$dst"; elif [ "$required" = yes ]; then exit 72; fi
+  if [ "$src" = "$dst" ]; then [ -f "$dst" ]; elif [ -f "$src" ]; then cp "$src" "$dst"; elif [ "$required" = yes ]; then exit 72; fi
 done
 actual=$("$binary" -v)
 case "$actual" in *"Mihomo Meta $expected "*) ;; *) exit 73;; esac
@@ -81,10 +117,12 @@ exec "$binary" -t -d /lazyclash-validation -f /lazyclash-validation/candidate.js
             args += ['--entrypoint','/bin/sh',image,'-c',script,'--',r['binary'],r['home'],r['version']]
             for src,dst,required in copies: args += [src,dst,'yes' if required else 'no']
             run(args,env={k:v for k,v in os.environ.items() if not k.startswith('CLASH_') and k not in ('SAFE_PATHS','SKIP_SAFE_PATH_CHECK')})
-    elif r['op']!='inspect': fail('invalid Docker operation')
+    elif r['op'] not in ('inspect','read-resource','resource-home'): fail('invalid Docker operation')
     visible=run(['exec',cid,'cat',r['core_path']])
     if len(visible)>8*1024*1024: fail('Container configuration exceeds the size limit')
-    print(json.dumps({'container_id':cid,'image':image,'source_sha256':hashlib.sha256(visible).hexdigest(),'single_file':single_file}))
+    result={'container_id':cid,'image':image,'source_sha256':hashlib.sha256(visible).hexdigest(),'single_file':single_file,'resource_home_host':resource_home,'resource_sha256':resource_sha}
+    if resource_data is not None:result['resource_data']=resource_data
+    print(json.dumps(result))
 except SourceUnavailable as e: print(json.dumps({'error':str(e),'error_kind':'unavailable'}))
 except (FileNotFoundError,PermissionError,ConnectionError,subprocess.TimeoutExpired): print(json.dumps({'error':'Docker source host or daemon is unavailable','error_kind':'unavailable'}))
 except ValueError as e: print(json.dumps({'error':str(e)}))
