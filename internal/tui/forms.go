@@ -95,6 +95,7 @@ func (m *Model) formKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	case "esc":
+		m.retainQuickRuleDraft()
 		m.invalidateTargetTest()
 		m.overlay = ""
 		m.form = nil
@@ -127,6 +128,13 @@ func (m *Model) submitForm() tea.Cmd {
 	f := m.form
 	value := func(i int) string { return strings.TrimSpace(f.fields[i].value) }
 	switch f.kind {
+	case "work-rule-quick":
+		m.quickRuleDraft = value(0)
+		if m.quickRuleDraft == "" {
+			f.err = "Enter one routing rule, for example DOMAIN-SUFFIX,example.com,DIRECT"
+			return nil
+		}
+		return m.startQuickRuleTargets(WorkRequest{Kind: "quick-rule-preview", Rule: m.quickRuleDraft})
 	case "work-url":
 		if value(2) != "true" && value(2) != "false" {
 			f.err = "Observe only must be true or false"

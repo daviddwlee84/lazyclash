@@ -129,6 +129,24 @@ func inspectSource(ctx context.Context, target config.Target, opts Options) (Sou
 				source.File = item.Path
 			}
 		}
+	} else if s.Kind == "docker" {
+		source.File, source.applyPath = s.HostPath, s.CorePath
+		info, err := ruleDockerOperation(ctx, target, "inspect", nil, "", opts)
+		if err != nil {
+			return source, err
+		}
+		if info.ContainerID == "" || info.Image == "" {
+			return source, errors.New("Docker source did not return an exact container and image identity")
+		}
+		source.dockerInfo = info
+		source.Warnings = append(source.Warnings, "The host source is edited through its verified container bind mount; reload uses the container path.")
+		if info.SingleFile {
+			if target.Service != nil {
+				source.Warnings = append(source.Warnings, "The bound Docker client may restart to remount its single-file configuration; active connections can close.")
+			} else {
+				source.Warnings = append(source.Warnings, "The container owner must remount its single-file configuration before runtime activation can be verified.")
+			}
+		}
 	} else {
 		automaticActivation := target.HostOS == "windows" && target.ManagedCoreID != "" && opts.ActivateOwner != nil
 		manifest, err := readSourceHost(ctx, target, hostpath.Join(target.HostOS, s.DataDir, "profiles.yaml"), opts)

@@ -18,6 +18,9 @@ func (o *options) runWorkbench(ctx context.Context, r tui.WorkRequest) (tui.Work
 	if strings.HasPrefix(r.Kind, "servers-") {
 		return o.runServerWorkbench(ctx, r)
 	}
+	if strings.HasPrefix(r.Kind, "quick-rule-") || r.Kind == "rule-healthcheck" {
+		return o.runQuickRuleWorkbench(ctx, r)
+	}
 	result := tui.WorkResult{}
 	cmp := compare.Options{Open: o.deps.Open, ReadOnly: o.readOnly}
 	ownerCommand := &cobra.Command{}

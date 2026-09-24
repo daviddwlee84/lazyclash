@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/daviddwlee84/lazyclash/internal/configwork"
+	"github.com/daviddwlee84/lazyclash/internal/sourceowner"
 	"strconv"
 	"strings"
 	"time"
@@ -65,6 +66,7 @@ type hostResponse struct {
 	Status    string                        `json:"status"`
 	Running   bool                          `json:"running"`
 	Error     string                        `json:"error"`
+	ErrorKind string                        `json:"error_kind,omitempty"`
 	AckToken  string                        `json:"ack_token,omitempty"`
 	GuardRef  string                        `json:"guard_ref,omitempty"`
 	Deadline  int64                         `json:"deadline,omitempty"`
@@ -119,6 +121,9 @@ func callHost(ctx context.Context, host string, privileged bool, request hostReq
 		return response, errors.New("managed host returned an invalid response")
 	}
 	if response.Error != "" {
+		if response.ErrorKind == "unavailable" {
+			return response, fmt.Errorf("%w: %s", sourceowner.ErrUnavailable, response.Error)
+		}
 		return response, fmt.Errorf("managed core: %s", response.Error)
 	}
 	return response, nil

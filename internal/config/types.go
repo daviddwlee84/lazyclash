@@ -58,13 +58,19 @@ type ConfigSource struct {
 // RuleSource explicitly identifies the persistent owner. SourceConfig remains
 // a credential reference and never implicitly grants permission to edit YAML.
 type RuleSource struct {
-	Kind       string `toml:"kind" json:"kind"`
-	Version    string `toml:"version,omitempty" json:"version,omitempty"`
-	ConfigID   string `toml:"config_id,omitempty" json:"config_id,omitempty"`
-	Binary     string `toml:"binary,omitempty" json:"binary,omitempty"`
-	Home       string `toml:"home,omitempty" json:"home,omitempty"`
-	DataDir    string `toml:"data_dir,omitempty" json:"data_dir,omitempty"`
-	ProfileUID string `toml:"profile_uid,omitempty" json:"profile_uid,omitempty"`
+	Kind                 string `toml:"kind" json:"kind"`
+	Version              string `toml:"version,omitempty" json:"version,omitempty"`
+	ConfigID             string `toml:"config_id,omitempty" json:"config_id,omitempty"`
+	Binary               string `toml:"binary,omitempty" json:"binary,omitempty"`
+	Home                 string `toml:"home,omitempty" json:"home,omitempty"`
+	DataDir              string `toml:"data_dir,omitempty" json:"data_dir,omitempty"`
+	ProfileUID           string `toml:"profile_uid,omitempty" json:"profile_uid,omitempty"`
+	HostPath             string `toml:"host_path,omitempty" json:"host_path,omitempty"`
+	CorePath             string `toml:"core_path,omitempty" json:"core_path,omitempty"`
+	Container            string `toml:"container,omitempty" json:"container,omitempty"`
+	DockerHost           string `toml:"docker_host,omitempty" json:"docker_host,omitempty"`
+	ValidationDockerHost string `toml:"validation_docker_host,omitempty" json:"validation_docker_host,omitempty"`
+	ValidationImage      string `toml:"validation_image,omitempty" json:"validation_image,omitempty"`
 }
 
 // TUIPreferences keeps absent values distinct from explicit choices. Reading

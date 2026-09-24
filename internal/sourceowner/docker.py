@@ -1,10 +1,16 @@
 import hashlib, json, os, subprocess, sys, tempfile
+class SourceUnavailable(Exception): pass
+def unavailable(s): raise SourceUnavailable(s)
 def fail(s): raise ValueError(s)
 def run(args, **kwargs):
     env=kwargs.pop('env',dict(os.environ))
     env.pop('DOCKER_HOST',None); env.pop('DOCKER_CONTEXT',None)
     p=subprocess.run(['docker']+(['--host',endpoint] if endpoint else [])+args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=35,env=env,**kwargs)
-    if p.returncode: fail('Docker source operation failed; check local daemon, bound container, mounts and offline validation resources')
+    if p.returncode:
+        diagnostic=p.stderr.decode(errors='replace').lower()
+        if args[0] in ('context','inspect') or any(text in diagnostic for text in ('cannot connect to the docker daemon','is the docker daemon running','error during connect','is not running','no such container','permission denied while trying to connect')):
+            unavailable('Docker daemon or bound container is unavailable; check daemon access and container state')
+        fail('Docker source operation failed; check local daemon, bound container, mounts and offline validation resources')
     return p.stdout
 try:
     r=json.load(sys.stdin)
@@ -24,7 +30,7 @@ try:
             candidate=os.path.normpath(os.path.join(mount['Source'],rel))
             if os.path.realpath(candidate)==os.path.realpath(r['host_path']): matched=True; single_file=(rel=='.')
     if not matched: fail('host_path does not map to core_path through a container bind mount')
-    if not item.get('State',{}).get('Running'): fail('bound Docker container is not running')
+    if not item.get('State',{}).get('Running'): unavailable('bound Docker container is not running')
     if r['op']=='validate':
         with tempfile.TemporaryDirectory(prefix='lazyclash-config-check-') as stage:
             os.chmod(stage,0o700);doc=r['document']; copies=[]
@@ -79,5 +85,7 @@ exec "$binary" -t -d /lazyclash-validation -f /lazyclash-validation/candidate.js
     visible=run(['exec',cid,'cat',r['core_path']])
     if len(visible)>8*1024*1024: fail('Container configuration exceeds the size limit')
     print(json.dumps({'container_id':cid,'image':image,'source_sha256':hashlib.sha256(visible).hexdigest(),'single_file':single_file}))
+except SourceUnavailable as e: print(json.dumps({'error':str(e),'error_kind':'unavailable'}))
+except (FileNotFoundError,PermissionError,ConnectionError,subprocess.TimeoutExpired): print(json.dumps({'error':'Docker source host or daemon is unavailable','error_kind':'unavailable'}))
 except ValueError as e: print(json.dumps({'error':str(e)}))
 except Exception: print(json.dumps({'error':'Docker source inspection or isolated validation failed; no credentials are shown'}))

@@ -19,6 +19,9 @@ type WorkRequest struct {
 	Kind, Source, Destination, URL, Via, Digest, Receipt string
 	Fields, Groups                                       []string
 	ObserveOnly                                          bool
+	Rule                                                 string
+	All                                                  bool
+	Targets                                              []config.Target
 }
 type WorkRow struct {
 	ID, Label, Detail string
@@ -72,6 +75,18 @@ func (m *Model) launchWork(req WorkRequest) tea.Cmd {
 	if req.Source == m.target.ID {
 		req.Target = m.target
 	}
+	if req.Kind == "quick-rule-preview" || req.Kind == "rule-healthcheck" {
+		if req.All {
+			req.Targets = nil
+			for _, t := range m.settings.Targets {
+				if !t.Transient {
+					req.Targets = append(req.Targets, t)
+				}
+			}
+		} else {
+			req.Targets = []config.Target{req.Target}
+		}
+	}
 	if m.work != nil && m.work.pending {
 		return nil
 	}
@@ -112,6 +127,17 @@ func (m *Model) receiveWork(msg workMsg) tea.Cmd {
 	}
 	m.status = "Finished · " + w.result.Title
 	affected := ""
+	if w.request.Kind == "quick-rule-apply" {
+		refreshCurrent := false
+		for _, target := range w.request.Targets {
+			m.invalidateRuleWorkTarget(target.ID)
+			refreshCurrent = refreshCurrent || target.ID == m.target.ID
+		}
+		if refreshCurrent {
+			return m.refresh(true)
+		}
+		return nil
+	}
 	switch w.request.Kind {
 	case "copy-apply":
 		affected = w.request.Destination
@@ -156,6 +182,16 @@ func (m *Model) chooseWorkTarget() tea.Cmd {
 		return nil
 	}
 	id := w.result.Rows[min(w.index, len(w.result.Rows)-1)].ID
+	if w.phase == "rule-target" {
+		m.quickRuleScope = id
+		req := w.request
+		req.All = id == "all"
+		req.Source = strings.TrimPrefix(id, "target:")
+		if req.All {
+			req.Source = ""
+		}
+		return m.launchWork(req)
+	}
 	if w.phase == "source" {
 		w.request.Source = id
 		w.phase = "destination"
@@ -194,6 +230,11 @@ func (m *Model) workButton(id string) tea.Cmd {
 		return m.chooseWorkTarget()
 	case "work-edit":
 		req := w.request
+		if strings.HasPrefix(req.Kind, "quick-rule-") {
+			m.quickRuleDraft = req.Rule
+			m.work = nil
+			return m.startQuickRuleForm()
+		}
 		if req.Kind == "url" {
 			m.work = nil
 			return m.startForm("work-url", "Diagnose a URL", "", []field{{"URL", req.URL}, {"Alternative policy (optional)", req.Via}, {"Observe only (true/false)", fmt.Sprint(req.ObserveOnly)}})
@@ -232,6 +273,11 @@ func (m *Model) workButton(id string) tea.Cmd {
 	case "work-apply":
 		if w.result.Apply != nil && !m.options.ReadOnly {
 			req := *w.result.Apply
+			if req.Kind == "quick-rule-apply" {
+				m.ask("Apply reviewed rule", w.result.Summary, func() tea.Cmd { return m.launchWork(req) })
+				m.confirm.defaultNegative = true
+				return nil
+			}
 			return m.ask("Apply reviewed change", w.result.Summary, func() tea.Cmd { return m.launchWork(req) })
 		}
 	case "work-verify":
@@ -364,7 +410,7 @@ func (m *Model) workLayout(width, height int) ([]string, []hitRegion) {
 	if w.phase != "result" {
 		buttons = append(buttons, button{"work-choose", "Enter Choose", len(w.result.Rows) > 0})
 	}
-	if w.request.Kind == "url" || w.request.Kind == "rule-preview" {
+	if w.request.Kind == "url" || w.request.Kind == "rule-preview" || strings.HasPrefix(w.request.Kind, "quick-rule-") {
 		buttons = append(buttons, button{"work-edit", "e Edit", !w.pending})
 	}
 	if w.request.Kind == "diff" {

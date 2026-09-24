@@ -109,6 +109,9 @@ func (m *Model) overlayLayout(width, height int) ([]string, []hitRegion) {
 		}
 		lines = m.detailLines(text, width, max(0, height-1), 0)
 		buttons = []button{{"confirm", "Confirm", m.confirm != nil}, {"cancel", "Cancel", true}}
+		if m.confirm != nil && m.confirm.defaultNegative {
+			buttons = []button{{"cancel", "Enter Cancel", true}, {"confirm", "y Apply", true}}
+		}
 	case "help":
 		lines = fitLines(m.legacyOverlayView(width, max(1, height-1)), width, max(0, height-1))
 		buttons = []button{{"cancel", "Close", true}}
@@ -140,6 +143,9 @@ func (m *Model) formLayout(width, height int) ([]string, []hitRegion, int) {
 	}
 	if f.kind == "work-rule" {
 		caption = "Review · next step previews the exact persistent domain rule"
+	}
+	if f.kind == "work-rule-quick" {
+		caption = "Review · choose a target or all saved targets, then preview"
 	}
 	if !review {
 		caption = fmt.Sprintf("Field %d/%d · Tab next / Shift+Tab back", f.index+1, len(f.fields))
@@ -178,6 +184,8 @@ func (m *Model) formLayout(width, height int) ([]string, []hitRegion, int) {
 			label = "Diagnose"
 		case "work-rule":
 			label = "Preview"
+		case "work-rule-quick":
+			label = "Choose targets"
 		case "work-receipt":
 			label = "Continue"
 		}
@@ -225,6 +233,7 @@ func (m *Model) overlayButton(id string) tea.Cmd {
 	case "quick-save":
 		return m.quickSaveForm()
 	case "cancel":
+		m.retainQuickRuleDraft()
 		if m.overlay == "confirm" && m.confirm != nil && m.confirm.back != "" {
 			m.overlay = m.confirm.back
 			m.confirm = nil

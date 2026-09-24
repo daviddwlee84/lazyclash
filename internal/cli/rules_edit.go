@@ -7,19 +7,28 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/managedcore"
 	"github.com/daviddwlee84/lazyclash/internal/rulework"
+	"github.com/daviddwlee84/lazyclash/internal/sourceowner"
 	"github.com/spf13/cobra"
 )
 
 func (o *options) ruleOptions(cmd *cobra.Command) rulework.Options {
-	return rulework.Options{ReadOnly: o.readOnly, Open: o.deps.Open,
+	return rulework.Options{ReadOnly: o.readOnly, Open: o.deps.Open, ClientServices: o.deps.ClientServices,
 		Host: func(ctx context.Context, target config.Target, request rulework.HostRequest) (rulework.HostFile, error) {
 			operation := configwork.HostRequest{Op: request.Op, Path: request.Path, Data: request.Data, Guards: request.Guards, Binary: request.Binary, Home: request.Home, Version: request.Version, Document: request.Document, ValidationDockerHost: request.ValidationDockerHost, ValidationImage: request.ValidationImage}
 			if target.ManagedCoreID != "" {
-				result, err := managedcore.SourceOperation(ctx, target, operation, o.managedOptions(cmd))
+				result, err := managedcore.RuleSourceOperation(ctx, target, operation, o.managedOptions(cmd))
 				return result.File, err
 			}
 			result, err := configwork.DefaultHostOperation(ctx, target, operation)
 			return result.File, err
+		},
+		Docker: func(ctx context.Context, target config.Target, request rulework.DockerRequest) (rulework.DockerInfo, error) {
+			if target.ManagedCoreID == "" {
+				return sourceowner.DockerOperation(ctx, target.SSHHost, request)
+			}
+			operation := configwork.HostRequest{Op: "docker-" + request.Op, Container: request.Container, HostPath: request.HostPath, CorePath: request.CorePath, Binary: request.Binary, Home: request.Home, Version: request.Version, Document: request.Document}
+			result, err := managedcore.RuleSourceOperation(ctx, target, operation, o.managedOptions(cmd))
+			return rulework.DockerInfo{ContainerID: result.ContainerID, Image: result.Image, SourceSHA256: result.SourceSHA256, SingleFile: result.SingleFile}, err
 		},
 		ActivateOwner: func(ctx context.Context, target config.Target) error {
 			return managedcore.WindowsActivateSource(ctx, target, o.managedOptions(cmd))
@@ -48,14 +57,30 @@ func (o *options) ruleEditCommands() []*cobra.Command {
 		return o.output(cmd, map[string]any{"target_id": t.ID, "rule_source": t.RuleSource})
 	}})
 	var binding config.RuleSource
-	set := &cobra.Command{Use: "set --kind mihomo|verge", Short: "Bind an existing standalone YAML or current Verge profile Rules companion", Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error {
+	var fromConfig bool
+	set := &cobra.Command{Use: "set --kind mihomo|docker|verge", Short: "Bind an existing persistent rule owner, or explicitly reuse --from-config-source", Args: argsExact(0), RunE: func(cmd *cobra.Command, _ []string) error {
 		defer connection.CloseAuthentications()
+		if err := o.writable(); err != nil {
+			return err
+		}
 		if globalChanged(cmd, "controller") || globalChanged(cmd, "ssh") {
 			return usage("rule source binding requires the registered endpoint and SSH host")
 		}
 		cfg, path, i, err := o.registered(cmd)
 		if err != nil {
 			return err
+		}
+		if fromConfig {
+			for _, name := range []string{"kind", "config-id", "binary", "home", "data-dir", "profile", "owner-version", "host-path", "core-path", "container", "docker-host", "validation-docker-host", "validation-image"} {
+				if cmd.Flags().Changed(name) {
+					return usage("--from-config-source cannot be combined with --%s", name)
+				}
+			}
+			copied, e := config.RuleSourceFromConfigSource(cfg.Targets[i])
+			if e != nil {
+				return e
+			}
+			binding = *copied
 		}
 		cfg.Targets[i].RuleSource = &binding
 		if err = config.ValidateRuleSource(cfg.Targets[i]); err != nil {
@@ -75,13 +100,20 @@ func (o *options) ruleEditCommands() []*cobra.Command {
 		}
 		return o.output(cmd, map[string]any{"target_id": cfg.Targets[i].ID, "rule_source": binding, "owner": owner})
 	}}
-	set.Flags().StringVar(&binding.Kind, "kind", "", "persistent owner: mihomo or verge")
+	set.Flags().BoolVar(&fromConfig, "from-config-source", false, "inspect and copy the node/group source into an independent rule binding")
+	set.Flags().StringVar(&binding.Kind, "kind", "", "persistent owner: mihomo, docker or verge")
 	set.Flags().StringVar(&binding.Version, "owner-version", "", "declared Verge compatibility version (supported: 2.5.2)")
 	set.Flags().StringVar(&binding.ConfigID, "config-id", "", "registered standalone config ID")
 	set.Flags().StringVar(&binding.Binary, "binary", "", "absolute Mihomo validator binary on the core host")
 	set.Flags().StringVar(&binding.Home, "home", "", "absolute existing Mihomo home for copying validation resources")
 	set.Flags().StringVar(&binding.DataDir, "data-dir", "", "absolute Clash Verge data directory on the target host")
 	set.Flags().StringVar(&binding.ProfileUID, "profile", "", "explicit current Verge profile UID")
+	set.Flags().StringVar(&binding.HostPath, "host-path", "", "host-side absolute YAML path of the Docker bind mount")
+	set.Flags().StringVar(&binding.CorePath, "core-path", "", "absolute config path inside the container")
+	set.Flags().StringVar(&binding.Container, "container", "", "existing Docker container name")
+	set.Flags().StringVar(&binding.DockerHost, "docker-host", "", "Docker daemon unix socket on the selected host")
+	set.Flags().StringVar(&binding.ValidationDockerHost, "validation-docker-host", "", "optional native validation sandbox Docker socket")
+	set.Flags().StringVar(&binding.ValidationImage, "validation-image", "", "pinned sha256 image ID for the native validation sandbox")
 	source.AddCommand(set)
 	verify := &cobra.Command{Use: "verify RECEIPT", Short: "Verify persistent bytes and the first runtime rule after owner reload", Args: argsExact(1), RunE: func(cmd *cobra.Command, args []string) error {
 		defer connection.CloseAuthentications()

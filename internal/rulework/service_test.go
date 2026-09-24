@@ -77,6 +77,10 @@ func baseFixture(t *testing.T, verge bool) *fixture {
 						entry["type"] = "Domain"
 						entry["payload"] = parts[1]
 					}
+					if parts[0] == "DOMAIN-SUFFIX" || parts[0] == "DOMAIN-KEYWORD" {
+						entry["type"] = map[string]string{"DOMAIN-SUFFIX": "DomainSuffix", "DOMAIN-KEYWORD": "DomainKeyword"}[parts[0]]
+						entry["payload"] = parts[1]
+					}
 					if parts[0] == "IP-CIDR" || parts[0] == "IP-CIDR6" {
 						entry["type"] = "IPCIDR"
 						entry["payload"] = parts[1]

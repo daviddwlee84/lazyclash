@@ -130,6 +130,8 @@ type Model struct {
 	authOffered       map[string]bool
 	work              *workState
 	workSerial        uint64
+	quickRuleDraft    string
+	quickRuleScope    string
 	options           Options
 	settings          config.Config
 	target            config.Target

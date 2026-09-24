@@ -465,6 +465,9 @@ func targetForInstance(instance Instance, plan Plan, secretPath string) config.T
 	}
 	target.Configs = []config.CoreConfig{{ID: "managed", Name: "Managed source", Path: corePath}}
 	target.ConfigSource = source
+	// New installations own this exact profile for both editing capabilities.
+	// Existing saved targets are not migrated by read operations.
+	target.RuleSource, _ = config.RuleSourceFromConfigSource(target)
 	return target
 }
 

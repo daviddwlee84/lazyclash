@@ -110,6 +110,8 @@ func (m *Model) toolbar(width int) (string, []hitRegion) {
 		wanted = []string{"close-connection", "close-all"}
 	case logs:
 		wanted = []string{"log-follow", "log-level", "log-clear"}
+	case rules:
+		wanted = []string{"work-rule-quick", "work-rule-health", "refresh", "targets"}
 	case providers:
 		wanted = []string{"provider-update", "provider-health"}
 	case configs:
@@ -121,6 +123,7 @@ func (m *Model) toolbar(width int) (string, []hitRegion) {
 	short := map[string]string{"overview-inspect": "Inspect", "refresh": "Refresh", "targets": "Targets", "select": "Choose", "delay": "Delay", "delay-group": "Group delay", "close-connection": "Close", "close-all": "Close all", "log-follow": "Follow", "log-level": "Level", "log-clear": "Clear", "provider-update": "Update", "provider-health": "Healthcheck", "config-apply": "Apply", "config-add": "Register", "config-edit": "Edit", "config-remove": "Remove", "probe-ip": "IP.SB", "probe-latency": "Websites", "mode": "Mode", "tun": "TUN", "history-window": "Window", "graph-style": "Style"}
 	short["authenticate"], short["reconnect"] = "Authenticate", "Reconnect"
 	short["tool-checks"] = "Checks"
+	short["work-rule-quick"], short["work-rule-health"] = "Quick apply", "Healthcheck"
 	short["tool-proxy-add"], short["tool-proxy-edit"], short["tool-proxy-export"] = "Add", "Edit", "Share"
 	if m.page == overview {
 		short["mode"] = "Mode: " + defaultString(m.routingMode(), "?")

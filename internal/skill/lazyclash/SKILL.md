@@ -1,6 +1,6 @@
 ---
 name: lazyclash
-description: Operate Mihomo clients through lazyclash CLI/TUI. Use for controller discovery, runtime selection, source-backed node/group editing and sharing, proxy environments, Docker consumer settings, managed native/Docker client setup, VPN/TUN diagnosis, cross-target comparison and owner-bound rule repair. Native Verge profile reactivation remains owned by Verge.
+description: Operate Mihomo clients through lazyclash CLI/TUI. Use for controller discovery, runtime selection, source-backed node/group editing and sharing, proxy environments, Docker consumer settings, managed native/Docker client setup, VPN/TUN diagnosis, cross-target comparison, quick persistent rules and passive rule healthchecks. Native Verge profile reactivation remains owned by Verge.
 ---
 
 # lazyclash
@@ -34,7 +34,8 @@ lazyclash --target "$TARGET" proxies select "$GROUP" "$MEMBER" --json
 lazyclash --target "$TARGET" proxies list --json
 ```
 
-`--read-only` blocks core control actions, active egress/latency tests and healthchecks; `targets test` remains available. It
+`--read-only` blocks core control actions, active egress/latency tests and proxy
+provider healthchecks; `targets test` and passive `rules healthcheck` remain available. It
 still permits local target/config registration changes; use read commands when
 the request is only to inspect.
 
@@ -54,7 +55,7 @@ the request is only to inspect.
   noninteractive errors, exit codes, uncertain-write recovery and local CLI upgrades.
 
 - [URL diagnosis](references/diagnosis.md), also `lazyclash skill print diagnosis`: separate observation contexts, confidence, DNS/TUN and tentative recommendations.
-- [Cross-target and rule workflows](references/workflows.md), also `lazyclash skill print workflows`: preview digests, partial writes, persistent owners and completion setup.
+- [Cross-target and rule workflows](references/workflows.md), also `lazyclash skill print workflows`: quick add-if-absent rules, ERROR/WARNING handling, all-target skips, passive rule healthchecks, reviewed repairs and persistent native/Docker/Verge owners.
 - [Nodes and groups](references/sources.md), also `lazyclash skill print sources`: bind the actual owner, preserve raw definitions, review field changes, copy between targets and intentionally export credentials.
 - [Proxy environments](references/environment.md), also `lazyclash skill print environment`: current-shell versus child scope, both SSH forwarding directions, remote shells, service lifetime checks, Docker namespaces and consumer tests.
 - [Managed setup and network ownership](references/setup.md), also `lazyclash skill print setup`: native/Docker installation, offline starter data, privilege, TUN/VPN conflicts, receipts and host rollback.

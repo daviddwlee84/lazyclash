@@ -94,14 +94,26 @@ endpoint. Port remapping may prevent that match; use an explicit local secret
 reference in that case. A registered configs path used by configs apply instead
 belongs to the core's **container filesystem**.
 
-Persistent rule repair does not yet translate host/container paths or run its
-validator inside Docker; leave that rule-source binding unset. Host DNS/routes
-and a bridge-network container's DNS/routes are also different observation
-contexts. See the [Docker references](references.md#host-diagnostics).
+Persistent rule changes use an explicit Docker rule source:
 
-Node/group editing has a separate Docker-aware `configs source` adapter from
-v0.1.6; it verifies the host bind and container reload path rather than expanding
-the older rule-source binding. See [nodes and groups](proxies-and-groups.md).
+```sh
+lazyclash --target docker-mihomo rules source set --kind docker \
+  --container mihomo --host-path /srv/mihomo/config.yaml \
+  --core-path /root/.config/mihomo/config.yaml \
+  --binary /mihomo --home /root/.config/mihomo
+```
+
+The adapter verifies the container and host bind, validates using its image in
+private staging storage, and reloads the container-visible path. The two paths
+must describe the same bound file; a host path is not a container reload path.
+Host DNS/routes and a bridge-network container's DNS/routes remain different
+observation contexts. See [rule ownership](rules-and-ownership.md) and the
+[Docker references](references.md#host-diagnostics).
+
+Node/group editing keeps its separate Docker-aware `configs source` binding.
+Use `rules source set --from-config-source` to explicitly reuse an existing
+owner for rule operations. Credential discovery alone never establishes either
+write binding. See [nodes and groups](proxies-and-groups.md).
 `setup` can also create an explicitly owned native/Docker client and register its
 target; see [managed clients](managed-cores.md).
 

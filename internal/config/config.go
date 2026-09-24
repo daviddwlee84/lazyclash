@@ -211,12 +211,27 @@ func ValidateRuleSource(t Target) error {
 	if s == nil {
 		return nil
 	}
-	for _, value := range []string{s.Kind, s.Version, s.ConfigID, s.Binary, s.Home, s.DataDir, s.ProfileUID} {
+	for _, value := range []string{s.Kind, s.Version, s.ConfigID, s.Binary, s.Home, s.DataDir, s.ProfileUID, s.HostPath, s.CorePath, s.Container, s.DockerHost, s.ValidationDockerHost, s.ValidationImage} {
 		if len(value) > 4096 || strings.IndexFunc(value, unicode.IsControl) >= 0 {
 			return errors.New("rule source fields must not contain control characters")
 		}
 	}
+	if s.ValidationDockerHost != "" || s.ValidationImage != "" {
+		if s.Kind != "mihomo" || !ValidDockerHost(s.ValidationDockerHost) || !regexp.MustCompile(`^sha256:[a-f0-9]{64}$`).MatchString(s.ValidationImage) {
+			return errors.New("rule validation requires a native Mihomo source, absolute Docker unix socket and full sha256 local image ID")
+		}
+	}
+	if s.Kind != "docker" && (s.HostPath != "" || s.CorePath != "" || s.Container != "" || s.DockerHost != "") {
+		return errors.New("Docker rule source fields require kind docker")
+	}
 	switch s.Kind {
+	case "docker":
+		candidate := t
+		candidate.ConfigSource = &ConfigSource{Kind: "docker", ConfigID: s.ConfigID, HostPath: s.HostPath, CorePath: s.CorePath, Container: s.Container, DockerHost: s.DockerHost, Binary: s.Binary, Home: s.Home, Version: s.Version, DataDir: s.DataDir, ProfileUID: s.ProfileUID}
+		if s.Version != "" {
+			return errors.New("Docker rule source cannot declare a Verge owner version")
+		}
+		return ValidateConfigSource(candidate)
 	case "mihomo":
 		if s.ConfigID == "" || !hostpath.IsAbs(t.HostOS, s.Binary) || !hostpath.IsAbs(t.HostOS, s.Home) || hostpath.IsRoot(t.HostOS, s.Home) || s.DataDir != "" || s.ProfileUID != "" || s.Version != "" {
 			return errors.New("mihomo rule source requires a registered config_id, absolute binary and home, and no Verge fields")
@@ -236,7 +251,7 @@ func ValidateRuleSource(t Target) error {
 		}
 		return nil
 	default:
-		return errors.New("rule source kind must be mihomo or verge")
+		return errors.New("rule source kind must be mihomo, docker or verge")
 	}
 }
 

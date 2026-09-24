@@ -6,9 +6,14 @@ import (
 	"io"
 	"time"
 
+	"github.com/daviddwlee84/lazyclash/internal/clientservice"
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/sourceowner"
 )
+
+type DockerRequest = sourceowner.DockerRequest
+type DockerInfo = sourceowner.DockerInfo
 
 type Options struct {
 	ReadOnly bool
@@ -16,7 +21,9 @@ type Options struct {
 	Open     func(context.Context, config.Target, bool) (*core.Client, io.Closer, error)
 	// Host implements the closed source-file protocol for an explicitly bound
 	// owner, including OS-specific isolated validation. Nil keeps POSIX I/O.
-	Host func(context.Context, config.Target, HostRequest) (HostFile, error)
+	Host           func(context.Context, config.Target, HostRequest) (HostFile, error)
+	Docker         func(context.Context, config.Target, DockerRequest) (DockerInfo, error)
+	ClientServices clientservice.Options
 	// ActivateOwner is supplied only for an explicitly managed GUI installation.
 	// A pending receipt is durable before this callback can reload its owner.
 	ActivateOwner func(context.Context, config.Target) error
@@ -32,6 +39,8 @@ type Source struct {
 	Warnings   []string `json:"warnings,omitempty"`
 	guards     []fileGuard
 	file       hostFile
+	applyPath  string
+	dockerInfo DockerInfo
 }
 
 type Plan struct {
@@ -53,6 +62,7 @@ type Receipt struct {
 	ID                  string    `json:"id"`
 	TargetID            string    `json:"target_id"`
 	Owner               string    `json:"owner"`
+	OwnerIdentity       string    `json:"owner_identity,omitempty"`
 	File                string    `json:"file"`
 	Rule                string    `json:"rule"`
 	Domain              string    `json:"domain,omitempty"`

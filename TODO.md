@@ -1,15 +1,16 @@
 # Future milestones
 
-The current release supports existing-core observation, runtime comparison/control, URL diagnosis and exact-domain repairs for explicitly bound owners. Remaining milestones:
+Current functionality includes existing-core observation, runtime comparison/control, URL diagnosis, quick common-rule apply and passive rule healthchecks for explicitly bound owners. Remaining milestones:
 
 - **VPS 每人／每裝置憑證管理 (P?, L)**: multiple UUIDs, device-specific exports, revocation and rotation with persistent configuration ownership; preserve legacy shared credentials and distinguish blocking new authentication from terminating existing sessions. → [research](backlog/server-client-identities.md)
 
 - **SVG topology export (P?, M)**: optional local Mermaid CLI rendering when needed; terminal/Mermaid/JSON output ships first, without Node or Chromium. → [research](backlog/topology-svg-export.md)
 
 - **Extended rules workbench**: edit general staged personal overrides with `$VISUAL`/`$EDITOR`; keep baseline, overrides and generated configuration separate; validate with the target core version in isolated storage; show diff, detect conflicting edits and retain previous revisions.
+- **Advanced rule grammar and analysis (P?, L)**: extend quick input beyond common domain/CIDR rules, preserve matcher modifiers and add evidence-backed provider/logical analysis without treating unknown results as no conflict. → [research](backlog/advanced-rule-analysis.md)
 - **Offline rule evaluation**: preview supported deterministic rules while preserving unknown outcomes; extend the shipped active URL evidence without pretending offline estimates are observations.
 - **Managed core upgrades/migration**: update/rollback core binaries and images; migrate backend/service identity/ports with complete resource and service recovery. v0.1.6 adds installation, profile configuration, lifecycle and guarded network setup.
-- **Routing data updates**: optional separately downloaded verified rule bundles beyond the snapshot embedded in a binary. v0.1.6 ships offline cn-split/simple presets with immutable clash-rules provenance and category mapping.
+- **Routing data updates and upstream rules (P?, L)**: optional verified bundles beyond the binary's immutable clash-rules snapshot; design upstream policy editing/publication and target refresh as separate operations with owner-aware activation. → [research](backlog/upstream-rule-distribution.md)
 - **Dual full-tunnel routing**: explicitly designed exit-node/TUN chaining. The current coexistence path supports split VPN destinations and reports competing default-route owners.
 - **Service-owned proxy tunnels**: explicit persistent ownership, service lifecycle and recovery for background consumers; v0.1.7 provides invocation/shell forwards and rejects known temporary endpoints for service use. Keep this separate from arbitrary command replay and shell-owned leases.
 - **Further proxy integration**: incrementally consolidate repeated dotfiles resolution and Docker diagnosis, then consider a TUI tunnel view and authenticated/TLS reverse proxy endpoints. Preserve Docker configuration ownership and API-gateway responsibilities.

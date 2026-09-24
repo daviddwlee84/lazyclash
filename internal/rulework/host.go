@@ -10,6 +10,7 @@ import (
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/connection"
+	"github.com/daviddwlee84/lazyclash/internal/sourceowner"
 )
 
 //go:embed host.py
@@ -43,16 +44,23 @@ func hostCall(ctx context.Context, host string, req hostRequest) (hostFile, erro
 	}
 	out, err := connection.ExecutePython(ctx, host, hostScript, body, 16<<20)
 	if err != nil {
+		if req.Op == "read" {
+			return hostFile{}, fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
+		}
 		return hostFile{}, err
 	}
 	var response struct {
-		File  hostFile `json:"file"`
-		Error string   `json:"error"`
+		File      hostFile `json:"file"`
+		Error     string   `json:"error"`
+		ErrorKind string   `json:"error_kind"`
 	}
 	if json.Unmarshal(out, &response) != nil {
 		return hostFile{}, errors.New("invalid rule host response")
 	}
 	if response.Error != "" {
+		if req.Op == "read" && response.ErrorKind == "unavailable" {
+			return hostFile{}, fmt.Errorf("%w: %s", ErrSourceUnavailable, response.Error)
+		}
 		return hostFile{}, fmt.Errorf("rule source: %s", response.Error)
 	}
 	return response.File, nil
@@ -60,7 +68,13 @@ func hostCall(ctx context.Context, host string, req hostRequest) (hostFile, erro
 
 func sourceHostCall(ctx context.Context, target config.Target, req hostRequest, opts Options) (hostFile, error) {
 	if opts.Host != nil {
-		return opts.Host(ctx, target, req)
+		file, err := opts.Host(ctx, target, req)
+		var transport *connection.SSHTransportError
+		var authentication *connection.AuthRequiredError
+		if req.Op == "read" && (errors.Is(err, sourceowner.ErrUnavailable) || errors.As(err, &transport) || errors.As(err, &authentication)) {
+			return file, fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
+		}
+		return file, err
 	}
 	if target.HostOS == "windows" {
 		return hostFile{}, errors.New("Windows rule sources require an explicitly bound owner host adapter")

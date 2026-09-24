@@ -17,9 +17,10 @@ type action struct {
 	enabled   bool
 }
 type confirmation struct {
-	title, body string
-	back        string
-	run         func() tea.Cmd
+	title, body     string
+	back            string
+	run             func() tea.Cmd
+	defaultNegative bool
 }
 
 func (m *Model) actions() []action {
@@ -43,7 +44,10 @@ func (m *Model) actions() []action {
 		{"work-compare", "Compare targets / copy selected settings", nil, m.options.Workbench != nil && len(m.settings.Targets) > 1},
 		{"work-url", "Diagnose URL and inspect routing topology", nil, m.options.Workbench != nil && m.target.ID != ""},
 		{"work-rule", "Preview / add domain rule", nil, m.options.Workbench != nil && m.target.ID != ""},
+		{"work-rule-quick", "Quick apply routing rule · target / all", ruleKeys(m.page, "n"), m.options.Workbench != nil && len(m.settings.Targets) > 0},
+		{"work-rule-health", "Rules healthcheck · target / all", ruleKeys(m.page, "H"), m.options.Workbench != nil && len(m.settings.Targets) > 0},
 		{"work-source", "Bind persistent rule source", nil, m.options.Workbench != nil && m.target.ID != ""},
+		{"work-source-reuse", "Bind rule source from node / group source", nil, m.options.Workbench != nil && m.options.SaveTargets != nil && m.target.ConfigSource != nil && !m.target.Transient && !m.target.TransportOverride && !m.options.ReadOnly},
 		{"work-receipt", "Verify / restore rule receipt", nil, m.options.Workbench != nil && m.target.ID != ""},
 		{"palette", "Open action menu", []string{":"}, true}, {"help", "Show help", []string{"?"}, true}, {"quit", "Quit", []string{"q"}, true},
 		{"mouse", "Toggle mouse capture", []string{"M"}, true},
@@ -300,7 +304,7 @@ func (m *Model) overlayKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return m.inputUpdate(msg)
 	case "confirm":
-		if key == "esc" || key == "n" {
+		if key == "esc" || key == "n" || key == "enter" && m.confirm != nil && m.confirm.defaultNegative {
 			m.overlay = ""
 			if m.confirm != nil {
 				m.overlay = m.confirm.back
@@ -395,6 +399,12 @@ func (m *Model) runAction(id string) tea.Cmd {
 		return m.startURLForm()
 	case "work-rule":
 		return m.startRuleForm()
+	case "work-rule-quick":
+		return m.startQuickRuleForm()
+	case "work-rule-health":
+		return m.startQuickRuleTargets(WorkRequest{Kind: "rule-healthcheck"})
+	case "work-source-reuse":
+		return m.startRuleSourceReuse()
 	case "work-source":
 		return m.startRuleSourceForm()
 	case "work-receipt":

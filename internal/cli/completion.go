@@ -416,7 +416,7 @@ func (o *options) registerCompletions(root *cobra.Command) {
 			} else if path == "configs source set" {
 				_ = cmd.RegisterFlagCompletionFunc("kind", values("native", "docker", "verge"))
 			} else {
-				_ = cmd.RegisterFlagCompletionFunc("kind", values("mihomo", "verge"))
+				_ = cmd.RegisterFlagCompletionFunc("kind", values("mihomo", "docker", "verge"))
 			}
 		}
 		if cmd.Flags().Lookup("shell") != nil {

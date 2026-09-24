@@ -44,6 +44,7 @@ func TestManagedSourceBridgeKeepsOwnershipAndPrivateSnapshot(t *testing.T) {
 	instance := Instance{ID: "demo", Backend: "native", Version: DefaultVersion, Root: filepath.Join(base, "demo"), ServiceScope: "user", OwnerToken: "owner", Digest: response.Digest, ProfileSHA256: hashBytes(profile), ResourceInventory: []string{"rules/test.list"}}
 	path := filepath.Join(instance.Root, "home", "config.yaml")
 	target := config.Target{ID: "demo", ManagedCoreID: "demo", Controller: "http://127.0.0.1:19090", ConfigSource: &config.ConfigSource{Kind: "native", ConfigID: "managed", Binary: filepath.Join(instance.Root, "bin", "mihomo"), Home: filepath.Join(instance.Root, "home")}}
+	target.Configs = []config.CoreConfig{{ID: "managed", Path: path}}
 	instance.Target = target
 	request := Request{ID: "demo", Backend: "native", Version: DefaultVersion, ServiceScope: "user", ControllerPort: 19090, MixedPort: 17890, Input: profile, InputKind: "yaml", Preset: "preserve"}
 	if e = saveInstance(instance, request, opts); e != nil {
@@ -69,9 +70,44 @@ func TestManagedSourceBridgeKeepsOwnershipAndPrivateSnapshot(t *testing.T) {
 	if value, e := os.ReadFile(filepath.Join(saved.InputBaseDir, "rules/test.list")); e != nil || string(value) != "DOMAIN,example.test" {
 		t.Fatal("provider snapshot missing", e)
 	}
+	target.RuleSource, e = config.RuleSourceFromConfigSource(target)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = RuleSourceOperation(context.Background(), target, configwork.HostRequest{Op: "read", Path: path}, opts); e != nil {
+		t.Fatal("explicit managed rule binding rejected", e)
+	}
+	target.RuleSource.Home = filepath.Join(instance.Root, "other")
+	if _, e = RuleSourceOperation(context.Background(), target, configwork.HostRequest{Op: "read", Path: path}, opts); e == nil {
+		t.Fatal("changed managed rule binding accepted")
+	}
 	target.Controller = "http://127.0.0.1:9999"
 	if _, e = SourceOperation(context.Background(), target, configwork.HostRequest{Op: "read", Path: path}, opts); e == nil {
 		t.Fatal("changed target controller accepted")
+	}
+}
+
+func TestManagedPOSTargetRegistersIndependentRuleOwner(t *testing.T) {
+	for _, backend := range []string{"native", "docker"} {
+		instance := Instance{ID: "owned", Root: "/owned", Backend: backend}
+		target := targetForInstance(instance, Plan{Controller: "http://127.0.0.1:9090"}, "/secret")
+		if target.RuleSource == nil || target.ConfigSource == nil {
+			t.Fatal("missing managed source binding", backend)
+		}
+		if err := config.ValidateRuleSource(target); err != nil {
+			t.Fatal(err)
+		}
+		want := "mihomo"
+		if backend == "docker" {
+			want = "docker"
+		}
+		if target.RuleSource.Kind != want {
+			t.Fatal(target.RuleSource)
+		}
+		target.ConfigSource.Home = "/different"
+		if target.RuleSource.Home == "/different" {
+			t.Fatal("rule and config owners alias")
+		}
 	}
 }
 func TestMutationLockSpansAllLocalStateCommits(t *testing.T) {

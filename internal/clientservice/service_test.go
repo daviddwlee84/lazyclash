@@ -202,6 +202,27 @@ func TestSingleFileOwnerRestartRefreshesMountWithoutRecreating(t *testing.T) {
 		t.Fatal("source hash drift accepted")
 	}
 }
+
+func TestExplicitRuleSourceActivationDoesNotRequireNodeOwner(t *testing.T) {
+	target, opts, _, _ := dockerFixture(t)
+	source := target.ConfigSource
+	descriptor := DockerSource{DockerHost: source.DockerHost, Container: source.Container, HostPath: source.HostPath, CorePath: source.CorePath, Binary: source.Binary, Home: source.Home}
+	target.ConfigSource = nil
+	sum := hashedBytes([]byte("new-config"))
+	if s, err := VerifyBoundSource(context.Background(), target, descriptor, sum, opts); err != nil || s.SourceMatches {
+		t.Fatal(s, err)
+	}
+	if r, err := RestartForBoundSource(context.Background(), target, descriptor, sum, opts); err != nil || r.Status != "observed" {
+		t.Fatal(r, err)
+	}
+	if s, err := VerifyBoundSource(context.Background(), target, descriptor, sum, opts); err != nil || !s.SourceMatches {
+		t.Fatal(s, err)
+	}
+	descriptor.DockerHost = "unix:///other"
+	if _, err := VerifyBoundSource(context.Background(), target, descriptor, sum, opts); err == nil {
+		t.Fatal("different daemon accepted")
+	}
+}
 func hashedBytes(b []byte) string { v := sha256.Sum256(b); return hex.EncodeToString(v[:]) }
 
 func TestSystemdIdentityAndCombinedDisableStop(t *testing.T) {

@@ -223,6 +223,8 @@ try:
     print(json.dumps({'file':result}))
 except ValueError as error:
     print(json.dumps({'error':str(error)}))
+except OSError:
+    print(json.dumps({'error':'host file operation failed; check permissions and explicitly bound paths','error_kind':'unavailable'}))
 except Exception:
     # Files, configuration content and child stderr may contain credentials.
     print(json.dumps({'error':'host file operation failed; check permissions, Python and explicitly bound paths'}))

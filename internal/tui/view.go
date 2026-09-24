@@ -399,6 +399,9 @@ func (m *Model) footer() string {
 	case "targets":
 		return "↑↓/jk select · Enter connect · T test · n add · e edit · Esc close"
 	case "confirm":
+		if m.confirm != nil && m.confirm.defaultNegative {
+			return "y apply · Enter / Esc / n cancel"
+		}
 		return "Enter / y confirm · Esc / n cancel"
 	case "help":
 		return "↑↓/jk scroll · Esc / ? close"
@@ -451,6 +454,9 @@ func (m *Model) legacyOverlayView(width, height int) string {
 	case "confirm":
 		if m.confirm != nil {
 			text = m.confirm.title + "\n\n" + m.confirm.body + "\n\nConfirm with Enter / y. Cancel with Esc / n."
+			if m.confirm.defaultNegative {
+				text = m.confirm.title + "\n\n" + m.confirm.body + "\n\nApply with y. Cancel with Enter / Esc / n."
+			}
 		}
 	case "help":
 		lines := []string{pageNames[m.page] + " · keyboard help", "↑↓ or j/k move · PgUp/PgDn page · gg/Home first · G/End last", "Tab/Shift+Tab or h/l focus pane · [ ] or 1–7 switch page", "/ live filter: typing owns keys; Enter accepts without acting", "t targets · : action menu · Esc back/clear · q/Ctrl+C quit", "", "Available actions:"}

@@ -4,6 +4,8 @@ import base64, contextlib, fcntl, gzip, hashlib, json, os, pathlib, platform, pl
 MAX_FILE = 128 * 1024 * 1024
 ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,47}$")
 
+class SourceUnavailable(RuntimeError): pass
+
 def fail(message):
     raise RuntimeError(message)
 
@@ -535,9 +537,14 @@ def source_operation(request):
             if request["backend"]!="docker":fail("Docker source is not owned by this backend")
             expected="lazyclash_"+request["id"]+"-mihomo-1"
             if source.get("container")!=expected:fail("Docker source container does not match managed instance")
-            items=json.loads(run(docker_command(request)+["inspect",expected]));item=items[0]
+            inspected=run(docker_command(request)+["inspect",expected],ok=True)
+            if inspected is None:raise SourceUnavailable("managed Docker daemon or container is unavailable")
+            items=json.loads(inspected);item=items[0]
             if item.get("Config",{}).get("Labels",{}).get("io.lazyclash.owner")!=request["owner_token"]:fail("Docker source owner label changed")
-            visible=run(docker_command(request)+["exec",item["Id"],"sha256sum","/root/.config/mihomo/config.yaml"]).split()[0]
+            if not item.get("State",{}).get("Running"):raise SourceUnavailable("managed Docker container is not running")
+            output=run(docker_command(request)+["exec",item["Id"],"sha256sum","/root/.config/mihomo/config.yaml"],ok=True)
+            if output is None:raise SourceUnavailable("managed Docker source is unavailable inside its container")
+            visible=output.split()[0]
             if not re.fullmatch(r"[a-f0-9]{64}",visible):fail("managed container source hash is invalid")
             result.update(container_id=item["Id"],image=item["Image"],source_sha256=visible,single_file=False)
         if op!="docker-inspect":
@@ -573,6 +580,7 @@ try:
 except Exception as error:
     message=str(error) if isinstance(error,RuntimeError) else "managed host operation failed; no untrusted process output is included"
     failure={"error":message}
+    if isinstance(error,SourceUnavailable):failure["error_kind"]="unavailable"
     try:
         if request.get("op")=="install" and not checked_root(request).exists():failure["status"]="not_installed"
     except Exception:pass

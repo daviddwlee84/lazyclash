@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
+	"github.com/daviddwlee84/lazyclash/internal/sourceowner"
 )
+
+type DockerSource = sourceowner.DockerSource
 
 type Options struct {
 	ReadOnly bool

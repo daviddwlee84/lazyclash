@@ -183,20 +183,35 @@ func VerifySource(ctx context.Context, t config.Target, sha string, o Options) (
 	if t.ConfigSource == nil || t.ConfigSource.Kind != "docker" {
 		return Status{}, errors.New("source activation requires a Docker source")
 	}
-	if t.Service == nil || t.Service.Kind != "docker" || t.ConfigSource.DockerHost != t.Service.DockerHost {
+	s := t.ConfigSource
+	return VerifyBoundSource(ctx, t, DockerSource{DockerHost: s.DockerHost, Container: s.Container, HostPath: s.HostPath, CorePath: s.CorePath, Binary: s.Binary, Home: s.Home}, sha, o)
+}
+
+// VerifyBoundSource checks an explicitly supplied source without assuming which
+// editing capability (nodes or rules) authorized access to it.
+func VerifyBoundSource(ctx context.Context, t config.Target, source DockerSource, sha string, o Options) (Status, error) {
+	if t.Service == nil || t.Service.Kind != "docker" || source.DockerHost != t.Service.DockerHost {
 		return Status{}, errors.New("source activation requires the same explicitly bound Docker daemon")
 	}
 	if err := config.ValidateClientService(t.Service); err != nil {
 		return Status{}, err
 	}
-	s, err := call(ctx, t, Request{Op: "source-status", Service: *t.Service, SourceContainer: t.ConfigSource.Container, SourcePath: t.ConfigSource.HostPath, CorePath: t.ConfigSource.CorePath, SourceSHA256: sha}, o)
+	s, err := call(ctx, t, Request{Op: "source-status", Service: *t.Service, SourceContainer: source.Container, SourcePath: source.HostPath, CorePath: source.CorePath, SourceSHA256: sha}, o)
 	return s, err
 }
 
 // RestartForSource performs one guarded owner restart after a reviewed source
 // write. It creates its own durable lifecycle receipt before changing the service.
 func RestartForSource(ctx context.Context, t config.Target, sha string, o Options) (Receipt, error) {
-	s, err := VerifySource(ctx, t, sha, o)
+	if t.ConfigSource == nil || t.ConfigSource.Kind != "docker" {
+		return Receipt{}, errors.New("source activation requires a Docker source")
+	}
+	c := t.ConfigSource
+	return RestartForBoundSource(ctx, t, DockerSource{DockerHost: c.DockerHost, Container: c.Container, HostPath: c.HostPath, CorePath: c.CorePath, Binary: c.Binary, Home: c.Home}, sha, o)
+}
+
+func RestartForBoundSource(ctx context.Context, t config.Target, source DockerSource, sha string, o Options) (Receipt, error) {
+	s, err := VerifyBoundSource(ctx, t, source, sha, o)
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -210,12 +225,12 @@ func RestartForSource(ctx context.Context, t config.Target, sha string, o Option
 	if err != nil {
 		return Receipt{}, err
 	}
-	guard := Request{SourcePath: t.ConfigSource.HostPath, CorePath: t.ConfigSource.CorePath, SourceSHA256: sha, SourceContainer: t.ConfigSource.Container}
+	guard := Request{SourcePath: source.HostPath, CorePath: source.CorePath, SourceSHA256: sha, SourceContainer: source.Container}
 	r, err := apply(ctx, t, "restart", false, p.Digest, o, &guard)
 	if err != nil {
 		return r, err
 	}
-	s, err = VerifySource(ctx, t, sha, o)
+	s, err = VerifyBoundSource(ctx, t, source, sha, o)
 	if err != nil {
 		return r, err
 	}

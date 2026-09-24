@@ -12,6 +12,39 @@ import (
 	"strings"
 )
 
+// RuleSourceOperation keeps the narrower rule binding independent while using
+// the same recorded owner and host protocol as configuration source edits.
+func RuleSourceOperation(ctx context.Context, target config.Target, operation configwork.HostRequest, opts Options) (configwork.HostResponse, error) {
+	instance, err := loadInstance(target.ManagedCoreID, opts)
+	if err != nil {
+		return configwork.HostResponse{}, err
+	}
+	expected, err := config.RuleSourceFromConfigSource(instance.Target)
+	if err != nil {
+		return configwork.HostResponse{}, err
+	}
+	if !reflect.DeepEqual(target.RuleSource, expected) {
+		return configwork.HostResponse{}, errors.New("managed rule source does not match its owned configuration")
+	}
+	if expected.Kind == "mihomo" {
+		bound, owned := "", ""
+		for _, c := range target.Configs {
+			if c.ID == expected.ConfigID {
+				bound = c.Path
+			}
+		}
+		for _, c := range instance.Target.Configs {
+			if c.ID == expected.ConfigID {
+				owned = c.Path
+			}
+		}
+		if bound == "" || bound != owned {
+			return configwork.HostResponse{}, errors.New("managed rule configuration path changed")
+		}
+	}
+	return SourceOperation(ctx, target, operation, opts)
+}
+
 // SourceOperation grants source access only through the recorded managed owner.
 // It never turns an arbitrary registered endpoint into a privileged file editor.
 func SourceOperation(ctx context.Context, target config.Target, operation configwork.HostRequest, opts Options) (configwork.HostResponse, error) {

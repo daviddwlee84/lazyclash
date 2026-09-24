@@ -4,6 +4,11 @@ A keyboard-first terminal console for **Mihomo clients and proxy servers**, incl
 
 Manage runtime state, edit and share source-backed nodes/groups, use a selected proxy from your shell or Docker, compare targets, and diagnose routing. `setup` installs native or Docker clients with an offline regional starter and optional reviewed TUN/system-proxy configuration. Clash Verge companion edits require native profile reactivation. See the [knowledge and operating guide](docs/README.md), [reference index](docs/references.md), and [future milestones](TODO.md).
 
+Apply one routing rule to a saved target or all targets with `rules apply`;
+existing rules are skipped and conflicting policies block the batch. Use
+`rules healthcheck` for read-only syntax, overlap and coverage findings. See
+[quick rules and persistent ownership](docs/rules-and-ownership.md).
+
 `servers deploy` adds owned proxy servers on Ubuntu VPSs or SSH-accessible
 homelabs, with native systemd or Docker Compose: VLESS/REALITY/Vision,
 Hysteria2, and the historical VMess/WebSocket/TLS recipe. `vps` compares and
@@ -239,7 +244,7 @@ capture with `M` or `--mouse=false` to use native terminal text selection.
 
 Use `?` for contextual help and `:` for the action palette. Arrow keys and `hjkl` navigate; Tab/Shift+Tab move focus; `/` filters; Esc returns; `q` quits. Letters typed into a field remain text. Numeric page keys switch views. Proxies adds `n` Add, `e` Edit and `y` Share. The target picker adds `s` Setup and `c` Cores alongside target management and SSH discovery. Narrow terminals show the focused pane.
 
-Refreshing retains the selected object by identity. Failed refreshes retain visibly stale data. Remote text is sanitized before display; logs are bounded in memory and are not written to disk. `NO_COLOR=1` disables color. `--read-only` disables core control actions, latency tests and healthchecks; local target/config registrations can still be edited.
+Refreshing retains the selected object by identity. Failed refreshes retain visibly stale data. Remote text is sanitized before display; logs are bounded in memory and are not written to disk. `NO_COLOR=1` disables color. `--read-only` disables core control actions, latency tests and active proxy healthchecks; passive `rules healthcheck` and local target/config registrations remain available.
 
 ## Agent operating guide
 
@@ -290,6 +295,9 @@ lazyclash connections close CONNECTION_ID
 lazyclash connections close --all --yes
 lazyclash logs --level debug --filter example --duration 10s --limit 100 --json
 lazyclash rules list --filter example
+lazyclash --target server rules apply 'DOMAIN,api.enterprise.githubcopilot.com,DIRECT' --dry-run
+lazyclash rules apply 'DOMAIN-SUFFIX,api.enterprise.githubcopilot.com,DIRECT' --all --yes
+lazyclash rules healthcheck --all --json
 lazyclash providers list proxies
 lazyclash providers update rules NAME
 lazyclash providers healthcheck NAME
@@ -339,8 +347,18 @@ lazyclash --target server rules source show
 lazyclash --target server rules add-domain example.com --via PROXY
 ```
 
-Copy and rule changes preview by default; applying requires `--yes --expect`
-with the reviewed digest. The TUI action menu provides target comparison,
+Copy-settings and the existing `add-domain`/`add-ip` repair commands preview by
+default; applying requires `--yes --expect` with the reviewed digest.
+`rules apply` supports DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD and IPv4/IPv6 CIDR
+input: it previews then confirms with default No, or applies with `--yes` after
+preflight. `--dry-run` inspects without writing; `--expect` is optional for
+pinning a previously reviewed quick-rule plan. Overlap is a warning; syntax and
+same-selector policy conflicts are errors that `--yes` cannot bypass.
+`--all` reports unavailable/unbound targets as skips; rule errors block the
+batch before writes. Partial availability can succeed with exit 0 and
+`completed_with_skips`; no usable targets returns nonzero.
+
+The TUI action menu provides quick rules, passive rule healthchecks, target comparison,
 checkbox selection, URL topology/evidence inspection, rule-source binding,
 preview/apply and receipt verification. Consult [targets](docs/targets-and-config.md),
 [diagnostics](docs/diagnostics-and-routing.md), and

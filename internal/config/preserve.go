@@ -356,7 +356,7 @@ func patchRuleSource(raw []byte, source *RuleSource) ([]byte, error) {
 	if start >= 0 {
 		block = raw[start:end]
 	}
-	block, err = patchFields(block, "targets.rule_source", []field{{"kind", source.Kind}, {"version", source.Version}, {"config_id", source.ConfigID}, {"binary", source.Binary}, {"home", source.Home}, {"data_dir", source.DataDir}, {"profile_uid", source.ProfileUID}})
+	block, err = patchFields(block, "targets.rule_source", []field{{"kind", source.Kind}, {"version", source.Version}, {"config_id", source.ConfigID}, {"binary", source.Binary}, {"home", source.Home}, {"data_dir", source.DataDir}, {"profile_uid", source.ProfileUID}, {"host_path", source.HostPath}, {"core_path", source.CorePath}, {"container", source.Container}, {"docker_host", source.DockerHost}, {"validation_docker_host", source.ValidationDockerHost}, {"validation_image", source.ValidationImage}})
 	if err != nil {
 		return nil, err
 	}

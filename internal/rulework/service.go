@@ -16,6 +16,7 @@ import (
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/rulecheck"
 )
 
 func binding(target config.Target) string {
@@ -108,7 +109,9 @@ func previewRule(ctx context.Context, target config.Target, domain, prefix, poli
 	data, _ := json.Marshal(struct {
 		Binding, Rule, Version, After, Runtime string
 		Guards                                 []fileGuard
-	}{binding(target), rule, coreVersion, sha(after), beforeRuntimeDigest, source.guards})
+		OwnerIdentity                          string                `json:",omitempty"`
+		Service                                *config.ClientService `json:",omitempty"`
+	}{binding(target), rule, coreVersion, sha(after), beforeRuntimeDigest, source.guards, sourceOwnerIdentity(source), target.Service})
 	plan.Digest = sha(data)
 	return plan, nil
 }
@@ -141,8 +144,8 @@ func applyRule(ctx context.Context, target config.Target, value, policy, expecte
 	if plan.Digest != expected {
 		return Receipt{}, errors.New("rule preview changed; review a new preview before applying")
 	}
-	if target.RuleSource.Kind == "mihomo" {
-		if err = validateCandidate(ctx, target, plan.after, plan.CoreVersion, opts); err != nil {
+	if target.RuleSource.Kind != "verge" {
+		if err = validateOwnerCandidate(ctx, target, plan.Owner, plan.after, plan.CoreVersion, opts); err != nil {
 			return Receipt{}, err
 		}
 	}
@@ -156,6 +159,7 @@ func applyRule(ctx context.Context, target config.Target, value, policy, expecte
 	}
 	receipt := Receipt{ID: hex.EncodeToString(idBytes), TargetID: target.ID, Owner: plan.Owner.Kind, File: plan.Owner.File, Rule: plan.Rule, Domain: plan.Domain, Prefix: plan.Prefix, Policy: plan.Policy, Status: "prepared", CreatedAt: now, UpdatedAt: now, Digest: plan.Digest, BeforeSHA256: plan.Owner.file.SHA256, AfterSHA256: sha(plan.after), Binding: binding(target), ProfileUID: plan.Owner.ProfileUID}
 	receipt.BeforeRuntimeDigest = plan.beforeRuntimeDigest
+	receipt.OwnerIdentity = sourceOwnerIdentity(plan.Owner)
 	if plan.NoChange {
 		receipt.AfterFingerprint = plan.Owner.file.Fingerprint
 	}
@@ -191,9 +195,24 @@ func applyRule(ctx context.Context, target config.Target, value, policy, expecte
 	if err = saveReceipt(opts, receipt); err != nil {
 		return receipt, err
 	}
+	ready, restarted, err := activateOwnerSource(ctx, target, plan.Owner, receipt.AfterSHA256, opts)
+	if err == nil && restarted {
+		err = waitForOwnerCore(ctx, target, opts)
+	}
+	if err != nil || !ready {
+		receipt.Status = "persisted_pending_owner_reload"
+		receipt.Message = "Source saved; activate the persistent owner and verify."
+		if err != nil {
+			receipt.Status = "runtime_result_unknown"
+		}
+		if e := saveReceipt(opts, receipt); e != nil {
+			return receipt, e
+		}
+		return receipt, err
+	}
 	client, cleanup, err := openCore(ctx, target, false, opts)
 	if err == nil {
-		_, err = client.ApplyConfig(ctx, receipt.File)
+		_, err = client.ApplyConfig(ctx, sourceReloadPath(plan.Owner))
 		cleanup()
 	}
 	if err != nil {
@@ -252,6 +271,9 @@ func Verify(ctx context.Context, target config.Target, id string, opts Options) 
 	if source.File != r.File {
 		return r, errors.New("the persistent owner changed since this receipt")
 	}
+	if r.OwnerIdentity != "" && r.OwnerIdentity != sourceOwnerIdentity(source) {
+		return r, errors.New("the Docker owner identity changed since this receipt")
+	}
 	f := source.file
 	expectedSHA := r.AfterSHA256
 	expectedFingerprint := r.AfterFingerprint
@@ -296,15 +318,15 @@ func Verify(ctx context.Context, target config.Target, id string, opts Options) 
 		}
 		return r, e
 	}
-	verified, err := runtimeFirstRule(ctx, target, r.Domain, r.Prefix, r.Policy, opts)
+	verified, err := runtimeFirstExpression(ctx, target, r.Rule, opts)
 	r.RuntimeVerified = verified
 	r.UpdatedAt = time.Now().UTC()
 	if verified {
 		r.Status = "applied_verified"
-		r.Message = "Persistent source matches; the exact " + strings.Split(r.Rule, ",")[0] + " rule is first in the current runtime rules."
-	} else if r.Owner == "verge" {
+		r.Message = "Persistent source matches; the first enabled runtime entry has the requested " + strings.Split(r.Rule, ",")[0] + " selector and policy. Runtime API evidence does not expose every source option."
+	} else if r.Owner == "verge" || r.Owner == "docker" {
 		r.Status = "persisted_pending_owner_reload"
-		r.Message = "Reactivate Profiles in Clash Verge, then verify. The rule may also be overridden by a later Merge or Script."
+		r.Message = "Activate the persistent owner, then verify. Later owner transformations may override the saved rule."
 	} else {
 		r.Status = "persisted_not_verified"
 		r.Message = "Persistent source matches, but the first runtime rule does not match the repair."
@@ -332,6 +354,9 @@ func Restore(ctx context.Context, target config.Target, id string, opts Options)
 	if err != nil {
 		return r, err
 	}
+	if r.OwnerIdentity != "" && r.OwnerIdentity != sourceOwnerIdentity(source) {
+		return r, errors.New("the Docker owner identity changed since this receipt")
+	}
 	if r.Restored && source.File == r.File && source.file.SHA256 == r.BeforeSHA256 {
 		if r.RestoredFingerprint != "" && source.file.Fingerprint != r.RestoredFingerprint {
 			return r, errors.New("restored source changed; refusing to overwrite intervening edits")
@@ -354,12 +379,12 @@ func Restore(ctx context.Context, target config.Target, id string, opts Options)
 	if err != nil || sha(backup) != r.BeforeSHA256 {
 		return r, errors.New("receipt backup is missing or changed")
 	}
-	if r.Owner == "mihomo" {
+	if r.Owner == "mihomo" || r.Owner == "docker" {
 		version, e := receiptCoreVersion(ctx, target, opts)
 		if e != nil {
 			return r, e
 		}
-		if e = validateCandidate(ctx, target, backup, version, opts); e != nil {
+		if e = validateOwnerRestoreCandidate(ctx, target, source, backup, version, opts); e != nil {
 			return r, e
 		}
 	}
@@ -379,10 +404,23 @@ func Restore(ctx context.Context, target config.Target, id string, opts Options)
 	r.RuntimeVerified = false
 	r.UpdatedAt = time.Now().UTC()
 	r.Message = "Original file restored. Reload the persistent owner before testing traffic."
-	if r.Owner == "mihomo" {
+	if r.Owner == "mihomo" || r.Owner == "docker" {
+		ready, restarted, e := activateOwnerSource(ctx, target, source, r.BeforeSHA256, opts)
+		if e == nil && restarted {
+			e = waitForOwnerCore(ctx, target, opts)
+		}
+		if e != nil || !ready {
+			if e != nil {
+				r.Status = "restore_runtime_result_unknown"
+			}
+			if saveErr := saveReceipt(opts, r); saveErr != nil {
+				return r, saveErr
+			}
+			return r, e
+		}
 		client, cleanup, e := openCore(ctx, target, false, opts)
 		if e == nil {
-			_, e = client.ApplyConfig(ctx, r.File)
+			_, e = client.ApplyConfig(ctx, sourceReloadPath(source))
 			cleanup()
 		}
 		if e != nil {
@@ -399,10 +437,31 @@ func Restore(ctx context.Context, target config.Target, id string, opts Options)
 		}
 		return Verify(ctx, target, r.ID, opts)
 	}
-	if err == nil && r.Owner == "mihomo" {
+	if err == nil && (r.Owner == "mihomo" || r.Owner == "docker") {
 		return Verify(ctx, target, r.ID, opts)
 	}
 	return r, err
+}
+
+func runtimeFirstExpression(ctx context.Context, target config.Target, expression string, opts Options) (bool, error) {
+	want, err := rulecheck.Parse(expression)
+	if err != nil {
+		return false, err
+	}
+	client, cleanup, err := openCore(ctx, target, true, opts)
+	if err != nil {
+		return false, err
+	}
+	defer cleanup()
+	object, err := client.Rules(ctx)
+	if err != nil {
+		return false, err
+	}
+	list, err := runtimeRuleList(object)
+	if err != nil || len(list) == 0 {
+		return false, err
+	}
+	return runtimeHasRule(list[:1], want), nil
 }
 
 func rulesDigest(object core.Object) (string, error) {
