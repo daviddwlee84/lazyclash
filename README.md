@@ -258,6 +258,11 @@ Use `?` for contextual help and `:` for the action palette. Arrow keys and `hjkl
 
 Refreshing retains the selected object by identity. Failed refreshes retain visibly stale data. Remote text is sanitized before display; logs are bounded in memory and are not written to disk. `NO_COLOR=1` disables color. `--read-only` disables core control actions, latency tests and active proxy healthchecks; passive `rules healthcheck` and local target/config registrations remain available.
 
+Human `rules apply` reports highlight success, errors, warnings and additions.
+`--color auto` uses colors on terminal stdout and honors `NO_COLOR`/`TERM=dumb`;
+redirected output stays plain. `--color never` disables command colors, while
+`--color always` explicitly overrides detection. JSON always remains unstyled.
+
 ## Agent operating guide
 
 The binary embeds its own operational skill, so an agent can read guidance for

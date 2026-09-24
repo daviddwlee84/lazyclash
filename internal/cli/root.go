@@ -82,6 +82,7 @@ type options struct {
 	serversPath                                                  string
 	json, readOnly                                               bool
 	page                                                         string
+	color                                                        string
 	mouse                                                        bool
 	deps                                                         Dependencies
 }
@@ -242,6 +243,9 @@ func New(deps Dependencies) *cobra.Command {
 	}
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usage("%s", err) })
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if err := validateColorMode(o.color); err != nil {
+			return err
+		}
 		if skillInvocation(cmd) {
 			return nil
 		}
@@ -269,6 +273,7 @@ func New(deps Dependencies) *cobra.Command {
 	f.StringVar(&o.secretEnv, "secret-env", "", "environment variable containing the controller secret")
 	f.StringVar(&o.caFile, "ca-cert", "", "PEM CA certificate for HTTPS")
 	f.BoolVar(&o.json, "json", false, "JSON data output; logs emit NDJSON")
+	o.registerColorFlag(root)
 	f.BoolVar(&o.readOnly, "read-only", false, "disable control actions and active probes; passive rule inspection remains available")
 	root.AddCommand(o.targetCommands(), o.configCommands(), o.statusCommand(), o.proxyCommands(), o.proxyCommand(), o.connectionCommands(), o.logsCommand(), o.rulesCommand(), o.providerCommands(), o.modeCommand(), o.tunCommand(), o.allowLANCommand(), o.settingsCommand())
 	root.AddCommand(o.skillCommand(), o.diagnosticsCommand(), o.upgradeCommand(), o.groupsCommand(), o.setupCommand(), o.coresCommand())

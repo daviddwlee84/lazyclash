@@ -159,7 +159,7 @@ func (o *options) setupCommand() *cobra.Command {
 		}
 		bare := len(args) == 0
 		cmd.Flags().Visit(func(flag *pflag.Flag) {
-			if flag.Name != "json" && flag.Name != "config" && flag.Name != "ssh" {
+			if flag.Name != "json" && flag.Name != "config" && flag.Name != "ssh" && flag.Name != "color" {
 				bare = false
 			}
 		})

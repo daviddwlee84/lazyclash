@@ -11,7 +11,6 @@ import (
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/connection"
-	"github.com/daviddwlee84/lazyclash/internal/core"
 	"github.com/daviddwlee84/lazyclash/internal/rulecheck"
 	"github.com/daviddwlee84/lazyclash/internal/rulework"
 	"github.com/spf13/cobra"
@@ -88,7 +87,7 @@ func (o *options) quickRuleCommands() []*cobra.Command {
 					return e
 				}
 			} else {
-				if _, e := fmt.Fprint(cmd.OutOrStdout(), core.Sanitize(rulework.FormatQuickPlan(p))); e != nil {
+				if e := o.writeQuickRulePlan(cmd, p); e != nil {
 					return e
 				}
 			}
@@ -119,7 +118,7 @@ func (o *options) quickRuleCommands() []*cobra.Command {
 			if e := o.output(cmd, result); e != nil {
 				return e
 			}
-		} else if _, e := fmt.Fprint(cmd.OutOrStdout(), core.Sanitize(rulework.FormatQuickResult(result))); e != nil {
+		} else if e := o.writeQuickRuleResult(cmd, result); e != nil {
 			return e
 		}
 		return err

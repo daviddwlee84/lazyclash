@@ -42,6 +42,14 @@ the exact reviewed plan. JSON and noninteractive execution without `--yes`
 returns a preview and never prompts. Use `--dry-run` to request preview-only
 behavior explicitly in either terminal mode.
 
+Human previews and results use semantic colors: green for ready/applied states
+and rule additions, red for blockers, amber for warnings or pending/unknown
+results, cyan for headings, and dim text for paths and digests. `--color auto`
+colors terminal stdout and keeps redirected output plain; it respects
+`NO_COLOR` and `TERM=dumb`. Use `--color never` for plain output or
+`--color always` to override terminal/environment detection. `--json` always
+stays free of ANSI styling. Colors do not change the findings or receipt data.
+
 `--all` attempts every saved target with its own credentials. Unreachable or
 unbound targets are reported as `skipped_unavailable`; they do not prevent the
 remaining usable targets from proceeding. Successful usable targets plus skips

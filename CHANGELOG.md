@@ -6,6 +6,9 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 
 ## Unreleased
 
+- Add semantic colors to human `rules apply` previews and results, with
+  `--color auto|always|never`, plain redirected output and ANSI-free JSON.
+
 - Treat existing selector conflicts as nonfatal routing-order warnings; quick
   rule apply blocks requested-selector conflicts and invalid candidates while
   summarizing unrelated source/runtime health findings separately.
