@@ -26,10 +26,10 @@ func finding(report Report, code string, index int) *Finding {
 
 func TestDuplicatesDoNotHideSelectorConflict(t *testing.T) {
 	r := Analyze(parsed("DOMAIN,EXAMPLE.COM,DIRECT", "DOMAIN,example.com,DIRECT", "DOMAIN,example.com,PROXY"), map[string]bool{"DIRECT": true, "PROXY": true})
-	if !r.HasErrors() || finding(r, "duplicate", 1) == nil || finding(r, "selector_conflict", 2) == nil {
+	if r.HasErrors() || !r.HasWarnings() || finding(r, "duplicate", 1) == nil || finding(r, "selector_conflict", 2) == nil {
 		t.Fatalf("duplicate masked contradictory selector: %+v", r)
 	}
-	if got := finding(r, "selector_conflict", 2); got.RelatedIndex == nil || *got.RelatedIndex != 0 || got.Severity != "error" || got.Rule != "DOMAIN,example.com,PROXY" || got.RelatedRule != "DOMAIN,example.com,DIRECT" {
+	if got := finding(r, "selector_conflict", 2); got.RelatedIndex == nil || *got.RelatedIndex != 0 || got.Severity != "warning" || got.Rule != "DOMAIN,example.com,PROXY" || got.RelatedRule != "DOMAIN,example.com,DIRECT" {
 		t.Fatalf("conflict lacks earlier evidence: %+v", got)
 	}
 }

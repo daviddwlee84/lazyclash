@@ -89,9 +89,14 @@ regex or logical rules. One YAML list item is accepted with a `--` terminator
 before an argument beginning `- `.
 
 An identical canonical rule in the bound source is skipped without moving it
-or reloading. ERROR findings such as syntax, missing policy and same-selector
-different-policy conflicts block every write. Confirmed overlap/shadowing is
-WARNING; inspect the exact rules and positions. Interactive confirmation
+or reloading, unless another occurrence conflicts with that requested selector.
+Invalid source/candidate syntax, missing policy/provider references and policy
+conflicts involving the requested selector block every write. Unrelated existing
+selector conflicts are health warnings: first-match rules can still operate
+normally. Quick apply summarizes these findings; use healthcheck for details.
+JSON `findings` contains operation diagnostics; `existing_health` retains whole
+source/runtime reports. Confirmed overlap/shadowing is WARNING; inspect the exact
+rules and positions. Interactive confirmation
 defaults to No. `--yes` accepts warnings and skips that prompt, without requiring
 a digest or bypassing errors. `--expect DIGEST` is available with `--yes` to
 pin a reviewed dry-run plan. JSON/noninteractive use without `--yes` returns a
@@ -112,6 +117,10 @@ not generated Merge/Script composition. Provider contents, GEO data and complex
 matchers are opaque; runtime omits source options such as no-resolve. Report
 these limits and supported/opaque counts, not total routing coverage or proof
 that a URL used a rule. It refreshes no providers and generates no probe traffic.
+Selector conflicts alone are warnings and do not make healthcheck fail. They
+are not proof that a core cannot load the source. Runtime-only requested policy
+drift is a warning for native/Docker full-source reload, but blocks Verge quick
+apply because a conflicting base rule can survive its companion edit.
 Existing unusual domain literals (including underscore labels or trailing dots)
 remain opaque: the core only lowercases them, so do not treat them as a missing
 or identical normalized hostname based on the stricter quick-input grammar.

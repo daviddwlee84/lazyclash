@@ -110,7 +110,7 @@ func Analyze(rules []Rule, policies map[string]bool) Report {
 			}
 		}
 		if conflict != nil {
-			add("error", "selector_conflict", rule, conflict, fmt.Sprintf("The same selector routes to both %q and %q.", conflict.Policy, rule.Policy))
+			add("warning", "selector_conflict", rule, conflict, fmt.Sprintf("The same selector is declared with policies %q and %q; earlier matching rules take precedence.", conflict.Policy, rule.Policy))
 		}
 		if duplicate != nil {
 			add("info", "duplicate", rule, duplicate, "An identical rule is already present earlier in this list.")
@@ -152,17 +152,7 @@ outer:
 				continue
 			}
 			overlapFindings++
-			code, message := "overlap", "These selectors have a confirmed overlap; earlier matching rules take precedence."
-			if earlier.Policy == "PASS" {
-				message = "These selectors have a confirmed overlap; the earlier PASS action continues to later rules."
-			} else if covered {
-				code, message = "shadowed", "An earlier selector covers this selector; this rule may be shadowed in first-match routing."
-			}
-			if earlier.Policy == later.Policy {
-				message += " Both select the same policy."
-			} else {
-				message += fmt.Sprintf(" Policies differ: %q then %q.", earlier.Policy, later.Policy)
-			}
+			code, message := overlapDescription(earlier, later, covered)
 			add("warning", code, later, &earlier, message)
 		}
 	}
@@ -179,6 +169,21 @@ outer:
 	}
 	report.Limitations = append(report.Limitations, "Only confirmed domain, keyword and CIDR relations are reported; absent findings do not prove disjointness. Static order does not prove application traffic, DNS state or UDP fallback behavior.")
 	return report
+}
+
+func overlapDescription(earlier, later Rule, covered bool) (code, message string) {
+	code, message = "overlap", "These selectors have a confirmed overlap; earlier matching rules take precedence."
+	if earlier.Policy == "PASS" {
+		message = "These selectors have a confirmed overlap; the earlier PASS action continues to later rules."
+	} else if covered {
+		code, message = "shadowed", "An earlier selector covers this selector; this rule may be shadowed in first-match routing."
+	}
+	if earlier.Policy == later.Policy {
+		message += " Both select the same policy."
+	} else {
+		message += fmt.Sprintf(" Policies differ: %q then %q.", earlier.Policy, later.Policy)
+	}
+	return code, message
 }
 
 // relation only returns true for a provable intersection/containment. An

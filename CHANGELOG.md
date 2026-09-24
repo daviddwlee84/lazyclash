@@ -6,6 +6,12 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 
 ## Unreleased
 
+- Treat existing selector conflicts as nonfatal routing-order warnings; quick
+  rule apply blocks requested-selector conflicts and invalid candidates while
+  summarizing unrelated source/runtime health findings separately.
+- Add discovery-assisted `targets add --ssh HOST` registration in a terminal,
+  with candidate selection, editable prefills and explicit save.
+
 - Add structural `configs diff` and selective `configs sync` for proxies, groups,
   providers and ordered rules, with masked tree/unified output, per-target CLI/TUI
   selections, dependency decisions, guarded provider-resource transfer and

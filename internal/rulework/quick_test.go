@@ -341,7 +341,12 @@ func TestQuickHealthKeepsSourceWhenRuntimeUnavailableAndReportsErrors(t *testing
 	}
 	quickSource(t, f, "rules:\n  - DOMAIN-SUFFIX,example.com,DIRECT\n  - DOMAIN-SUFFIX,example.com,PROXY\n  - MATCH,DIRECT\n")
 	r, err = Healthcheck(context.Background(), []config.Target{f.target}, false, f.opts)
-	if err == nil || r.Status != "errors" || !quickFindings(r.Targets[0].Source.Findings, "selector_conflict") {
+	if err != nil || r.Status != "completed" || r.Targets[0].Source.HasErrors() || !quickFindings(r.Targets[0].Source.Findings, "selector_conflict") {
+		t.Fatal(r, err)
+	}
+	quickSource(t, f, "rules:\n  - DOMAIN,example.com,missing-policy\n  - MATCH,DIRECT\n")
+	r, err = Healthcheck(context.Background(), []config.Target{f.target}, false, f.opts)
+	if err == nil || r.Status != "errors" || !quickFindings(r.Targets[0].Source.Findings, "policy_missing") {
 		t.Fatal(r, err)
 	}
 	quickAssertUnchanged(t, f)

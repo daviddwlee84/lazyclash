@@ -41,7 +41,7 @@ func (o *options) runQuickRuleWorkbench(ctx context.Context, req tui.WorkRequest
 
 func quickRulePreviewResult(req tui.WorkRequest, plan rulework.QuickPlan) tui.WorkResult {
 	result := tui.WorkResult{Title: "Review routing rule · " + plan.Status}
-	lines := []string{plan.Rule, "All targets are inspected before any write. Conflicts block the entire batch."}
+	lines := []string{plan.Rule, "All targets are inspected before any write. Conflicts involving this selector and invalid candidates block the batch; unrelated existing health findings do not."}
 	for _, target := range plan.Targets {
 		label := target.TargetID + " · " + target.Status
 		lines = append(lines, label)
@@ -55,9 +55,11 @@ func quickRulePreviewResult(req tui.WorkRequest, plan rulework.QuickPlan) tui.Wo
 		}
 		if target.Owner != nil {
 			detail = append(detail, "Owner: "+target.Owner.Kind, "File: "+target.Owner.File)
-			detail = append(detail, target.Owner.Warnings...)
 		}
 		detail = append(detail, ruleFindingLines(target.Findings)...)
+		if existing := rulework.FormatQuickExistingHealth(target.ExistingHealth); existing != "" {
+			detail = append(detail, existing)
+		}
 		for _, limitation := range target.Limitations {
 			detail = append(detail, "Coverage: "+limitation)
 		}
@@ -85,6 +87,9 @@ func quickRuleApplyResult(receipt rulework.QuickResult) tui.WorkResult {
 		label := target.TargetID + " · " + target.Status
 		detail := []string{label, target.Message, fmt.Sprintf("Runtime verified: %t", target.RuntimeVerified)}
 		detail = append(detail, ruleFindingLines(target.Findings)...)
+		if existing := rulework.FormatQuickExistingHealth(target.ExistingHealth); existing != "" {
+			detail = append(detail, existing)
+		}
 		if target.Receipt != nil {
 			detail = append(detail, "Receipt: "+target.Receipt.ID, "File: "+target.Receipt.File, target.Receipt.Message)
 		}

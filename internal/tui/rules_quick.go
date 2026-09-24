@@ -54,7 +54,11 @@ func (m *Model) startQuickRuleTargets(req WorkRequest) tea.Cmd {
 		}
 	}
 	if len(w.result.Rows) > 0 {
-		w.result.Rows = append(w.result.Rows, WorkRow{ID: "all", Label: fmt.Sprintf("All saved targets (%d)", len(w.result.Rows)), Detail: "Every saved target is preflighted; unavailable targets are reported separately. A conflict blocks the entire batch before any write."})
+		detail := "Every saved target is preflighted; unavailable targets are reported separately. Requested-selector conflicts and invalid candidates block the batch; unrelated existing health warnings do not."
+		if req.Kind == "rule-healthcheck" {
+			detail = "Inspect every saved target without changing its routing configuration. Unavailable views are reported separately."
+		}
+		w.result.Rows = append(w.result.Rows, WorkRow{ID: "all", Label: fmt.Sprintf("All saved targets (%d)", len(w.result.Rows)), Detail: detail})
 	} else {
 		w.result.Summary += "\nSave a target to use this operation."
 	}

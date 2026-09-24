@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
@@ -262,44 +263,166 @@ func finalizeHealth(h TargetHealth) TargetHealth {
 func FormatQuickPlan(p QuickPlan) string {
 	text := fmt.Sprintf("Rule: %s\nStatus: %s\nDigest: %s\n", p.Rule, p.Status, p.Digest)
 	for _, t := range p.Targets {
-		text += fmt.Sprintf("\n%s: %s\n", t.TargetID, t.Status)
-		if t.ReasonCode != "" {
-			text += "Reason: " + t.ReasonCode + "\n"
-		}
-		if t.Owner != nil {
-			text += "Source: " + t.Owner.File + " (" + t.Owner.Kind + ")\n"
-		}
-		if t.Diff != "" {
-			text += t.Diff + "\n"
-		}
-		if t.Message != "" {
-			text += t.Message + "\n"
-		}
-		for _, command := range t.NextCommands {
-			text += "Next: " + command + "\n"
-		}
-		for _, f := range t.Findings {
-			where := ""
-			if f.Index >= 0 {
-				where = fmt.Sprintf(" rule #%d", f.Index+1)
-			} else if f.Rule != "" {
-				where = " proposed rule"
+		text += "\n" + FormatQuickTarget(t)
+	}
+	return text
+}
+
+// FormatQuickResult keeps human apply output as compact as its preview. The
+// complete independent health reports remain available in the JSON result.
+func FormatQuickResult(result QuickResult) string {
+	text := fmt.Sprintf("Rule: %s\nStatus: %s\nDigest: %s\n", result.Rule, result.Status, result.Digest)
+	for _, target := range result.Results {
+		text += "\n" + FormatQuickTarget(QuickTargetPlan{TargetID: target.TargetID, Status: target.Status, Message: target.Message, Findings: target.Findings, ExistingHealth: target.ExistingHealth})
+		text += fmt.Sprintf("Runtime verified: %t\n", target.RuntimeVerified)
+		if receipt := target.Receipt; receipt != nil {
+			text += "Receipt: " + receipt.ID + "\nFile: " + receipt.File + "\n"
+			if receipt.Message != "" && receipt.Message != target.Message {
+				text += receipt.Message + "\n"
 			}
-			text += fmt.Sprintf("  %s [%s]%s: %s\n", f.Severity, f.Code, where, f.Message)
-			if f.Rule != "" {
-				text += "    " + f.Rule + "\n"
-			}
-			if f.RelatedRule != "" {
-				label := "Proposed rule"
-				if f.RelatedIndex != nil && *f.RelatedIndex >= 0 {
-					label = fmt.Sprintf("Related rule #%d", *f.RelatedIndex+1)
-				}
-				text += fmt.Sprintf("    %s: %s\n", label, f.RelatedRule)
-			}
-		}
-		for _, l := range t.Limitations {
-			text += "  Analysis limit: " + l + "\n"
 		}
 	}
 	return text
+}
+
+// FormatQuickTarget is shared by the CLI and TUI so operation findings and
+// existing health context have the same meaning on both surfaces.
+func FormatQuickTarget(t QuickTargetPlan) string {
+	text := fmt.Sprintf("%s: %s\n", t.TargetID, t.Status)
+	if t.ReasonCode != "" {
+		text += "Reason: " + t.ReasonCode + "\n"
+	}
+	if t.Owner != nil {
+		text += "Source: " + t.Owner.File + " (" + t.Owner.Kind + ")\n"
+	}
+	if t.Diff != "" {
+		text += t.Diff + "\n"
+	}
+	if t.Message != "" {
+		text += t.Message + "\n"
+	}
+	if len(t.Findings) > 0 {
+		text += "Operation checks:\n"
+	}
+	for _, f := range uniqueQuickFindings(t.Findings) {
+		where := ""
+		if f.Index >= 0 {
+			where = fmt.Sprintf(" rule #%d", f.Index+1)
+		} else if f.Rule != "" {
+			where = " requested rule"
+		}
+		text += fmt.Sprintf("  %s [%s]%s: %s\n", f.Severity, f.Code, where, f.Message)
+		if f.Rule != "" {
+			text += "    " + f.Rule + "\n"
+		}
+		if f.RelatedRule != "" {
+			label := "Requested rule"
+			if f.RelatedIndex != nil && *f.RelatedIndex >= 0 {
+				label = fmt.Sprintf("Related rule #%d", *f.RelatedIndex+1)
+			}
+			text += fmt.Sprintf("    %s: %s\n", label, f.RelatedRule)
+		}
+	}
+	text += FormatQuickExistingHealth(t.ExistingHealth)
+	for _, command := range uniqueQuickStrings(t.NextCommands) {
+		text += "Next: " + command + "\n"
+	}
+	for _, limitation := range uniqueQuickStrings(t.Limitations) {
+		text += "  Analysis limit: " + limitation + "\n"
+	}
+	return text
+}
+
+// FormatQuickExistingHealth summarizes repeated observations without printing
+// unrelated rule pairs twice. JSON retains the complete independent reports.
+func FormatQuickExistingHealth(health *QuickExistingHealth) string {
+	if health == nil {
+		return ""
+	}
+	type observation struct {
+		severity, code string
+		views          int
+	}
+	observations := map[string]observation{}
+	var limitations []string
+	for i, report := range []*rulecheck.Report{health.Source, health.Runtime} {
+		if report == nil {
+			continue
+		}
+		for _, f := range report.Findings {
+			first, second := f.Rule, f.RelatedRule
+			if f.Code == "selector_conflict" {
+				identity := func(raw string) string {
+					rule := rulecheck.ParseExisting(raw, -1)
+					if key := rule.SelectorKey(); key != "" {
+						return key + "\x00" + rule.Policy
+					}
+					return raw
+				}
+				first, second = identity(first), identity(second)
+				if first > second {
+					first, second = second, first
+				}
+			}
+			key := hashQuick([]any{f.Severity, f.Code, first, second})
+			if first == "" && second == "" {
+				key = hashQuick([]any{key, f.Message})
+			}
+			item := observations[key]
+			item.severity, item.code, item.views = f.Severity, f.Code, item.views|1<<i
+			observations[key] = item
+		}
+		for _, limitation := range report.Limitations {
+			if strings.Contains(limitation, "size limit") {
+				limitations = append(limitations, limitation)
+			}
+		}
+	}
+	if len(observations) == 0 && len(limitations) == 0 {
+		return ""
+	}
+	counts := map[string]int{}
+	for _, item := range observations {
+		view := map[int]string{1: "source", 2: "runtime", 3: "source + runtime"}[item.views]
+		label := fmt.Sprintf("%s [%s] (%s)", item.severity, item.code, view)
+		counts[label]++
+	}
+	labels := make([]string, 0, len(counts))
+	for label := range counts {
+		labels = append(labels, label)
+	}
+	sort.Strings(labels)
+	text := "Existing health (whole-list context; unrelated ordering warnings do not block this request):\n"
+	for _, label := range labels {
+		text += fmt.Sprintf("  %d distinct %s\n", counts[label], label)
+	}
+	for _, limitation := range uniqueQuickStrings(limitations) {
+		text += "  Existing health limit: " + limitation + "\n"
+	}
+	return text
+}
+
+func uniqueQuickStrings(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value != "" && !seen[value] {
+			seen[value] = true
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func uniqueQuickFindings(findings []rulecheck.Finding) []rulecheck.Finding {
+	seen := map[string]bool{}
+	out := make([]rulecheck.Finding, 0, len(findings))
+	for _, f := range findings {
+		key := hashQuick(f)
+		if !seen[key] {
+			seen[key] = true
+			out = append(out, f)
+		}
+	}
+	return out
 }

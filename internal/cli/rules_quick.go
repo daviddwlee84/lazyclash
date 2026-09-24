@@ -43,7 +43,7 @@ func (o *options) quickRuleTargets(cmd *cobra.Command, all bool) ([]config.Targe
 func (o *options) quickRuleCommands() []*cobra.Command {
 	var all, dryRun, yes bool
 	var expected string
-	apply := &cobra.Command{Use: "apply RULE", Short: "Apply a persistent common rule to one target or --all; preview errors block every write", Args: argsExact(1), Long: "Apply one DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, IP-CIDR or IP-CIDR6 rule.\nInteractive terminals preview and ask [y/N]. --yes accepts warnings, never errors.\nWithout a terminal or with --json, omit --yes to preview. --all reports unavailable targets as skips.\nUse -- before a quoted YAML item beginning with '- '.", Example: "  lazyclash --target server rules apply -- '- DOMAIN-SUFFIX,example.com,DIRECT'\n  lazyclash rules apply --all --yes 'DOMAIN-SUFFIX,example.com,DIRECT'\n  lazyclash rules apply --all --dry-run --json 'DOMAIN-SUFFIX,example.com,DIRECT'", RunE: func(cmd *cobra.Command, args []string) error {
+	apply := &cobra.Command{Use: "apply RULE", Short: "Apply a persistent common rule to one target or --all; relevant conflicts and invalid candidates block writes", Args: argsExact(1), Long: "Apply one DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, IP-CIDR or IP-CIDR6 rule.\nConflicts involving the requested selector and invalid candidate configurations block all writes. Unrelated existing selector conflicts are health warnings; use rules healthcheck for details.\nInteractive terminals preview and ask [y/N]. --yes accepts warnings, never operation errors.\nWithout a terminal or with --json, omit --yes to preview. --all reports unavailable targets as skips.\nUse -- before a quoted YAML item beginning with '- '.", Example: "  lazyclash --target server rules apply -- '- DOMAIN-SUFFIX,example.com,DIRECT'\n  lazyclash rules apply --all --yes 'DOMAIN-SUFFIX,example.com,DIRECT'\n  lazyclash rules apply --all --dry-run --json 'DOMAIN-SUFFIX,example.com,DIRECT'", RunE: func(cmd *cobra.Command, args []string) error {
 		defer connection.CloseAuthentications()
 		if _, err := rulecheck.Parse(args[0]); err != nil {
 			return usage("%s", err)
@@ -115,7 +115,11 @@ func (o *options) quickRuleCommands() []*cobra.Command {
 			}
 		}
 		result, err := rulework.ApplyRules(cmd.Context(), targets, args[0], all, p.Digest, opts)
-		if e := o.output(cmd, result); e != nil {
+		if o.json {
+			if e := o.output(cmd, result); e != nil {
+				return e
+			}
+		} else if _, e := fmt.Fprint(cmd.OutOrStdout(), core.Sanitize(rulework.FormatQuickResult(result))); e != nil {
 			return e
 		}
 		return err

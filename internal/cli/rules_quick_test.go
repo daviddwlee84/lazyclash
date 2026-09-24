@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
+	"github.com/daviddwlee84/lazyclash/internal/rulecheck"
 	"github.com/daviddwlee84/lazyclash/internal/rulework"
 	"github.com/daviddwlee84/lazyclash/internal/testcore"
 )
@@ -111,6 +112,86 @@ func TestQuickRuleCLIAllSkipsAndBlockingErrors(t *testing.T) {
 		if _, _, err = run(t, Dependencies{}, args...); err == nil || ExitCode(err) != 2 {
 			t.Fatal(args, err)
 		}
+	}
+}
+
+func TestQuickRuleCLIUnrelatedHealthDoesNotBlockApplyOrSkip(t *testing.T) {
+	initial := "prepend:\n  - DOMAIN-SUFFIX,nicovideo.jp,DIRECT\n  - DOMAIN-SUFFIX,nicovideo.jp," + testcore.Selector + "\nappend: []\ndelete: []\n"
+	settings, source := quickCLIFixture(t, initial)
+	out, _, err := run(t, Dependencies{}, "--config", settings, "rules", "apply", quickCLIRule, "--dry-run", "--json")
+	var plan rulework.QuickPlan
+	if err != nil || json.Unmarshal([]byte(out), &plan) != nil || plan.Status != "ready" || len(plan.Targets) != 1 {
+		t.Fatal(out, err)
+	}
+	target := plan.Targets[0]
+	if target.ExistingHealth == nil || target.ExistingHealth.Source == nil {
+		t.Fatal("existing health evidence was lost", out)
+	}
+	conflict := false
+	for _, f := range target.ExistingHealth.Source.Findings {
+		if f.Code == "selector_conflict" {
+			conflict = true
+			if f.Severity != "warning" {
+				t.Fatal("nonfatal conflict was labeled an error", f)
+			}
+		}
+	}
+	if !conflict {
+		t.Fatal("source health warning was hidden", out)
+	}
+	for _, f := range target.Findings {
+		if f.Code == "selector_conflict" || f.Severity == "error" {
+			t.Fatal("unrelated health finding became an operation blocker", f)
+		}
+	}
+	if len(target.NextCommands) == 0 || !strings.Contains(strings.Join(target.NextCommands, "\n"), "--config '") || !strings.Contains(strings.Join(target.NextCommands, "\n"), "rules healthcheck") {
+		t.Fatal("healthcheck guidance lost selected settings", target.NextCommands)
+	}
+	text, _, err := run(t, Dependencies{}, "rules", "apply", quickCLIRule, "--dry-run")
+	if err != nil || !strings.Contains(text, "Status: ready") || strings.Contains(text, "nicovideo.jp") || !strings.Contains(text, "healthcheck") {
+		t.Fatal("preview did not summarize unrelated health findings", text, err)
+	}
+	if got, _ := os.ReadFile(source); string(got) != initial {
+		t.Fatal("preview changed source")
+	}
+	out, _, err = run(t, Dependencies{}, "rules", "healthcheck", "--json")
+	var health rulework.HealthReport
+	if err != nil || json.Unmarshal([]byte(out), &health) != nil || health.Status == "errors" || health.Targets[0].Source == nil || health.Targets[0].Source.HasErrors() {
+		t.Fatal("health warnings implied failed configuration", out, err)
+	}
+	out, _, err = run(t, Dependencies{}, "rules", "apply", quickCLIRule, "--yes", "--json")
+	var applied rulework.QuickResult
+	if err != nil || json.Unmarshal([]byte(out), &applied) != nil || len(applied.Results) != 1 || applied.Results[0].Status != "persisted_pending_owner_reload" || applied.Results[0].ExistingHealth == nil {
+		t.Fatal("unrelated health prevented authorized apply or disappeared from result", out, err)
+	}
+	after, _ := os.ReadFile(source)
+	out, _, err = run(t, Dependencies{}, "rules", "apply", quickCLIRule, "--yes", "--json")
+	var skipped rulework.QuickResult
+	if err != nil || json.Unmarshal([]byte(out), &skipped) != nil || skipped.Results[0].Status != "skipped_existing" || skipped.Results[0].Receipt != nil {
+		t.Fatal("unrelated health prevented exact skip", out, err)
+	}
+	if got, _ := os.ReadFile(source); !bytes.Equal(got, after) {
+		t.Fatal("skip changed source")
+	}
+	out, _, err = run(t, Dependencies{}, "rules", "apply", quickCLIRule, "--yes")
+	if err != nil || !strings.Contains(out, "skipped_existing") || strings.Contains(out, "nicovideo.jp") || strings.Contains(out, `"existing_health"`) {
+		t.Fatal("human apply output dumped existing health reports", out, err)
+	}
+}
+
+func TestQuickRuleCLIExactMatchDoesNotHideRequestedConflict(t *testing.T) {
+	initial := "prepend:\n  - " + quickCLIRule + "\n  - DOMAIN-SUFFIX,api.enterprise.githubcopilot.com," + testcore.Selector + "\nappend: []\ndelete: []\n"
+	_, source := quickCLIFixture(t, initial)
+	out, _, err := run(t, Dependencies{}, "rules", "apply", quickCLIRule, "--all", "--yes", "--json")
+	var plan rulework.QuickPlan
+	if err == nil || json.Unmarshal([]byte(out), &plan) != nil || plan.Status != "blocked" || len(plan.Targets) != 1 {
+		t.Fatal(out, err)
+	}
+	if !(rulecheck.Report{Findings: plan.Targets[0].Findings}).HasErrors() {
+		t.Fatal("requested conflict lost error classification")
+	}
+	if got, _ := os.ReadFile(source); string(got) != initial {
+		t.Fatal("blocked exact match changed source")
 	}
 }
 

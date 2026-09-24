@@ -34,6 +34,17 @@ The `targets add` commands save local registrations; they do not install or
 start a core. Pass every required argument in automation. `--json` never opens
 the registration wizard.
 
+For human terminal use, `targets add [ID] --ssh HOST` without a controller
+discovers remote candidates and opens a prefilled registration form. Multiple
+candidates require a choice; a single candidate still requires Save. Explicit
+`--interactive` supports prefills. Existing `(SSH host, controller)` registrations
+are reported without duplication; ID conflicts keep the draft for correction.
+No candidates offers retry or manual input. Authentication/cancellation stays
+inside this registration flow, without switching to an unrelated saved target.
+Discovered credential/config references are retained, but plaintext secrets and
+ConfigSource/RuleSource/service ownership are never inferred for saving.
+Non-TTY automation uses the separate discover output and explicit add command.
+
 ## Secrets and transports
 
 - Prefer an existing `--secret-env VARIABLE` or `--secret-file /absolute/path`

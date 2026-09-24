@@ -452,21 +452,7 @@ func (o *options) discoverTargets(ctx context.Context, host string) ([]config.Ta
 }
 
 func (o *options) discoverCommand(cmd *cobra.Command) ([]config.Target, error) {
-	targets, err := o.discoverTargets(cmd.Context(), o.ssh)
-	if err != nil && connection.IsAuthRequired(err) && !o.json && o.deps.Terminal(cmd.InOrStdin(), cmd.ErrOrStderr()) {
-		auth, e := o.deps.Authenticate(cmd.Context(), o.ssh)
-		if e != nil {
-			return nil, e
-		}
-		auth.Stdin = cmd.InOrStdin()
-		auth.Stdout = cmd.ErrOrStderr()
-		auth.Stderr = cmd.ErrOrStderr()
-		if e = auth.Run(); e != nil {
-			return nil, fmt.Errorf("SSH authentication failed: %w", e)
-		}
-		return o.discoverTargets(cmd.Context(), o.ssh)
-	}
-	return targets, err
+	return o.discoverCommandUsing(cmd, o.ssh, o.discoverTargets)
 }
 
 func appendTarget(targets []config.Target, t config.Target) []config.Target {

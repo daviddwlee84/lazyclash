@@ -125,6 +125,7 @@ func (o *options) targetCommands() *cobra.Command {
 
 func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 	var draft config.Target
+	var requestedInteractive bool
 	verb, short := "add", "Register a controller; bare invocation opens a guided prompt"
 	if edit {
 		verb = "edit"
@@ -136,11 +137,27 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 		}
 		return nil
 	}, RunE: func(cmd *cobra.Command, args []string) error {
+		if requestedInteractive && (o.json || !o.deps.Terminal(cmd.InOrStdin(), cmd.OutOrStdout())) {
+			return usage("--interactive requires a terminal and cannot use --json")
+		}
 		if cmd.Flags().Changed("secret-file") && cmd.Flags().Changed("secret-env") {
 			return usage("--secret-file and --secret-env are mutually exclusive")
 		}
 		if cmd.Flags().Changed("probe-password-file") && cmd.Flags().Changed("probe-password-env") {
 			return usage("--probe-password-file and --probe-password-env are mutually exclusive")
+		}
+		discoverAdd := !edit && draft.Controller == "" && draft.SSHHost != ""
+		if !edit && (discoverAdd || requestedInteractive) {
+			if len(args) == 1 {
+				draft.ID = args[0]
+			}
+			if err := validateTargetRegistrationPrefill(draft); err != nil {
+				return usage("target: %s", err)
+			}
+			if discoverAdd && (o.json || !o.deps.Terminal(cmd.InOrStdin(), cmd.OutOrStdout())) {
+				return usage("supply a target ID and --controller URL for noninteractive registration; first run targets discover --ssh %s, or run targets add --ssh %s in a terminal", quoteTargetArgument(draft.SSHHost), quoteTargetArgument(draft.SSHHost))
+			}
+			return o.addTargetWithDiscovery(cmd, draft, discoverAdd)
 		}
 		cfg, path, err := o.load(cmd)
 		if err != nil {
@@ -226,7 +243,16 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 		}
 		return o.result(cmd, "Saved target "+draft.ID)
 	}}
+	if !edit {
+		cmd.Use = "add [ID]"
+		cmd.Short = "Register a controller, or discover and review one with --ssh HOST"
+		cmd.Long = "Register an explicit controller. In a terminal, --ssh HOST without --controller discovers remote controllers and opens an editable review before saving. Use --interactive to review a partially filled manual target. Bare targets add keeps the guided manual prompt. Noninteractive and JSON registration require an ID and --controller."
+		cmd.Example = "  lazyclash targets add --ssh my-host\n  lazyclash targets add office --ssh my-host\n  lazyclash targets add office --ssh my-host --controller http://127.0.0.1:9090\n  lazyclash targets add office --interactive --ssh my-host --controller http://127.0.0.1:9090"
+	}
 	f := cmd.Flags()
+	if !edit {
+		f.BoolVar(&requestedInteractive, "interactive", false, "review editable target fields, discovering controllers when only --ssh is supplied")
+	}
 	f.StringVar(&draft.Name, "name", "", "display name")
 	f.StringVar(&draft.Controller, "controller", "", "controller URL (host:port implies HTTP)")
 	f.StringVar(&draft.SSHHost, "ssh", "", "SSH host alias")
@@ -244,7 +270,7 @@ func (o *options) targetWriteCommand(edit bool) *cobra.Command {
 }
 
 func businessChanged(cmd *cobra.Command) bool {
-	for _, key := range []string{"name", "controller", "ssh", "secret-file", "secret-env", "ca-cert", "source-config", "probe-proxy", "probe-username", "probe-password-env", "probe-password-file", "probe-ca-cert"} {
+	for _, key := range []string{"name", "controller", "ssh", "host-os", "secret-file", "secret-env", "ca-cert", "source-config", "probe-proxy", "probe-username", "probe-password-env", "probe-password-file", "probe-ca-cert"} {
 		if cmd.Flags().Changed(key) {
 			return true
 		}

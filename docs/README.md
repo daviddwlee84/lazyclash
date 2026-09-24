@@ -60,6 +60,8 @@ for reverse forwarding, remote shells and cleanup. `scripts/analytics_pty_smoke.
 checks opt-in collection and the historical report browser against a disposable core.
 `scripts/config_sync_pty_smoke.py` checks per-target object selection, dependency
 decisions, review and composite apply against disposable Verge source fixtures.
+`scripts/target_discovery_pty_smoke.py` checks SSH discovery registration with
+injected candidates and authentication, without contacting real hosts.
 Tests use disposable state and controllers.
 Keep actual OS execution, cross-builds, fixture checks and real-host observations
 distinct in verification reports.

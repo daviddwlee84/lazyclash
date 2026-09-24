@@ -21,10 +21,17 @@ source is skipped without moving it, writing a file or reloading the core.
 Its position can still leave it shadowed; the result includes that warning.
 
 The command inspects source and runtime rules and validates each candidate
-before writing. Invalid syntax, an unavailable policy or the same selector with
-different policies is an **ERROR**. Any such error aborts the batch before its
-first write. Confirmed overlap and shadowing are **WARNING** findings, with the
-two rules and their positions. The ordinary final `MATCH` fallback is expected.
+before writing. Invalid source syntax/schema, known missing policy/provider
+references, candidate validation failures, and a conflicting policy for the
+**requested selector** block the batch before its first write. An exact matching
+rule does not hide another conflicting occurrence of that requested selector.
+
+Unrelated existing selector conflicts are health **WARNING** findings. They do
+not mean Mihomo cannot load the configuration: rules normally match in order.
+Quick apply summarizes these existing findings and suggests `rules healthcheck`
+for the full report. Confirmed overlap and shadowing remain warnings; the
+ordinary final `MATCH` fallback is expected. JSON keeps operation diagnostics in
+`findings` and whole-list source/runtime evidence in `existing_health`.
 
 Interactive apply shows the plan and asks **[y/N]**; Enter, No or cancellation
 leaves the sources unchanged. `--dry-run` always stops after the preview.
@@ -87,7 +94,10 @@ and policy, analyzed/opaque/invalid/disabled counts, routing mode and provider
 count. It checks malformed common rules, exact-selector policy conflicts,
 duplicates, confirmed overlap/shadowing and rules after MATCH. It sends no probe
 traffic, refreshes no providers, and writes or reloads nothing. Errors return
-nonzero; warnings alone do not.
+nonzero; warnings alone do not. Same-selector/different-policy findings are
+warnings here, not reports of a failed core. Source validity and runtime health
+are separate: a currently running core does not prove the saved source will
+load successfully on its next reload.
 
 Source coverage means the bound complete YAML, or the Verge Rules companion's
 prepend/append lists. A Verge base profile, Merge and Script are not composed by
@@ -96,6 +106,10 @@ cannot establish original YAML syntax or all modifiers, including `no-resolve`.
 A source/runtime difference is drift, not a contradictory pair within one list.
 For Verge quick apply, a proposed selector conflicting with the current runtime
 is also blocking: editing its companion does not remove the base profile rule.
+For native/Docker sources, that runtime-only difference is a drift warning
+because the complete source replaces runtime on reload. An unrelated runtime
+health finding does not block either owner. A rule found only in runtime still
+needs to be persisted; only a matching source rule can produce a no-write skip.
 Runtime presence does not prove a request used that rule.
 
 Provider contents, GEO data, regex, process/port and logical expressions are
@@ -105,7 +119,10 @@ prove disjointness. Existing domain literals outside ordinary DNS-name syntax,
 including underscore labels or trailing dots, also remain opaque. The core
 retains those literals, so they cannot be rewritten or treated as duplicates
 of a new normalized hostname. Large lists can reach the documented overlap-analysis
-limit while exact-selector checks still cover the full list. Counts describe
+limit while exact-selector checks still cover the full list. Quick apply uses
+a separate linear comparison against the requested rule, so its related
+findings are not lost when whole-list overlap analysis reaches its limit.
+Counts describe
 what was inspected, not a percentage of internet traffic covered.
 
 ## Compare rules between targets
@@ -267,7 +284,7 @@ old preview fails if its guarded source/context changed.
 
 `add-domain` and `add-ip` retain their repair behavior: they replace rules for
 the same selector and require `--yes --expect DIGEST`. Use `rules apply` for
-add-if-absent behavior with conflicts treated as errors.
+add-if-absent behavior with requested-selector conflicts treated as operation errors.
 
 Private backups and receipts support recovery. Files are replaced atomically,
 but file save and core reload are not one atomic transaction. If loading fails

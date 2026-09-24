@@ -4,12 +4,34 @@
 
 ```sh
 lazyclash targets discover --ssh home-server
+lazyclash targets add --ssh home-server
+lazyclash targets add server --ssh home-server --interactive
 lazyclash targets add server --ssh home-server \
   --controller http://127.0.0.1:9090 \
   --source-config /home/user/.config/mihomo/config.yaml
 lazyclash targets test server
 lazyclash --target server --read-only
 ```
+
+In a terminal, `targets add [ID] --ssh HOST` without `--controller` discovers
+controllers on that host, lets you choose a candidate, and opens a prefilled
+registration form. A single candidate goes straight to that form; saving still
+requires your explicit action. `--interactive` opens the flow explicitly and
+prefills supplied fields. With no candidates, retry discovery or enter the
+controller manually. Back, failed or declined authentication, and validation
+errors retain the draft. Ctrl+C cancels the entire command without saving it.
+
+The form preserves the discovered `source_config` and complete configuration
+registrations. It does not save plaintext secrets or automatically bind rule,
+configuration, service or managed-core ownership. A saved target with the same
+SSH host and controller is reported instead of creating a duplicate; an ID
+already used by a different endpoint must be changed before saving.
+
+`targets discover --ssh HOST` remains a read-only listing. Non-TTY/JSON commands
+never start registration prompts: discover first, then supply an explicit ID
+and controller to `targets add`. `--interactive` requires a terminal and cannot
+be combined with JSON. Remote discovery retains its existing POSIX scope;
+Docker mappings, remote Unix sockets and Windows discovery are not inferred.
 
 The controller address and source YAML refer to the SSH host. OpenSSH host
 aliases, keys and known-host checks are retained. The source configuration must

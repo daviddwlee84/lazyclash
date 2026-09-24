@@ -48,3 +48,16 @@ func TestQuickWorkbenchPartialResultsAndHealthCoverage(t *testing.T) {
 		t.Fatal("healthcheck omitted sorted type/policy counts")
 	}
 }
+
+func TestQuickWorkbenchSummarizesNonblockingExistingHealth(t *testing.T) {
+	health := &rulework.QuickExistingHealth{Source: &rulecheck.Report{Findings: []rulecheck.Finding{{Severity: "warning", Code: "selector_conflict", Rule: "DOMAIN,unrelated.test,DIRECT", RelatedRule: "DOMAIN,unrelated.test,PROXY"}}}}
+	plan := rulework.QuickPlan{Rule: "DOMAIN,copilot.test,DIRECT", Status: "ready", Digest: "reviewed", Targets: []rulework.QuickTargetPlan{{TargetID: "server", Status: "ready", ExistingHealth: health, Diff: "+ DOMAIN,copilot.test,DIRECT", NextCommands: []string{"lazyclash --target server rules healthcheck"}}}}
+	result := quickRulePreviewResult(tui.WorkRequest{}, plan)
+	if result.Apply == nil || len(result.Rows) != 1 || !strings.Contains(result.Rows[0].Detail, "healthcheck") || strings.Contains(result.Rows[0].Detail, "unrelated.test") {
+		t.Fatal("existing health should be summarized without blocking apply", result)
+	}
+	applied := quickRuleApplyResult(rulework.QuickResult{Status: "completed", Results: []rulework.QuickTargetResult{{TargetID: "server", Status: "applied_verified", ExistingHealth: health}}})
+	if len(applied.Rows) != 1 || !strings.Contains(applied.Rows[0].Detail, rulework.FormatQuickExistingHealth(health)) {
+		t.Fatal("apply result omitted existing health summary", applied)
+	}
+}

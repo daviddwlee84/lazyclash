@@ -5,7 +5,8 @@ A keyboard-first terminal console for **Mihomo clients and proxy servers**, incl
 Manage runtime state, edit and share source-backed nodes/groups, use a selected proxy from your shell or Docker, compare targets, and diagnose routing. `setup` installs native or Docker clients with an offline regional starter and optional reviewed TUN/system-proxy configuration. Clash Verge companion edits require native profile reactivation. See the [knowledge and operating guide](docs/README.md), [reference index](docs/references.md), and [future milestones](TODO.md).
 
 Apply one routing rule to a saved target or all targets with `rules apply`;
-existing rules are skipped and conflicting policies block the batch. Use
+existing rules are skipped and conflicts involving the requested selector block
+the batch. Unrelated existing selector conflicts remain health warnings. Use
 `rules healthcheck` for read-only syntax, overlap and coverage findings. See
 [quick rules and persistent ownership](docs/rules-and-ownership.md).
 `rules diff` compares ordered declarations between targets, `rules find` checks
@@ -203,6 +204,7 @@ lazyclash vps catalog                                # dated cost and sizing com
 lazyclash vps guide --provider aws-lightsail --region ap-northeast-1
 lazyclash vps guide --provider oracle --format agent  # offline CLI setup + agent handoff
 lazyclash --target desktop configs source set --interactive
+lazyclash targets add --ssh home-server              # discover, review, save
 lazyclash --target desktop proxies export 'My node' --interactive
 lazyclash --target desktop groups edit PROXY --interactive
 lazyclash configs diff desktop server --format unified
@@ -367,8 +369,11 @@ default; applying requires `--yes --expect` with the reviewed digest.
 `rules apply` supports DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD and IPv4/IPv6 CIDR
 input: it previews then confirms with default No, or applies with `--yes` after
 preflight. `--dry-run` inspects without writing; `--expect` is optional for
-pinning a previously reviewed quick-rule plan. Overlap is a warning; syntax and
-same-selector policy conflicts are errors that `--yes` cannot bypass.
+pinning a previously reviewed quick-rule plan. Overlap and unrelated existing
+selector conflicts are warnings. Invalid source/candidate configurations and
+policy conflicts involving the requested selector block writes; `--yes` cannot
+bypass them. `healthcheck` reports selector conflicts as routing-order warnings,
+not fatal core errors.
 `--all` reports unavailable/unbound targets as skips; rule errors block the
 batch before writes. Partial availability can succeed with exit 0 and
 `completed_with_skips`; no usable targets returns nonzero.

@@ -175,56 +175,60 @@ func previewQuickTarget(ctx context.Context, t config.Target, rule rulecheck.Rul
 		return fail(err, false)
 	}
 	base := rulecheck.Analyze(rules, policies)
-	p.Findings = append(p.Findings, base.Findings...)
-	p.Findings = append(p.Findings, sourceReferenceFindings(source, rules, policies)...)
-	p.Limitations = append(p.Limitations, base.Limitations...)
-	duplicate := false
-	for _, old := range rules {
-		duplicate = duplicate || old.Equal(rule)
+	base.Findings = append(base.Findings, sourceReferenceFindings(source, rules, policies)...)
+	runtimeReport := rulecheck.Analyze(runtimeList, policies)
+	p.ExistingHealth = &QuickExistingHealth{Source: &base, Runtime: &runtimeReport}
+	if len(base.Findings) > 0 || len(runtimeReport.Findings) > 0 {
+		p.NextCommands = append(p.NextCommands, "lazyclash --target "+strconv.Quote(t.ID)+" rules healthcheck")
 	}
-	if !duplicate {
-		rule.Index = -1
-		report := rulecheck.Analyze(append([]rulecheck.Rule{rule}, rules...), policies)
-		// Keep each original finding once, plus findings involving the new rule.
-		for _, f := range report.Findings {
-			if f.Index == -1 || f.RelatedIndex != nil && *f.RelatedIndex == -1 {
-				p.Findings = append(p.Findings, f)
+	// A source syntax/reference error makes the retained candidate invalid.
+	// Whole-list ordering warnings are separate existing health observations.
+	for _, f := range base.Findings {
+		if f.Severity == "error" {
+			p.Findings = append(p.Findings, f)
+		}
+	}
+	existingPosition := -1
+	for i, old := range rules {
+		if !old.Disabled && old.Equal(rule) {
+			existingPosition = i
+			break
+		}
+	}
+	duplicate := existingPosition >= 0
+	focused := rulecheck.AnalyzeFocused(rules, rule, existingPosition, policies)
+	p.Findings = append(p.Findings, focused.Findings...)
+	p.Limitations = append(p.Limitations, focused.Limitations...)
+	// Runtime is a separate list: native/Docker reload replaces it, whereas a
+	// Verge companion can retain the conflicting rule from its base profile.
+	// Project only reported options, without inventing a no-resolve difference.
+	incoming := rule
+	incoming.NoResolve, incoming.Options = false, nil
+	runtimePosition := -1
+	if duplicate {
+		for i, old := range runtimeList {
+			if !old.Disabled && old.Equal(incoming) {
+				runtimePosition = i
+				break
 			}
 		}
 	}
-	if !policies[rule.Policy] {
-		p.Findings = append(p.Findings, finding("error", "policy_missing", "requested policy does not exist on this target: "+rule.Policy))
-	}
-	// Runtime is a separate list: an old runtime policy is drift, not a
-	// contradiction with the source candidate that is about to replace it.
-	runtimeReport := rulecheck.Analyze(runtimeList, policies)
-	for _, f := range runtimeReport.Findings {
-		f.Message = "Runtime: " + f.Message
+	runtimeFocused := rulecheck.AnalyzeFocused(runtimeList, incoming, runtimePosition, nil)
+	for _, f := range runtimeFocused.Findings {
+		if f.Code == "duplicate" {
+			continue
+		}
+		if f.Code == "selector_conflict" && source.Kind != "verge" {
+			f.Severity, f.Code = "warning", "runtime_policy_drift"
+			f.Message = "The requested policy differs from the current runtime for the same selector. The persistent source will be used when its owner is activated."
+		}
+		f.Message = "Current runtime vs requested rule: " + f.Message
 		p.Findings = append(p.Findings, f)
 	}
-	p.Limitations = append(p.Limitations, runtimeReport.Limitations...)
+	p.Limitations = append(p.Limitations, runtimeFocused.Limitations...)
 	p.Limitations = append(p.Limitations, "Runtime checks confirm enabled selector/policy entries; the API does not expose every source option, including no-resolve.")
 	if source.Kind == "verge" {
 		p.Limitations = append(p.Limitations, "Persistent checks cover the Rules companion prepend/append; base profile and later Merge/Script effects are represented only by the runtime snapshot.")
-	}
-	if !duplicate {
-		incoming := rule
-		incoming.Index = -1
-		report := rulecheck.Analyze(append([]rulecheck.Rule{incoming}, runtimeList...), policies)
-		for _, f := range report.Findings {
-			if f.Index != -1 && (f.RelatedIndex == nil || *f.RelatedIndex != -1) {
-				continue
-			}
-			if f.Code == "duplicate" {
-				continue
-			}
-			if f.Severity == "error" && source.Kind != "verge" {
-				f.Severity = "warning"
-				f.Code = "runtime_policy_drift"
-			}
-			f.Message = "Current runtime vs proposed source: " + f.Message
-			p.Findings = append(p.Findings, f)
-		}
 	}
 	for _, warning := range source.Warnings {
 		p.Findings = append(p.Findings, finding("warning", "owner_reload", warning))
@@ -238,10 +242,15 @@ func previewQuickTarget(ctx context.Context, t config.Target, rule rulecheck.Rul
 	} else {
 		p.Limitations = append(p.Limitations, "Runtime mode could not be read.")
 	}
+	p.Findings = uniqueQuickFindings(p.Findings)
+	p.Limitations = uniqueQuickStrings(p.Limitations)
 	for _, f := range p.Findings {
 		if f.Severity == "error" {
 			p.ReasonCode = f.Code
 			p.Message = "Resolve rule errors before applying."
+			if f.Code == "selector_conflict" {
+				p.Message = "Requested policy conflicts with an existing rule; choose a policy before applying."
+			}
 			return p
 		}
 	}
@@ -443,7 +452,7 @@ func ApplyRules(ctx context.Context, targets []config.Target, raw string, all bo
 		if strings.HasPrefix(t.Status, "skipped_") {
 			status = t.Status
 		}
-		r.Results = append(r.Results, QuickTargetResult{TargetID: t.TargetID, Status: status, Message: t.Message, Findings: t.Findings, RuntimeVerified: t.RuntimeVerified})
+		r.Results = append(r.Results, QuickTargetResult{TargetID: t.TargetID, Status: status, Message: t.Message, Findings: t.Findings, ExistingHealth: t.ExistingHealth, RuntimeVerified: t.RuntimeVerified})
 	}
 	if err != nil {
 		return r, err
