@@ -102,7 +102,8 @@ func addSetupFlags(cmd *cobra.Command, flags *setupFlags) {
 	f := cmd.Flags()
 	r := &flags.request
 	f.StringVar(&r.CloneSourceID, "from-target", "", "clone the active portable configuration of a registered target")
-	f.StringVar(&r.Client, "client", "mihomo", "mihomo or verge (Windows desktop client)")
+	f.StringVar(&r.Client, "client", "mihomo", "mihomo or verge (Windows or macOS arm64 desktop client)")
+	f.StringVar(&r.CloneMode, "clone-mode", "", "with --from-target on macOS Verge: native mirrors every Verge profile/setting; portable (default) seeds one flattened profile")
 	f.StringVar(&r.ClientVersion, "client-version", "", "exact supported desktop client version (Verge: 2.5.2)")
 	f.StringVar(&r.HostOS, "host-os", "", "optional host platform: windows, linux or darwin; normally detected")
 	f.StringVar(&r.Backend, "backend", "native", "native service or existing Docker daemon")
@@ -125,7 +126,7 @@ func addSetupFlags(cmd *cobra.Command, flags *setupFlags) {
 	f.StringVar(&r.DockerArchive, "docker-archive", "", "absolute Docker save archive path already on the selected host")
 	f.StringVar(&r.DockerArchiveSHA256, "docker-archive-sha256", "", "reviewed SHA-256 of the host-side Docker archive")
 	f.StringVar(&r.BootstrapTarget, "bootstrap-target", "", "existing explicit proxy target for downloads; no automatic environment fallback")
-	f.StringVar(&r.ArtifactFile, "artifact", "", "verified local release artifact for offline transfer (gzip, zip or Windows installer)")
+	f.StringVar(&r.ArtifactFile, "artifact", "", "verified local release artifact for offline transfer (gzip, zip, Windows installer or macOS Verge dmg)")
 	f.StringVar(&r.ArtifactSHA256, "artifact-sha256", "", "expected official artifact SHA-256")
 	f.BoolVar(&flags.interactive, "interactive", false, "open the guided setup form with supplied values")
 	f.BoolVar(&flags.yes, "yes", false, "apply exactly the reviewed plan")
@@ -288,11 +289,20 @@ func (o *options) prepareSetupRequest(ctx context.Context, cmd *cobra.Command, r
 	if err != nil {
 		return ctx, request, err
 	}
-	snapshot, err := managedcore.SnapshotTarget(ctx, o.overrideCredentials(cfg.Targets[i]), opts)
+	source := o.overrideCredentials(cfg.Targets[i])
+	snapshot, err := managedcore.SnapshotTarget(ctx, source, opts)
 	if err != nil {
 		return ctx, request, err
 	}
-	return managedcore.ApplyCloneToRequest(ctx, request, snapshot)
+	ctx, request, err = managedcore.ApplyCloneToRequest(ctx, request, snapshot)
+	if err != nil || request.CloneMode != "native" {
+		return ctx, request, err
+	}
+	mirror, err := managedcore.SnapshotVergeNative(ctx, source, opts)
+	if err != nil {
+		return ctx, request, err
+	}
+	return managedcore.WithNativeMirror(ctx, mirror), request, nil
 }
 
 func (o *options) runSetupWizard(cmd *cobra.Command, request managedcore.Request, configureID, inputPath string) error {
@@ -535,7 +545,7 @@ func setupSpec(request managedcore.Request, path, message string) wizard.Spec {
 	}
 	return wizard.Spec{Title: "Deploy client", Description: message, SubmitLabel: "Preview", Fields: []wizard.Field{
 		{Key: "id", Label: "Core ID", Value: request.ID, Required: true}, {Key: "name", Label: "Display name", Value: request.Name}, {Key: "ssh", Label: "SSH host (empty = local)", Value: request.SSHHost},
-		{Key: "client", Label: "Client", Value: request.Client, Kind: wizard.Select, Options: []wizard.Choice{{Value: "mihomo", Label: "Background Mihomo"}, {Value: "verge", Label: "Clash Verge Rev (Windows desktop)"}}},
+		{Key: "client", Label: "Client", Value: request.Client, Kind: wizard.Select, Options: []wizard.Choice{{Value: "mihomo", Label: "Background Mihomo"}, {Value: "verge", Label: "Clash Verge Rev (Windows / macOS arm64 desktop)"}}},
 		{Key: "client_version", Label: "Desktop client version", Value: request.ClientVersion, Help: "Verge default: 2.5.2; its bundled core is used"},
 		{Key: "from_target", Label: "Source target to copy", Value: request.CloneSourceID},
 		{Key: "backend", Label: "Backend", Value: request.Backend, Kind: wizard.Select, Options: []wizard.Choice{{Value: "native", Label: "Native service"}, {Value: "docker", Label: "Existing Docker daemon"}}},

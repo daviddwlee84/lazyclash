@@ -36,6 +36,9 @@ type Request struct {
 	CloneSourceSHA256 string                   `json:"clone_source_sha256,omitempty"`
 	CloneSelections   map[string]string        `json:"clone_selections,omitempty"`
 	CloneChecks       []config.DiagnosticCheck `json:"clone_checks,omitempty"`
+	// CloneMode "native" mirrors a bound Verge data directory (all profiles and
+	// companions) instead of cold-seeding one flattened profile. macOS Verge only.
+	CloneMode string `json:"clone_mode,omitempty"`
 
 	ID             string            `json:"id"`
 	Name           string            `json:"name,omitempty"`
@@ -78,6 +81,16 @@ type HostFacts struct {
 	WindowsStateDigest string             `json:"windows_state_digest,omitempty"`
 	WindowsProxy       *WindowsProxyState `json:"windows_proxy,omitempty"`
 	WindowsCFW         []WindowsProcess   `json:"windows_cfw,omitempty"`
+
+	DarwinUser            string   `json:"darwin_user,omitempty"`
+	DarwinConsoleUser     string   `json:"darwin_console_user,omitempty"`
+	DarwinVersion         string   `json:"darwin_version,omitempty"`
+	DarwinServiceExisting bool     `json:"darwin_service_existing,omitempty"`
+	DarwinDataDirExisting bool     `json:"darwin_data_dir_existing,omitempty"`
+	DarwinCFWRunning      bool     `json:"darwin_cfw_running,omitempty"`
+	DarwinCFWJobs         []string `json:"darwin_cfw_jobs,omitempty"`
+	DarwinStateDigest     string   `json:"darwin_state_digest,omitempty"`
+	SudoNonInteractive    bool     `json:"sudo_noninteractive,omitempty"`
 
 	OS             string `json:"os"`
 	Arch           string `json:"arch"`
@@ -131,12 +144,15 @@ type Plan struct {
 	Changes           []string          `json:"changes"`
 	Warnings          []string          `json:"warnings"`
 	Blockers          []string          `json:"blockers"`
-	windowsProxy      *WindowsProxyState
-	current           *Instance
-	profile           []byte
-	resources         map[string][]byte
-	systemProxy       *networkcheck.SystemProxyPlan
-	SystemProxy       *networkcheck.SystemProxyPlan `json:"system_proxy,omitempty"`
+	// NativeSHA256 pins every mirrored Verge data file; bytes stay private.
+	NativeSHA256 map[string]string `json:"native_sha256,omitempty"`
+	nativeFiles  map[string][]byte
+	windowsProxy *WindowsProxyState
+	current      *Instance
+	profile      []byte
+	resources    map[string][]byte
+	systemProxy  *networkcheck.SystemProxyPlan
+	SystemProxy  *networkcheck.SystemProxyPlan `json:"system_proxy,omitempty"`
 }
 
 type Instance struct {

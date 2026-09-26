@@ -44,6 +44,9 @@ func (o *options) coresCommand() *cobra.Command {
 			return err
 		}
 		if instance.OS != "windows" {
+			if instance.OS == "darwin" && instance.Client == "verge" {
+				return usage("macOS Verge has no staged resume; inspect cores status, then cores start re-verifies under the rollback watchdog")
+			}
 			return usage("resume currently supports owned Windows deployments; inspect cores status for this instance")
 		}
 		// Authenticate with a read before the single mutation; never replay a
@@ -156,7 +159,7 @@ func (o *options) coresCommand() *cobra.Command {
 }
 
 func changedSetupBusiness(cmd *cobra.Command) bool {
-	for _, name := range []string{"client", "client-version", "host-os", "from-target", "backend", "input-kind", "input", "preset", "category", "policy", "service-scope", "boot", "tun", "system-proxy", "network-service", "exclude-route", "controller-port", "mixed-port", "core-version", "docker-context", "artifact", "artifact-sha256", "yes", "expect", "routing-owner", "bootstrap-target", "docker-archive", "docker-archive-sha256"} {
+	for _, name := range []string{"client", "client-version", "clone-mode", "host-os", "from-target", "backend", "input-kind", "input", "preset", "category", "policy", "service-scope", "boot", "tun", "system-proxy", "network-service", "exclude-route", "controller-port", "mixed-port", "core-version", "docker-context", "artifact", "artifact-sha256", "yes", "expect", "routing-owner", "bootstrap-target", "docker-archive", "docker-archive-sha256"} {
 		if cmd.Flags().Changed(name) {
 			return true
 		}
@@ -165,7 +168,7 @@ func changedSetupBusiness(cmd *cobra.Command) bool {
 }
 
 func mergeSetupFlags(cmd *cobra.Command, to *managedcore.Request, from managedcore.Request) {
-	for name, fields := range map[string][2]*string{"client": {&to.Client, &from.Client}, "client-version": {&to.ClientVersion, &from.ClientVersion}, "host-os": {&to.HostOS, &from.HostOS}, "docker-archive": {&to.DockerArchive, &from.DockerArchive}, "docker-archive-sha256": {&to.DockerArchiveSHA256, &from.DockerArchiveSHA256}, "bootstrap-target": {&to.BootstrapTarget, &from.BootstrapTarget}, "backend": {&to.Backend, &from.Backend}, "input-kind": {&to.InputKind, &from.InputKind}, "preset": {&to.Preset, &from.Preset}, "service-scope": {&to.ServiceScope, &from.ServiceScope}, "core-version": {&to.Version, &from.Version}, "docker-context": {&to.DockerContext, &from.DockerContext}, "artifact": {&to.ArtifactFile, &from.ArtifactFile}, "artifact-sha256": {&to.ArtifactSHA256, &from.ArtifactSHA256}, "routing-owner": {&to.Network.RoutingOwner, &from.Network.RoutingOwner}} {
+	for name, fields := range map[string][2]*string{"client": {&to.Client, &from.Client}, "client-version": {&to.ClientVersion, &from.ClientVersion}, "clone-mode": {&to.CloneMode, &from.CloneMode}, "host-os": {&to.HostOS, &from.HostOS}, "docker-archive": {&to.DockerArchive, &from.DockerArchive}, "docker-archive-sha256": {&to.DockerArchiveSHA256, &from.DockerArchiveSHA256}, "bootstrap-target": {&to.BootstrapTarget, &from.BootstrapTarget}, "backend": {&to.Backend, &from.Backend}, "input-kind": {&to.InputKind, &from.InputKind}, "preset": {&to.Preset, &from.Preset}, "service-scope": {&to.ServiceScope, &from.ServiceScope}, "core-version": {&to.Version, &from.Version}, "docker-context": {&to.DockerContext, &from.DockerContext}, "artifact": {&to.ArtifactFile, &from.ArtifactFile}, "artifact-sha256": {&to.ArtifactSHA256, &from.ArtifactSHA256}, "routing-owner": {&to.Network.RoutingOwner, &from.Network.RoutingOwner}} {
 		if cmd.Flags().Changed(name) {
 			*fields[0] = *fields[1]
 		}

@@ -791,6 +791,12 @@ func WindowsSourceOperation(ctx context.Context, target config.Target, source co
 	}
 	return response.Source, err
 }
+
+// ActivateSource reloads an owned desktop client after a persistent source edit.
+func ActivateSource(ctx context.Context, target config.Target, opts Options) error {
+	return WindowsActivateSource(ctx, target, opts)
+}
+
 func WindowsActivateSource(ctx context.Context, target config.Target, opts Options) error {
 	if opts.ReadOnly {
 		return errors.New("Windows source activation disabled in read-only mode")
@@ -803,6 +809,9 @@ func WindowsActivateSource(ctx context.Context, target config.Target, opts Optio
 	instance, err := loadInstance(target.ManagedCoreID, opts)
 	if err != nil {
 		return err
+	}
+	if isDarwinVerge(instance) && !instance.Removed && target.ID == instance.Target.ID && target.Controller == instance.Target.Controller && target.SSHHost == instance.SSHHost && reflect.DeepEqual(target.ConfigSource, instance.Target.ConfigSource) {
+		return darwinActivateSource(ctx, instance, opts)
 	}
 	if instance.OS != "windows" || instance.Removed || target.ID != instance.Target.ID || target.Controller != instance.Target.Controller || target.SSHHost != instance.SSHHost || !reflect.DeepEqual(target.ConfigSource, instance.Target.ConfigSource) {
 		return errors.New("Windows activation binding changed")

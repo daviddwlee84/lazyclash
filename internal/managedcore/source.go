@@ -66,6 +66,9 @@ func SourceOperation(ctx context.Context, target config.Target, operation config
 	if err != nil {
 		return configwork.HostResponse{}, err
 	}
+	if isDarwinVerge(instance) {
+		return darwinVergeSourceOperation(ctx, target, instance, operation, opts)
+	}
 	if instance.Removed || target.ID != instance.Target.ID || target.SSHHost != instance.SSHHost || target.Controller != instance.Target.Controller || !reflect.DeepEqual(target.ConfigSource, instance.Target.ConfigSource) {
 		return configwork.HostResponse{}, errors.New("managed source binding no longer matches its owned instance")
 	}

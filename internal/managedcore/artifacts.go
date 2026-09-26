@@ -175,7 +175,11 @@ func resolveDockerImage(ctx context.Context, version, arch string) (Artifact, er
 }
 
 func download(ctx context.Context, endpoint string, headers http.Header, limit int64) ([]byte, http.Header, error) {
-	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	return downloadTimeout(ctx, endpoint, headers, limit, 45*time.Second)
+}
+
+func downloadTimeout(ctx context.Context, endpoint string, headers http.Header, limit int64, timeout time.Duration) ([]byte, http.Header, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -187,7 +191,13 @@ func download(ctx context.Context, endpoint string, headers http.Header, limit i
 			request.Header.Add(name, value)
 		}
 	}
-	response, err := downloadHTTPClient(ctx).Do(request)
+	client := *downloadHTTPClient(ctx)
+	// Large release assets (a Verge dmg) need longer than the default client's
+	// whole-request limit; the context deadline still bounds the transfer.
+	if client.Timeout != 0 && client.Timeout < timeout {
+		client.Timeout = timeout
+	}
+	response, err := client.Do(request)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, nil, ctx.Err()
@@ -200,7 +210,10 @@ func download(ctx context.Context, endpoint string, headers http.Header, limit i
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {
-		return nil, nil, errors.New("official artifact response could not be read")
+		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "Client.Timeout") {
+			return nil, nil, errors.New("official artifact download timed out before completion; retry or pass a verified --artifact file")
+		}
+		return nil, nil, errors.New("official artifact response could not be read (connection interrupted); retry or pass a verified --artifact file")
 	}
 	if int64(len(data)) > limit {
 		return nil, nil, errors.New("official artifact response exceeded its size limit")

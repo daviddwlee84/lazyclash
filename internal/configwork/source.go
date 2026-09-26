@@ -150,7 +150,7 @@ func inspectWithOptions(ctx context.Context, t config.Target, opts Options) (*so
 		s.dockerSourceSHA, s.dockerSingleFile = d.SourceSHA256, d.SingleFile
 		s.Warnings = append(s.Warnings, "The host source is edited through its verified container bind mount; reload uses the container path.")
 	case "verge":
-		automaticActivation := t.HostOS == "windows" && t.ManagedCoreID != "" && opts.ActivateOwner != nil
+		automaticActivation := (t.HostOS == "windows" || t.HostOS == "darwin") && t.ManagedCoreID != "" && opts.ActivateOwner != nil
 		manifest := hostpath.Join(t.HostOS, c.DataDir, "profiles.yaml")
 		n, e := s.read(ctx, t, manifest)
 		if e != nil {
@@ -280,7 +280,7 @@ func inspectWithOptions(ctx context.Context, t config.Target, opts Options) (*so
 		s.runtime = hostpath.Join(t.HostOS, c.DataDir, "clash-verge.yaml")
 		warning := "Saves are persistent companions. Reactivate the profile in Clash Verge; later Merge/Script can override them."
 		if automaticActivation {
-			warning = "Companion edits persist and activate automatically through the owned Windows client. Adopting unchanged source does not reload it; later Merge/Script can override edits."
+			warning = "Companion edits persist and activate automatically through the owned desktop client. Adopting unchanged source does not reload it; later Merge/Script can override edits."
 		}
 		s.Warnings = append(s.Warnings, warning)
 	}

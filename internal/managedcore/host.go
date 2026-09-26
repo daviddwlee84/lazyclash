@@ -154,7 +154,15 @@ if path.parent==root and path.name.startswith('request-'):
  except FileNotFoundError:pass
 `
 
+// ErrSudoRefused reports that native sudo declined noninteractive use and no
+// terminal was available. The staged request was never executed.
+var ErrSudoRefused = errors.New("administrator authorization requires a native terminal or existing noninteractive sudo policy")
+
 func runPrivileged(ctx context.Context, host string, data []byte, opts Options) ([]byte, error) {
+	return runPrivilegedScript(ctx, host, fullHostScript(), data, opts)
+}
+
+func runPrivilegedScript(ctx context.Context, host, script string, data []byte, opts Options) ([]byte, error) {
 	output, err := connection.ExecutePython(ctx, host, stagePrivilegedScript, data, 8192)
 	if err != nil {
 		return nil, err
@@ -172,7 +180,7 @@ func runPrivileged(ctx context.Context, host string, data []byte, opts Options) 
 		body, _ := json.Marshal(map[string]string{"path": staged.Path})
 		_, _ = connection.ExecutePython(cleanupCtx, host, cleanPrivilegedScript, body, 1024)
 	}()
-	batch, err := connection.ManagedPrivilegedBatchCommand(ctx, host, fullHostScript(), staged.Path, staged.SHA256)
+	batch, err := connection.ManagedPrivilegedBatchCommand(ctx, host, script, staged.Path, staged.SHA256)
 	if err != nil {
 		return nil, err
 	}
@@ -198,10 +206,10 @@ func runPrivileged(ctx context.Context, host string, data []byte, opts Options) 
 		return nil, errors.New("privileged host result is unconfirmed; inspect before retrying")
 	}
 	if opts.Foreground == nil {
-		return nil, errors.New("administrator authorization requires a native terminal or existing noninteractive sudo policy")
+		return nil, ErrSudoRefused
 	}
 
-	cmd, err := connection.ManagedPrivilegedCommand(ctx, host, fullHostScript(), staged.Path, staged.SHA256)
+	cmd, err := connection.ManagedPrivilegedCommand(ctx, host, script, staged.Path, staged.SHA256)
 	if err != nil {
 		return nil, err
 	}

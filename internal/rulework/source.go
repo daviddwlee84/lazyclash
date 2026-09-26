@@ -148,7 +148,7 @@ func inspectSource(ctx context.Context, target config.Target, opts Options) (Sou
 			}
 		}
 	} else {
-		automaticActivation := target.HostOS == "windows" && target.ManagedCoreID != "" && opts.ActivateOwner != nil
+		automaticActivation := (target.HostOS == "windows" || target.HostOS == "darwin") && target.ManagedCoreID != "" && opts.ActivateOwner != nil
 		manifest, err := readSourceHost(ctx, target, hostpath.Join(target.HostOS, s.DataDir, "profiles.yaml"), opts)
 		if err != nil {
 			return source, err
@@ -222,7 +222,7 @@ func inspectSource(ctx context.Context, target config.Target, opts Options) (Sou
 				if mappingValue(doc.Content[0], "rules") != nil {
 					warning := "A later Verge Merge defines rules and may replace this Rules companion; verify after native reactivation."
 					if automaticActivation {
-						warning = "A later Verge Merge defines rules and may replace this Rules companion; the owned Windows client handles activation and verification."
+						warning = "A later Verge Merge defines rules and may replace this Rules companion; the owned desktop client handles activation and verification."
 					}
 					source.Warnings = append(source.Warnings, warning)
 				}
@@ -230,7 +230,7 @@ func inspectSource(ctx context.Context, target config.Target, opts Options) (Sou
 			if item.Type == "script" {
 				warning := "Verge Scripts run after Rules; final rule order must be verified after native reactivation."
 				if automaticActivation {
-					warning = "Verge Scripts run after Rules; the owned Windows client handles activation and final rule-order verification."
+					warning = "Verge Scripts run after Rules; the owned desktop client handles activation and final rule-order verification."
 				}
 				source.Warnings = append(source.Warnings, warning)
 			}

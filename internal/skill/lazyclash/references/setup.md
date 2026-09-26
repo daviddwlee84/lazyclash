@@ -39,6 +39,13 @@ host namespace/TUN device/capabilities. Rootless Docker and macOS Docker Desktop
 use explicit proxy mode for this workflow. Existing Verge service/TUN remains
 Verge-owned; API toggling does not install its privileged service.
 
+`setup --client verge` also targets Apple silicon Macs over SSH: the pinned dmg
+is downloaded locally and pushed by SFTP. Add `--from-target SOURCE
+--clone-mode native` to mirror a bound Verge data directory (all profiles,
+companions and settings; new controller secret; Tailnet excluded from TUN). A
+launchd watchdog restores Clash for Windows and the system proxy unless a fresh
+SSH login and egress checks pass. Apply needs noninteractive sudo or a terminal.
+
 Network changes arm a host-side rollback deadline. ACK requires management
 verification, including a fresh SSH transport for a remote host rather than a
 channel on a surviving ControlMaster. Failure/unknown state leaves a receipt and

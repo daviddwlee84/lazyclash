@@ -16,7 +16,7 @@ import (
 
 func (o *options) configWorkOptions(cmd *cobra.Command) configwork.Options {
 	return configwork.Options{ActivateOwner: func(ctx context.Context, t config.Target) error {
-		return managedcore.WindowsActivateSource(ctx, t, o.managedOptions(cmd))
+		return managedcore.ActivateSource(ctx, t, o.managedOptions(cmd))
 	}, ReadOnly: o.readOnly, ClientServices: o.clientServiceOptions(), Open: o.deps.Open, Host: func(ctx context.Context, t config.Target, req configwork.HostRequest) (configwork.HostResponse, error) {
 		if t.ManagedCoreID != "" {
 			return managedcore.SourceOperation(ctx, t, req, o.managedOptions(cmd))
