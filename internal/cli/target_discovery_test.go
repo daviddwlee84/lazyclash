@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -161,15 +162,21 @@ func TestTargetRegistrationRetriesDiscoveryAndPreservesDraftAcrossBack(t *testin
 		}
 		return "edit", nil
 	}
+	// An OS-absolute path: "/local/secret" is relative on Windows, where the
+	// registration loop would keep asking for a valid draft forever.
+	secretFile := filepath.Join(t.TempDir(), "secret")
 	ops.ui.edit = func(_ context.Context, spec wizard.Spec) (map[string]string, error) {
 		edits++
+		if edits > 5 {
+			t.Fatalf("registration kept re-editing: %s", spec.Description)
+		}
 		values := registrationAnswers(spec)
 		if edits == 1 {
 			values["name"] = "Edited name"
-			values["secret-file"] = "/local/secret"
+			values["secret-file"] = secretFile
 			return values, wizard.ErrBack
 		}
-		if values["name"] != "Edited name" || values["secret-file"] != "/local/secret" {
+		if values["name"] != "Edited name" || values["secret-file"] != secretFile {
 			t.Fatalf("Back discarded draft: %+v", values)
 		}
 		return values, nil

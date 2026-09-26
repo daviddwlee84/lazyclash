@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"runtime"
 	"strings"
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
@@ -56,7 +57,7 @@ func SnapshotVergeNative(ctx context.Context, target config.Target, opts Options
 
 func snapshotVergeNative(ctx context.Context, target config.Target, reader cloneReadFunc) (NativeMirror, error) {
 	c := target.ConfigSource
-	if c == nil || c.Kind != "verge" || target.HostOS == "windows" {
+	if c == nil || c.Kind != "verge" || target.HostOS == "windows" || target.SSHHost == "" && runtime.GOOS == "windows" {
 		return NativeMirror{}, errors.New("native mirror requires a saved macOS/Linux target bound to a Verge data directory")
 	}
 	if err := config.ValidateConfigSource(target); err != nil {

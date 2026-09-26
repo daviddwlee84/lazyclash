@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -368,6 +369,9 @@ func TestDarwinVergeSourceRestrictedToDataDir(t *testing.T) {
 }
 
 func TestSnapshotVergeNativeGuardsAndExclusions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("native Verge mirrors read macOS/Linux data directories")
+	}
 	dir := t.TempDir()
 	write := func(name, data string) {
 		os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0700)
@@ -410,6 +414,9 @@ func TestSnapshotVergeNativeGuardsAndExclusions(t *testing.T) {
 }
 
 func TestDarwinVergeHelperCompiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the macOS host helper uses POSIX-only modules")
+	}
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("python3 unavailable")
