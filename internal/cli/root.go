@@ -281,7 +281,39 @@ func New(deps Dependencies) *cobra.Command {
 	root.AddCommand(o.topologyCommand(), o.completionCommand(root))
 	root.AddCommand(o.analyticsCommand())
 	o.registerCompletions(root)
+	rejectUnknownSubcommands(root)
 	return root
+}
+
+// Cobra prints help and exits 0 when a pure command group receives an unknown
+// subcommand. Make that a usage error that names the valid choices instead.
+func rejectUnknownSubcommands(cmd *cobra.Command) {
+	for _, child := range cmd.Commands() {
+		rejectUnknownSubcommands(child)
+	}
+	if !cmd.HasAvailableSubCommands() || cmd.Run != nil || cmd.RunE != nil {
+		return
+	}
+	cmd.Args = cobra.ArbitraryArgs
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if len(args) > 0 {
+			return unknownSubcommand(cmd, args[0])
+		}
+		if json, _ := cmd.Flags().GetBool("json"); json {
+			return usage("%s needs a subcommand for --json output; see --help", cmd.CommandPath())
+		}
+		return cmd.Help()
+	}
+}
+
+func unknownSubcommand(cmd *cobra.Command, name string) error {
+	names := []string{}
+	for _, child := range cmd.Commands() {
+		if child.IsAvailableCommand() {
+			names = append(names, child.Name())
+		}
+	}
+	return usage("unknown %s subcommand %q; choose one of: %s", cmd.CommandPath(), name, strings.Join(names, ", "))
 }
 
 func terminals(in io.Reader, out io.Writer) bool {
@@ -295,6 +327,9 @@ func terminals(in io.Reader, out io.Writer) bool {
 
 func argsExact(n int) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
+		if n == 0 && len(args) > 0 && cmd.HasAvailableSubCommands() {
+			return unknownSubcommand(cmd, args[0])
+		}
 		if len(args) != n {
 			return usage("%s requires %d argument(s); see --help", cmd.CommandPath(), n)
 		}
