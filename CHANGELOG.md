@@ -6,6 +6,20 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 
 ## Unreleased
 
+## 0.2.1 — 2026-09-26
+
+- Report unknown subcommands (for example `targets show`) as usage errors that
+  list the valid choices, instead of printing help with a successful exit. A
+  bare command group with `--json` (for example `connections --json`) now fails
+  instead of printing help where JSON was expected.
+
+- Deploy owned Clash Verge Rev 2.5.2 to Apple silicon Macs over SSH with
+  `setup --client verge`: pinned dmg pushed by SFTP (no GitHub access needed on
+  the host), `--clone-mode native` mirroring of a bound Verge data directory,
+  staged verification beside Clash for Windows, a launchd rollback watchdog and
+  guarded CFW handoff. `cores status/start/stop/restart/remove` and owned source
+  edits support the new instance.
+
 - Add semantic colors to human `rules apply` previews and results, with
   `--color auto|always|never`, plain redirected output and ANSI-free JSON.
 
