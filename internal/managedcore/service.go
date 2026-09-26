@@ -19,6 +19,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/diagnostics"
+	"github.com/daviddwlee84/lazyclash/internal/hostpath"
 	"github.com/daviddwlee84/lazyclash/internal/networkcheck"
 )
 
@@ -160,12 +161,12 @@ func preview(ctx context.Context, request Request, opts Options, current *Instan
 			plan.Blockers = append(plan.Blockers, "host Docker TUN requires rootful Docker Engine on Linux; use native for macOS TUN")
 		}
 	}
-	root := filepath.Join(host.Home, ".local", "share", "lazyclash", "cores", request.ID)
+	root := hostpath.Join("linux", host.Home, ".local", "share", "lazyclash", "cores", request.ID)
 	if request.ServiceScope == "system" {
 		if host.OS == "darwin" {
-			root = filepath.Join("/Library/Application Support/lazyclash/cores", request.ID)
+			root = hostpath.Join("darwin", "/Library/Application Support/lazyclash/cores", request.ID)
 		} else {
-			root = filepath.Join("/var/lib/lazyclash/cores", request.ID)
+			root = hostpath.Join("linux", "/var/lib/lazyclash/cores", request.ID)
 		}
 	}
 	plan.Root = root
@@ -461,13 +462,13 @@ func Apply(ctx context.Context, request Request, expected string, opts Options) 
 
 func targetForInstance(instance Instance, plan Plan, secretPath string) config.Target {
 	target := config.Target{Checks: plan.Request.CloneChecks, ID: instance.ID, Name: instance.Name, SSHHost: instance.SSHHost, Controller: plan.Controller, ProbeProxy: plan.ProbeProxy, SecretFile: secretPath, ManagedCoreID: instance.ID}
-	corePath := filepath.Join(instance.Root, "home", "config.yaml")
-	binary := filepath.Join(instance.Root, "bin", "mihomo")
-	home := filepath.Join(instance.Root, "home")
+	corePath := hostpath.Join("linux", instance.Root, "home", "config.yaml")
+	binary := hostpath.Join("linux", instance.Root, "bin", "mihomo")
+	home := hostpath.Join("linux", instance.Root, "home")
 	source := &config.ConfigSource{Kind: "native", ConfigID: "managed", Binary: binary, Home: home}
 	if instance.Backend == "docker" {
 		corePath = "/root/.config/mihomo/config.yaml"
-		source = &config.ConfigSource{Kind: "docker", ConfigID: "managed", HostPath: filepath.Join(instance.Root, "home", "config.yaml"), CorePath: corePath, Binary: "/mihomo", Home: "/root/.config/mihomo", Container: "lazyclash_" + instance.ID + "-mihomo-1"}
+		source = &config.ConfigSource{Kind: "docker", ConfigID: "managed", HostPath: hostpath.Join("linux", instance.Root, "home", "config.yaml"), CorePath: corePath, Binary: "/mihomo", Home: "/root/.config/mihomo", Container: "lazyclash_" + instance.ID + "-mihomo-1"}
 	}
 	target.Configs = []config.CoreConfig{{ID: "managed", Name: "Managed source", Path: corePath}}
 	target.ConfigSource = source

@@ -7,10 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/daviddwlee84/lazyclash/internal/connection"
+	"github.com/daviddwlee84/lazyclash/internal/hostpath"
 	"github.com/daviddwlee84/lazyclash/internal/networkcheck"
 )
 
@@ -257,7 +257,7 @@ func PreviewConfigure(ctx context.Context, id string, request Request, opts Opti
 		request.Input = snapshot.Profile
 		request.InputKind = "yaml"
 		request.InputBaseDir = ""
-		home := filepath.Join(instance.Root, "home")
+		home := hostpath.Join("linux", instance.Root, "home")
 		if instance.Backend == "docker" {
 			home = "/root/.config/mihomo"
 		}

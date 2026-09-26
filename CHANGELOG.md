@@ -8,6 +8,8 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 
 ## 0.2.1 — 2026-09-26
 
+- Build managed macOS/Linux core paths with POSIX separators when the
+  controller runs on Windows, so source/rule bindings of owned cores validate.
 - Report unknown subcommands (for example `targets show`) as usage errors that
   list the valid choices, instead of printing help with a successful exit. A
   bare command group with `--json` (for example `connections --json`) now fails

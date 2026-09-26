@@ -3,14 +3,15 @@ package managedcore
 import (
 	"context"
 	"errors"
-	"github.com/daviddwlee84/lazyclash/internal/config"
-	"github.com/daviddwlee84/lazyclash/internal/configwork"
-	"github.com/daviddwlee84/lazyclash/internal/hostpath"
-	"go.yaml.in/yaml/v3"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
+
+	"github.com/daviddwlee84/lazyclash/internal/config"
+	"github.com/daviddwlee84/lazyclash/internal/configwork"
+	"github.com/daviddwlee84/lazyclash/internal/hostpath"
+	"go.yaml.in/yaml/v3"
 )
 
 // RuleSourceOperation keeps the narrower rule binding independent while using
@@ -82,7 +83,7 @@ func SourceOperation(ctx context.Context, target config.Target, operation config
 	if sourceMutation(operation.Op) && opts.ReadOnly {
 		return configwork.HostResponse{}, errors.New("managed source writes are disabled in read-only mode")
 	}
-	if operation.Op == "write" && filepath.Clean(operation.Path) == filepath.Join(instance.Root, "home", "config.yaml") {
+	if operation.Op == "write" && hostpath.Clean("linux", operation.Path) == hostpath.Join("linux", instance.Root, "home", "config.yaml") {
 		before, e := SourceOperation(ctx, target, configwork.HostRequest{Op: "read", Path: operation.Path}, opts)
 		if e != nil {
 			return configwork.HostResponse{}, e
