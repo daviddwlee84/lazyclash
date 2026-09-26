@@ -71,6 +71,63 @@ enables its user-logon trigger. The task stores no password, runs while that use
 is logged on, permits battery operation and has no default execution-time limit.
 Verge's separate auto-launch setting stays off to avoid duplicate startup owners.
 
+## Preview and deploy macOS Verge
+
+Apple silicon Macs can receive an owned Clash Verge Rev 2.5.2 over SSH. The
+controller downloads the pinned `Clash.Verge_2.5.2_aarch64.dmg` (size and
+SHA-256 verified) and pushes it through a private SFTP transfer, so a host
+behind a filtering network never contacts GitHub. `--artifact` accepts a
+verified local copy of the same disk image.
+
+```sh
+lazyclash setup mac-verge \
+  --from-target local-clash-verge-rev --clone-mode native \
+  --ssh mac_alias --client verge --client-version 2.5.2 \
+  --controller-port 9097 --mixed-port 7897 \
+  --tun --system-proxy --boot --json
+lazyclash setup mac-verge ... --yes --expect <digest> --json
+```
+
+`--clone-mode native` mirrors the bound Verge data directory: the profile index,
+every profile and Merge/Script companion, `config.yaml`, `verge.yaml`,
+`dns_config.yaml` and geodata. Runtime and host-local state (`clash-verge.yaml`,
+`cache.db`, logs, update caches, window state) is excluded; the reviewed proxy
+group selections are applied and verified through the controller instead. The
+destination receives a new controller secret, loopback-only listeners with
+`allow-lan` off, and Tailnet ranges (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`)
+excluded from TUN. WebDAV credentials and `startup_script` are dropped. Without
+`--clone-mode native`, a fresh data directory is cold-seeded from the flattened
+portable profile, as on Windows.
+
+The helper needs only the system `python3`; YAML is rendered locally. Installing
+the app, its privileged service helper and the rollback watchdog requires
+administrator rights. Setup first runs a no-op privileged check: with neither
+noninteractive `sudo` nor a terminal it stops with nothing changed.
+
+Activation order:
+
+1. Install the verified app bundle and service helper, back up any existing Verge
+   data directory (never deleted) and seed the new one. An existing unowned
+   Verge app or service blocks the plan.
+2. Arm a root launchd rollback watchdog (three-minute deadline) and launch Verge
+   into the console user's desktop with TUN, system proxy and autostart off. A
+   running Clash for Windows keeps its own ports during this stage.
+3. Verify the controller, Rule mode, selections, loopback listeners owned by the
+   bundled core and a proxied probe. Failure leaves CFW untouched.
+4. Take over: quit Clash for Windows, boot out and disable its root helper jobs
+   (files kept), apply the final Verge settings and relaunch.
+5. Require a fresh SSH login, controller health and a `generate_204` response
+   through the data proxy (and through TUN when enabled), then acknowledge the
+   watchdog and register the target.
+
+Without acknowledgement the watchdog quits Verge, writes its staged settings back,
+restores the recorded per-service system proxy, runs Verge's DNS restore when
+present and re-enables Clash for Windows. `cores stop` and `cores remove` perform
+the same restore; `cores start` repeats the guarded takeover. Removal also
+uninstalls the Verge service helper but keeps the app and data. Owned macOS
+node/group/rule edits write the recorded data directory as the SSH user and
+relaunch Verge to regenerate its runtime profile.
+
 ## Background Mihomo
 
 Use `--client mihomo` with the pinned Windows Mihomo v1.19.31 artifact. Its task

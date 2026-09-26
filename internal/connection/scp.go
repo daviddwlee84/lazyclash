@@ -23,6 +23,13 @@ const privateCopyLimit = 256 << 20
 // and verify the received size/hash before using the payload. This function does
 // not create remote directories, retry a transfer, or fall back to legacy SCP.
 func CopyPrivateFile(ctx context.Context, host, localPath, remotePath string) error {
+	return CopyPrivateFileOS(ctx, host, localPath, remotePath, "windows")
+}
+
+// CopyPrivateFileOS is CopyPrivateFile for an explicit destination path OS.
+// POSIX destinations must be inside the caller-prepared private transfer root
+// ~/.cache/lazyclash/managed-transfers of the SSH user.
+func CopyPrivateFileOS(ctx context.Context, host, localPath, remotePath, pathOS string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -47,7 +54,11 @@ func CopyPrivateFile(ctx context.Context, host, localPath, remotePath string) er
 	if runtime.GOOS != "windows" && before.Mode().Perm()&0077 != 0 {
 		return errors.New("private copy source must be readable only by its owner")
 	}
-	remotePath, err = privateCopyRemotePath(remotePath)
+	if pathOS == "windows" {
+		remotePath, err = privateCopyRemotePath(remotePath)
+	} else {
+		remotePath, err = privateCopyPOSIXPath(remotePath)
+	}
 	if err != nil {
 		return err
 	}
@@ -114,6 +125,21 @@ func privateCopyRemotePath(p string) (string, error) {
 		if part == "" || part == "." || part == ".." || strings.HasSuffix(part, ".") || strings.HasSuffix(part, " ") {
 			return "", errors.New("private copy destination contains an ambiguous path component")
 		}
+	}
+	return p, nil
+}
+
+func privateCopyPOSIXPath(p string) (string, error) {
+	if invalidPrivateCopyPath(p) || !strings.HasPrefix(p, "/") || strings.ContainsAny(p, "\\'\"`$;&|<>*?[]{}()!%^~") || strings.HasSuffix(p, "/") {
+		return "", errors.New("private copy destination must be an unambiguous absolute POSIX file path")
+	}
+	for _, part := range strings.Split(p[1:], "/") {
+		if part == "" || part == "." || part == ".." {
+			return "", errors.New("private copy destination contains an ambiguous path component")
+		}
+	}
+	if !strings.Contains(p, "/.cache/lazyclash/managed-transfers/") {
+		return "", errors.New("POSIX private copies are limited to the prepared managed transfer directory")
 	}
 	return p, nil
 }

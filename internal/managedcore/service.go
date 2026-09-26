@@ -97,7 +97,10 @@ func Preview(ctx context.Context, request Request, opts Options) (Plan, error) {
 		return PreviewWindows(ctx, request, opts)
 	}
 	if request.Client == "verge" {
-		return Plan{}, errors.New("managed Verge deployment requires a Windows host")
+		if request.HostOS == "darwin" {
+			return PreviewDarwinVerge(ctx, request, opts)
+		}
+		return Plan{}, errors.New("managed Verge deployment requires a Windows or macOS arm64 host")
 	}
 	return preview(ctx, request, opts, nil)
 }
@@ -326,6 +329,9 @@ func preview(ctx context.Context, request Request, opts Options, current *Instan
 func Apply(ctx context.Context, request Request, expected string, opts Options) (Receipt, error) {
 	if request.HostOS == "windows" {
 		return ApplyWindows(ctx, request, expected, opts)
+	}
+	if request.Client == "verge" && request.HostOS == "darwin" {
+		return ApplyDarwinVerge(ctx, request, expected, opts)
 	}
 	if opts.ReadOnly {
 		return Receipt{}, errors.New("managed installation is disabled in read-only mode")

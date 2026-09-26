@@ -38,6 +38,9 @@ func GetStatus(ctx context.Context, id string, opts Options) (Status, error) {
 	if instance.OS == "windows" {
 		return WindowsStatus(ctx, id, opts)
 	}
+	if isDarwinVerge(instance) {
+		return DarwinVergeStatus(ctx, id, opts)
+	}
 	request, err := LoadRequest(id, opts)
 	if err != nil {
 		return Status{}, err
@@ -92,6 +95,8 @@ func lifecycleRequest(instance Instance, request Request, op string) hostRequest
 func PreviewAction(ctx context.Context, id, operation string, opts Options) (ActionPlan, error) {
 	if instance, err := loadInstance(id, opts); err == nil && instance.OS == "windows" {
 		return WindowsPreviewAction(ctx, id, operation, opts)
+	} else if err == nil && isDarwinVerge(instance) {
+		return DarwinVergePreviewAction(ctx, id, operation, opts)
 	}
 	switch operation {
 	case "start", "stop", "restart", "remove":
@@ -143,6 +148,8 @@ func PreviewAction(ctx context.Context, id, operation string, opts Options) (Act
 func ApplyAction(ctx context.Context, id, operation, expected string, opts Options) (Receipt, error) {
 	if instance, err := loadInstance(id, opts); err == nil && instance.OS == "windows" {
 		return WindowsLifecycle(ctx, id, operation, expected, opts)
+	} else if err == nil && isDarwinVerge(instance) {
+		return DarwinVergeLifecycle(ctx, id, operation, expected, opts)
 	}
 	if opts.ReadOnly {
 		return Receipt{}, errors.New("managed lifecycle changes are disabled in read-only mode")
@@ -221,8 +228,8 @@ func ApplyAction(ctx context.Context, id, operation, expected string, opts Optio
 }
 
 func PreviewConfigure(ctx context.Context, id string, request Request, opts Options) (Plan, error) {
-	if instance, err := loadInstance(id, opts); err == nil && instance.OS == "windows" {
-		return Plan{}, errors.New("Windows whole-instance reconfiguration is not supported; use the bound node/group/rule editors or deploy a separately reviewed client")
+	if instance, err := loadInstance(id, opts); err == nil && (instance.OS == "windows" || isDarwinVerge(instance)) {
+		return Plan{}, errors.New("desktop Verge/Windows whole-instance reconfiguration is not supported; use the bound node/group/rule editors or deploy a separately reviewed client")
 	}
 	status, err := GetStatus(ctx, id, opts)
 	instance := status.Instance

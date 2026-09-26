@@ -32,7 +32,7 @@ func (o *options) ruleOptions(cmd *cobra.Command) rulework.Options {
 			return rulework.DockerInfo{ContainerID: result.ContainerID, Image: result.Image, SourceSHA256: result.SourceSHA256, SingleFile: result.SingleFile}, err
 		},
 		ActivateOwner: func(ctx context.Context, target config.Target) error {
-			return managedcore.WindowsActivateSource(ctx, target, o.managedOptions(cmd))
+			return managedcore.ActivateSource(ctx, target, o.managedOptions(cmd))
 		},
 	}
 }
