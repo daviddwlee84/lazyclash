@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
@@ -331,7 +332,7 @@ func TestTargetDiscoveryUsesActualAddSSHFlagBeforeAnyReview(t *testing.T) {
 	isolated(t)
 	for _, args := range [][]string{
 		{"targets", "add", "--ssh", "fixture-host", "--secret-env", "LOCAL_SECRET"},
-		{"--ssh", "fixture-host", "targets", "add", "--secret-file", "/local/secret"},
+		{"--ssh", "fixture-host", "targets", "add", "--secret-file", filepath.Join(t.TempDir(), "secret")},
 	} {
 		ctx, cancel := context.WithCancel(context.Background())
 		calls := 0
@@ -388,7 +389,8 @@ func TestDiscoverCommandAuthenticatesExactHostAndRetriesOnce(t *testing.T) {
 		if host != "fixture-host" {
 			t.Fatalf("auth wrong host %q", host)
 		}
-		return exec.CommandContext(ctx, "/bin/sh", "-c", "exit 0"), nil
+		// Re-run this test binary with no tests: a portable command that exits 0.
+		return exec.CommandContext(ctx, os.Args[0], "-test.run=^$"), nil
 	}}}
 	found, err := o.discoverCommandUsing(cmd, "fixture-host", func(_ context.Context, host string) ([]config.Target, error) {
 		calls++
