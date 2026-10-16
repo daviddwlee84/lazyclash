@@ -119,6 +119,22 @@ func TestLogsQuietStreamStopsAtDuration(t *testing.T) {
 	}
 }
 
+func TestLogsDurationIncludesUnflushedHeaders(t *testing.T) {
+	isolated(t)
+	server := logsServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
+	defer server.Close()
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"--controller", server.URL, "logs", "--duration", "30ms", "--json"})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetIn(strings.NewReader(""))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := cmd.ExecuteContext(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type cancelLogsWriter struct{ cancel context.CancelFunc }
 
 func (w cancelLogsWriter) Write(p []byte) (int, error) {

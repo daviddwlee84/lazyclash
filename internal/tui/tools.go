@@ -62,6 +62,9 @@ type toolSettingsMsg struct {
 }
 
 func (m *Model) canRunTool() bool {
+	if m.discovery != nil {
+		return false
+	}
 	return m.options.RunCommand != nil && !m.toolPending && (!m.opening || m.serverWork()) && m.pending == "" && !m.authPending() && (m.work == nil || !m.work.pending)
 }
 func (m *Model) runTool(label string, targeted bool, args ...string) tea.Cmd {
@@ -84,6 +87,7 @@ func (m *Model) runTool(label string, targeted bool, args ...string) tea.Cmd {
 	m.pressed = nil
 	m.toolSerial++
 	m.toolPending = true
+	m.observationGap("external tool handoff")
 	m.overlay = "external-tool"
 	m.status = label
 	request := toolMsg{generation: m.generation, serial: m.toolSerial, label: label}
@@ -114,6 +118,7 @@ func (m *Model) receiveTool(msg toolMsg) tea.Cmd {
 	}
 	m.toolPending = false
 	m.overlay = ""
+	m.observationGap("external tool returned")
 	m.pressed = nil
 	if msg.label == "Import proxies" || msg.label == "Add proxy" || msg.label == "Sync configurations" {
 		// The shared wizard may write several targets. Invalidate cached data
@@ -140,13 +145,13 @@ func (m *Model) receiveTool(msg toolMsg) tea.Cmd {
 		return tea.Batch(m.refreshServerWork(false), m.refresh(true))
 	}
 	if m.options.ReloadTargets == nil {
-		return m.refresh(true)
+		return tea.Batch(m.refresh(true), m.checkPendingDiscovery())
 	}
 	reload := m.options.ReloadTargets
-	return func() tea.Msg {
+	return tea.Batch(func() tea.Msg {
 		settings, err := reload()
 		return toolSettingsMsg{toolMsg: msg, settings: settings, loadErr: err}
-	}
+	}, m.checkPendingDiscovery())
 }
 func (m *Model) receiveToolSettings(msg toolSettingsMsg) tea.Cmd {
 	if msg.generation != m.generation || msg.serial != m.toolSerial {

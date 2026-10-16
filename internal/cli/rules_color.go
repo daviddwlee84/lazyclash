@@ -48,6 +48,8 @@ func (s cliStyle) quickRuleOutput(raw, status string, targets map[string]string)
 		switch {
 		case strings.HasPrefix(line, "Rule: "):
 			lines[i] = s.paint(toneAccent, "Rule: ") + s.paint(toneStrong, strings.TrimPrefix(line, "Rule: "))
+		case strings.HasPrefix(line, "Rules: "):
+			lines[i] = s.paint(toneAccent, line)
 		case line == "Status: "+core.Sanitize(status):
 			lines[i] = s.paint(toneAccent, "Status: ") + s.paint(statusTone(status), status)
 		case strings.HasPrefix(line, "Digest: "), strings.HasPrefix(line, "Source: "), strings.HasPrefix(line, "Receipt: "), strings.HasPrefix(line, "File: "):

@@ -4,12 +4,13 @@ Saving a source file, loading it into a core and observing a request use its
 rule are separate outcomes. A runtime `PUT /configs` does not regenerate a
 Clash Verge profile or synchronize its in-memory state.
 
-## Apply one rule to a target or all targets
+## Apply rules to a target or all targets
 
 ```sh
 lazyclash --target server rules apply 'DOMAIN,api.enterprise.githubcopilot.com,DIRECT'
 lazyclash rules apply 'DOMAIN-SUFFIX,api.enterprise.githubcopilot.com,DIRECT' --all --dry-run
 lazyclash rules apply 'DOMAIN-SUFFIX,api.enterprise.githubcopilot.com,DIRECT' --all --yes
+lazyclash --target server rules apply 'DOMAIN,api.example.com,PROXY' 'DOMAIN,cdn.example.com,PROXY'
 # A pasted YAML list item also works; put flags before the -- terminator.
 lazyclash --target server rules apply --dry-run -- '- DOMAIN-SUFFIX,api.enterprise.githubcopilot.com,DIRECT'
 ```
@@ -19,6 +20,17 @@ Without `--all`, the selected/default saved target is used. An explicit
 bound persistent source. An identical canonical rule already anywhere in that
 source is skipped without moving it, writing a file or reloading the core.
 Its position can still leave it shadowed; the result includes that warning.
+
+`rules apply RULE...` accepts up to 256 ordered rule arguments, with a combined
+canonical size of 128 KiB. Repeated identical inputs are deduplicated at their
+first position. New declarations are prepended together in the requested order;
+identical existing declarations retain their original positions. Conflicting
+policies within the requested batch are rejected before source or controller
+access. Each changed target receives one validated candidate, source write,
+owner activation and receipt. Verification checks the entire added block in
+order and the presence of every requested rule, including retained declarations.
+Single-rule JSON and receipts retain their existing fields; multi-rule reports
+add `rules`, per-target dispositions, and receipt `added_rules`.
 
 The command inspects source and runtime rules and validates each candidate
 before writing. Invalid source syntax/schema, known missing policy/provider
@@ -64,9 +76,93 @@ both are also in the action palette, for one target or all targets. Preview
 rows show each target's owner, findings and disposition before the default-No
 confirmation.
 
+## Discover missing rules from observed traffic
+
+Normal dashboard use already accumulates the selected target's observed dial
+errors and successes. On Logs or Rules, **R** opens the shared review; **D**
+starts or stops a temporary DIRECT session. The action palette also exposes
+saved observations and pending restorations. Ordinary review does not require a
+DIRECT session or change routing. It covers only the time this target was
+connected in lazyclash, not historical logs from before collection began.
+
+```sh
+# Observe normal routing in the foreground; default duration is 30m.
+lazyclash --target desktop rules discover start --duration 20m
+# Inspect the actual fallback, then explicitly start temporary DIRECT routing.
+lazyclash --target desktop rules discover start --direct --dry-run --json
+lazyclash --target desktop rules discover start --direct --duration 30m --yes
+lazyclash rules discover list --json
+lazyclash rules discover review SESSION_ID --interactive
+lazyclash rules discover review SESSION_ID --json
+lazyclash rules discover recover GUARD_ID --dry-run --json
+lazyclash rules discover recover GUARD_ID --yes --json
+```
+
+`start` is a foreground collector with a positive duration of at most 24h;
+Ctrl-C stops collection and waits for restoration. Without `--direct`, it never
+changes a selector, routing mode or persistent source. `--direct` previews
+without collecting in JSON/noninteractive use unless `--yes` is supplied.
+Read-only mode permits passive collection and previews, but blocks temporary
+DIRECT changes, recovery writes and applying reviewed rules. There is no
+permanent background collector.
+
+DIRECT discovery finds the enabled runtime `MATCH` fallback; `FINAL` is merely
+a possible group name. Rule mode and either a DIRECT fallback or a manual
+Selector directly containing DIRECT are required. It does not rewrite MATCH,
+follow nested groups or pin automatic groups. If the Selector is shared by
+other rules or groups, the preview explains the wider effect. Existing
+connections are not forcibly closed.
+
+Before changing the selection, an independent helper opens its own authenticated
+controller connection and saves a private restoration journal. Stop, timeout,
+parent exit or an expired heartbeat lease trigger restoration using the saved
+selection. The helper retains its connection, including an SSH tunnel, through
+the first restoration attempt; retries resolve the same saved credential
+references. A temporary parent-only SSH authentication session is insufficient.
+Runtime mode, rule/group identity and selection are checked before restoring;
+visible external edits become conflicts rather than being overwritten. Core
+selection has no atomic compare-and-set, so this cannot exclude every race.
+
+The helper runs independently on macOS/Linux. Windows requires successful
+process-job breakaway and rejects auto-switch if independence cannot be proven;
+the Windows implementation is cross-compiled but native behavior is not yet
+verified. A machine shutdown, force-killing the helper or an unreachable
+controller can still leave restoration pending. Retries last at most two
+minutes; unresolved records remain available to `list` and `recover`. Rule
+apply refuses active or unresolved restoration records for the same controller,
+including another saved alias. Recovery does not silently overwrite a changed
+target or group.
+
+The review groups by normalized exact hostname, or exact IP when no hostname
+was reported. Each group retains protocol, port, process, matched rule, policy,
+error category, counts and first/last observations. Variants remain visible;
+sharing a domain does not imply every failure has the same cause. Views switch
+between anomalies, observed MATCH traffic (including successes), and all
+observations. Space marks rows; **p** assigns an existing policy, **e** edits
+the hostname, **s** explicitly chooses DOMAIN-SUFFIX, **i/u** ignores/restores
+rows, **w** saves and **a** previews the complete batch. Only **y** from a ready
+preview applies it. No policy or broader suffix is inferred automatically.
+IP-only candidates use `/32` or `/128` with `no-resolve`.
+
+Counts describe log records, not unique failed requests: one failed dial may
+produce repeated retry logs. Dial success does not prove HTTP/TLS/application
+success, and failures do not prove missing rules. Unknown warnings, gaps and
+dropped observations remain visible. The controller's log stream may itself
+drop events; a quiet stream is not evidence of complete rule coverage.
+Collection requests info-level stream events without changing the core's
+runtime logging setting.
+
+Only structured observations and fixed error summaries are saved, never raw
+log payloads or arbitrary error URLs. Private snapshots live under
+`$XDG_STATE_HOME/lazyclash/rule-discovery`, with restoration journals in
+`discovery-guards` (default base `~/.local/state`). Each snapshot has bounded
+groups, variants, samples and gap details; excess evidence is counted as
+dropped. Saved snapshots can be inspected later, but a changed target identity
+prevents their application to a different controller.
+
 ## Choose the intended matching scope
 
-The quick command accepts one rule, as a scalar or single YAML list item:
+Each quick-command argument accepts one rule, as a scalar or single YAML list item:
 
 | Type | Example | Scope |
 | --- | --- | --- |

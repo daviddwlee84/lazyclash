@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/daviddwlee84/lazyclash/internal/discoveryguard"
 	"github.com/daviddwlee84/lazyclash/internal/scoopupgrade"
 	"os"
 	"os/signal"
@@ -11,6 +12,9 @@ import (
 )
 
 func main() {
+	if code, handled := discoveryguard.HandleHelper(); handled {
+		os.Exit(code)
+	}
 	if code, handled := scoopupgrade.HandleHelper(scoopupgrade.Product{Binary: "lazyclash", Module: "github.com/daviddwlee84/lazyclash", Main: "github.com/daviddwlee84/lazyclash/cmd/lazyclash"}); handled {
 		os.Exit(code)
 	}

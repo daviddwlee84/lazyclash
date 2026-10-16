@@ -25,7 +25,7 @@ type confirmation struct {
 
 func (m *Model) actions() []action {
 	connected := m.client != nil && !m.opening
-	write := connected && !m.options.ReadOnly && !m.client.IsReadOnly() && m.pending == ""
+	write := connected && !m.options.ReadOnly && !m.client.IsReadOnly() && m.pending == "" && m.discovery == nil
 	selected, hasRow := m.selectedRow()
 	group, hasGroup := m.group()
 	cfg := m.configData()
@@ -35,6 +35,9 @@ func (m *Model) actions() []action {
 		configSyncKeys = []string{"S"}
 	}
 	a := []action{
+		{"observe-review", "Review observed connection anomalies / fallback traffic", observationKeys(m.page, "R"), m.options.RuleReview != nil && m.target.ID != ""},
+		{"observe-discovery", "Start / stop temporary DIRECT discovery", observationKeys(m.page, "D"), m.discovery != nil || write && m.options.DiscoverySettings != "" && !m.target.Transient && !m.target.TransportOverride},
+		{"observe-saved", "Saved rule observations / restorations", nil, m.canRunTool()},
 		{"tool-setup", "Setup Mihomo client", nil, m.canRunTool() && !m.options.ReadOnly},
 		{"tool-core", "Manage installed cores", nil, m.canRunTool()},
 		{"tool-client-service", "Existing target service: status / start / stop / autostart", nil, m.canRunTool() && m.target.ID != "" && !m.target.Transient && !m.target.TransportOverride && m.target.ManagedCoreID == ""},
@@ -62,7 +65,7 @@ func (m *Model) actions() []action {
 		{"target-test", "Test current target connectivity", nil, m.target.ID != "" && m.options.TestTarget != nil && !m.testPending},
 		{"refresh", "Refresh", []string{"r"}, connected}, {"targets", "Choose target", []string{"t"}, len(m.settings.Targets) > 0},
 		{"reconnect", "Reconnect current target", nil, m.target.ID != ""},
-		{"target-add", "Add target", nil, true}, {"target-edit", "Edit current target", nil, m.target.ID != ""}, {"target-remove", "Remove current target", nil, m.target.ID != ""},
+		{"target-add", "Add target", nil, true}, {"target-edit", "Edit current target", nil, m.target.ID != "" && m.discovery == nil}, {"target-remove", "Remove current target", nil, m.target.ID != "" && m.discovery == nil},
 		{"target-default", "Make current target default", nil, m.target.ID != ""}, {"target-up", "Move current target earlier", nil, m.target.ID != ""}, {"target-down", "Move current target later", nil, m.target.ID != ""},
 		{"discover", "Discover local controllers", nil, m.options.Discover != nil}, {"discover-ssh", "Discover SSH host", nil, m.options.DiscoverHost != nil},
 		{"authenticate", "Authenticate SSH and reconnect", []string{"A"}, m.canAuthenticate()},
@@ -397,10 +400,23 @@ func (m *Model) ask(title, body string, run func() tea.Cmd) tea.Cmd {
 	return nil
 }
 func (m *Model) runAction(id string) tea.Cmd {
+	if m.discovery != nil && (id == "target-edit" || id == "target-remove") {
+		m.status = "Stop discovery and restore its selection before editing or removing this target."
+		return nil
+	}
 	if strings.HasPrefix(id, "tool-") {
 		return m.toolAction(id)
 	}
 	switch id {
+	case "observe-review":
+		return m.startObservedReview()
+	case "observe-discovery":
+		if m.discovery != nil {
+			return m.stopDiscovery()
+		}
+		return m.startDiscoveryForm()
+	case "observe-saved":
+		return m.runTool("Saved rule observations / restorations", false, "rules", "discover", "list", "--interactive")
 	case "work-compare":
 		return m.startCompare()
 	case "work-url":
@@ -427,6 +443,10 @@ func (m *Model) runAction(id string) tea.Cmd {
 		m.helpOffset = 0
 		return nil
 	case "quit":
+		if m.discovery != nil {
+			m.discovery.quitAfter = true
+			return m.stopDiscovery()
+		}
 		return tea.Quit
 	case "overview-inspect":
 		return m.activateOverview(m.overviewSelection)

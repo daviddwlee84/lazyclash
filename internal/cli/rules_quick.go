@@ -42,10 +42,17 @@ func (o *options) quickRuleTargets(cmd *cobra.Command, all bool) ([]config.Targe
 func (o *options) quickRuleCommands() []*cobra.Command {
 	var all, dryRun, yes bool
 	var expected string
-	apply := &cobra.Command{Use: "apply RULE", Short: "Apply a persistent common rule to one target or --all; relevant conflicts and invalid candidates block writes", Args: argsExact(1), Long: "Apply one DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, IP-CIDR or IP-CIDR6 rule.\nConflicts involving the requested selector and invalid candidate configurations block all writes. Unrelated existing selector conflicts are health warnings; use rules healthcheck for details.\nInteractive terminals preview and ask [y/N]. --yes accepts warnings, never operation errors.\nWithout a terminal or with --json, omit --yes to preview. --all reports unavailable targets as skips.\nUse -- before a quoted YAML item beginning with '- '.", Example: "  lazyclash --target server rules apply -- '- DOMAIN-SUFFIX,example.com,DIRECT'\n  lazyclash rules apply --all --yes 'DOMAIN-SUFFIX,example.com,DIRECT'\n  lazyclash rules apply --all --dry-run --json 'DOMAIN-SUFFIX,example.com,DIRECT'", RunE: func(cmd *cobra.Command, args []string) error {
+	apply := &cobra.Command{Use: "apply RULE...", Short: "Apply an ordered batch of persistent common rules to one target or --all", Args: func(_ *cobra.Command, args []string) error {
+		if len(args) == 0 || len(args) > rulework.MaxRuleBatchSize {
+			return usage("supply between 1 and %d rules", rulework.MaxRuleBatchSize)
+		}
+		return nil
+	}, Long: "Apply ordered DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, IP-CIDR or IP-CIDR6 rules.\nEach target receives one validated source write and owner activation. Identical inputs are deduplicated; existing declarations retain their positions.\nConflicts involving the requested selector and invalid candidate configurations block all writes. Unrelated existing selector conflicts are health warnings; use rules healthcheck for details.\nInteractive terminals preview and ask [y/N]. --yes accepts warnings, never operation errors.\nWithout a terminal or with --json, omit --yes to preview. --all reports unavailable targets as skips.\nUse -- before a quoted YAML item beginning with '- '.", Example: "  lazyclash --target server rules apply -- '- DOMAIN-SUFFIX,example.com,DIRECT'\n  lazyclash rules apply 'DOMAIN,api.example.com,DIRECT' 'DOMAIN-SUFFIX,example.org,DIRECT'\n  lazyclash rules apply --all --yes 'DOMAIN-SUFFIX,example.com,DIRECT'\n  lazyclash rules apply --all --dry-run --json 'DOMAIN-SUFFIX,example.com,DIRECT'", RunE: func(cmd *cobra.Command, args []string) error {
 		defer connection.CloseAuthentications()
-		if _, err := rulecheck.Parse(args[0]); err != nil {
-			return usage("%s", err)
+		for _, raw := range args {
+			if _, err := rulecheck.Parse(raw); err != nil {
+				return usage("%s", err)
+			}
 		}
 		if dryRun && yes {
 			return usage("--dry-run and --yes are mutually exclusive")
@@ -71,7 +78,7 @@ func (o *options) quickRuleCommands() []*cobra.Command {
 		var p rulework.QuickPlan
 		preview := func() error {
 			var e error
-			p, e = rulework.PreviewRules(cmd.Context(), targets, args[0], all, opts)
+			p, e = rulework.PreviewRuleBatch(cmd.Context(), targets, args, all, opts)
 			return e
 		}
 		if all {
@@ -113,7 +120,7 @@ func (o *options) quickRuleCommands() []*cobra.Command {
 				return o.result(cmd, "Canceled; no targets changed.")
 			}
 		}
-		result, err := rulework.ApplyRules(cmd.Context(), targets, args[0], all, p.Digest, opts)
+		result, err := rulework.ApplyRuleBatch(cmd.Context(), targets, args, all, p.Digest, opts)
 		if o.json {
 			if e := o.output(cmd, result); e != nil {
 				return e
@@ -129,7 +136,7 @@ func (o *options) quickRuleCommands() []*cobra.Command {
 	apply.Flags().StringVar(&expected, "expect", "", "optionally require this reviewed digest with --yes")
 	apply.ValidArgsFunction = func(_ *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
 		var suggestions []string
-		if len(args) == 0 {
+		if len(args) < rulework.MaxRuleBatchSize {
 			for _, kind := range []string{"DOMAIN,", "DOMAIN-SUFFIX,", "DOMAIN-KEYWORD,", "IP-CIDR,", "IP-CIDR6,"} {
 				if strings.HasPrefix(kind, prefix) {
 					suggestions = append(suggestions, kind)

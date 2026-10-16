@@ -19,6 +19,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/diagnostics"
 	"github.com/daviddwlee84/lazyclash/internal/managedcore"
 	"github.com/daviddwlee84/lazyclash/internal/proxyenv"
+	"github.com/daviddwlee84/lazyclash/internal/ruleobserve"
 	"github.com/daviddwlee84/lazyclash/internal/selfupdate"
 	"github.com/daviddwlee84/lazyclash/internal/serverdeploy"
 	"github.com/daviddwlee84/lazyclash/internal/serverstate"
@@ -109,9 +110,9 @@ func New(deps Dependencies) *cobra.Command {
 		deps.Upgrade = selfupdate.Run
 	}
 	if deps.RunTUI == nil {
-		deps.RunTUI = func(ctx context.Context, opts tui.Options, in io.Reader, out io.Writer) error {
+		deps.RunTUI = func(ctx context.Context, opts tui.Options, in io.Reader, out io.Writer) (result error) {
 			model := tui.New(opts)
-			defer model.Close()
+			defer func() { result = errors.Join(result, model.Close()) }()
 			_, err := tea.NewProgram(model, tea.WithContext(ctx), tea.WithInput(in), tea.WithOutput(out)).Run()
 			if errors.Is(err, tea.ErrProgramKilled) && ctx.Err() != nil {
 				return ctx.Err()
@@ -153,6 +154,10 @@ func New(deps Dependencies) *cobra.Command {
 			}
 			initial := target.ID
 			opts := tui.Options{
+				DiscoverySettings: settingsPath,
+				RuleReview: func(ctx context.Context, t config.Target, s ruleobserve.Snapshot) tui.RuleReviewOptions {
+					return o.ruleReviewOptions(ctx, t, s, settingsPath)
+				},
 				NodeProvenance: o.nodeProvenance(cmd, cfg),
 				Config:         cfg, InitialTarget: initial, ReadOnly: o.readOnly, Workbench: o.runWorkbench,
 				StartPage: o.page, TestTarget: o.testTargetText, ProbeIP: o.probeIPText, ProbeLatency: o.probeLatencyText,

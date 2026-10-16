@@ -40,6 +40,7 @@ func newFixture(t *testing.T, verge bool) *fixture {
 func baseFixture(t *testing.T, verge bool) *fixture {
 	t.Helper()
 	root := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", filepath.Join(root, "state"))
 	f := &fixture{rules: []map[string]any{{"type": "Match", "payload": "", "proxy": "DIRECT"}}}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()

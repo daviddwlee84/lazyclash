@@ -6,6 +6,13 @@ or use `@latest` to upgrade. Check the installed binary with `lazyclash --versio
 
 ## Unreleased
 
+- Add observed-connection rule review from normal dashboard use, with exact-domain
+  aggregation, explicit policy/suffix choices, saved observations and ordered
+  multi-rule apply using one validated write and receipt per target.
+- Add timed `rules discover` sessions with optional temporary DIRECT fallback,
+  an independent restoration helper, guarded crash recovery and visible coverage
+  gaps. Quiet log streams respect the requested collection duration.
+
 ## 0.2.1 — 2026-09-26
 
 - Build managed macOS/Linux core paths with POSIX separators when the

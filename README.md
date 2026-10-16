@@ -314,6 +314,10 @@ lazyclash logs --level debug --filter example --duration 10s --limit 100 --json
 lazyclash rules list --filter example
 lazyclash --target server rules apply 'DOMAIN,api.enterprise.githubcopilot.com,DIRECT' --dry-run
 lazyclash rules apply 'DOMAIN-SUFFIX,api.enterprise.githubcopilot.com,DIRECT' --all --yes
+lazyclash rules apply 'DOMAIN,api.example.com,PROXY' 'DOMAIN,cdn.example.com,PROXY'
+lazyclash --target desktop rules discover start --direct --duration 30m --yes
+lazyclash rules discover list --json
+lazyclash rules discover review SESSION_ID --interactive
 lazyclash rules healthcheck --all --json
 lazyclash rules diff desktop server --scope both
 lazyclash rules diff desktop --all --scope runtime --json
@@ -382,6 +386,15 @@ not fatal core errors.
 `--all` reports unavailable/unbound targets as skips; rule errors block the
 batch before writes. Partial availability can succeed with exit 0 and
 `completed_with_skips`; no usable targets returns nonzero.
+
+`rules apply RULE...` prepends the reviewed additions together, with one write,
+owner activation and receipt per target. Normal dashboard logs and timed
+`rules discover start` sessions feed the same domain-grouped review (**R** on
+Logs/Rules). Optional `--direct` temporarily switches the actual MATCH fallback;
+an independent helper attempts restoration when collection stops or the parent
+exits. Pending restorations remain recoverable and block rule apply. Counts are
+observed log records, not proof of missing rules or complete traffic coverage.
+See [discovery, review and recovery](docs/rules-and-ownership.md#discover-missing-rules-from-observed-traffic).
 
 Read-only `rules diff`, `find` and `lookup` default to `--scope both`; choose
 `runtime` or `source` explicitly when needed. Diff preserves duplicate counts

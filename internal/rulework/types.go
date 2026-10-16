@@ -44,16 +44,18 @@ type Source struct {
 }
 
 type Plan struct {
-	TargetID            string `json:"target_id"`
-	Owner               Source `json:"owner"`
-	Domain              string `json:"domain,omitempty"`
-	Prefix              string `json:"prefix,omitempty"`
-	Policy              string `json:"policy"`
-	Rule                string `json:"rule"`
-	Digest              string `json:"digest"`
-	Diff                string `json:"diff"`
-	NoChange            bool   `json:"no_change"`
-	CoreVersion         string `json:"core_version"`
+	TargetID            string   `json:"target_id"`
+	Owner               Source   `json:"owner"`
+	Domain              string   `json:"domain,omitempty"`
+	Prefix              string   `json:"prefix,omitempty"`
+	Policy              string   `json:"policy"`
+	Rule                string   `json:"rule"`
+	Rules               []string `json:"rules,omitempty"`
+	AddedRules          []string `json:"added_rules,omitempty"`
+	Digest              string   `json:"digest"`
+	Diff                string   `json:"diff"`
+	NoChange            bool     `json:"no_change"`
+	CoreVersion         string   `json:"core_version"`
 	after               []byte
 	beforeRuntimeDigest string
 }
@@ -65,6 +67,8 @@ type Receipt struct {
 	OwnerIdentity       string    `json:"owner_identity,omitempty"`
 	File                string    `json:"file"`
 	Rule                string    `json:"rule"`
+	Rules               []string  `json:"rules,omitempty"`
+	AddedRules          []string  `json:"added_rules,omitempty"`
 	Domain              string    `json:"domain,omitempty"`
 	Prefix              string    `json:"prefix,omitempty"`
 	Policy              string    `json:"policy"`

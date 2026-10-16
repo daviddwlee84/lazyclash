@@ -14,6 +14,9 @@ import (
 )
 
 func (m *Model) View() tea.View {
+	if m.review != nil {
+		return m.review.View()
+	}
 	width, height := max(m.width, 1), max(m.height, 1)
 	contentHeight := max(1, height-5)
 	content := m.body(width, contentHeight)
@@ -23,6 +26,12 @@ func (m *Model) View() tea.View {
 	lines := []string{m.header(width), m.tabs(width)}
 	lines = append(lines, fitLines(content, width, contentHeight)...)
 	status := m.status
+	if m.discoveryRecoveryNotice != "" {
+		status = m.discoveryRecoveryNotice
+	}
+	if m.discovery != nil {
+		status = "DIRECT discovery · D stop/restore · R review · " + status
+	}
 	if m.pending != "" {
 		status = "PENDING: " + m.pending
 	}

@@ -83,14 +83,16 @@ func (e *Error) Unwrap() error { return e.cause }
 // Client is safe for concurrent use. Every operation is bound to its caller's
 // context; it never retries a write or follows redirects with a bearer token.
 type Client struct {
-	base         *url.URL
-	http         *http.Client
-	transport    *http.Transport
-	secret       string
-	readOnly     bool
-	timeout      time.Duration
-	delayURL     string
-	delayTimeout time.Duration
+	base            *url.URL
+	http            *http.Client
+	transport       *http.Transport
+	streamHTTP      *http.Client
+	streamTransport *http.Transport
+	secret          string
+	readOnly        bool
+	timeout         time.Duration
+	delayURL        string
+	delayTimeout    time.Duration
 }
 
 func New(options Options) (*Client, error) {
@@ -165,16 +167,27 @@ func New(options Options) (*Client, error) {
 	if delayTimeout <= 0 {
 		delayTimeout = 5 * time.Second
 	}
+	// Mihomo may leave /logs response headers unflushed until its first event.
+	// Stream lifetime belongs to the caller, not the ordinary request timeout.
+	streamTransport := transport.Clone()
+	streamTransport.ResponseHeaderTimeout = 0
+	noRedirect := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &Client{
 		base: base, secret: options.Secret, readOnly: options.ReadOnly,
 		timeout: timeout, delayURL: delayURL, delayTimeout: delayTimeout,
-		transport: transport,
-		http:      &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
+		transport:       transport,
+		http:            &http.Client{Transport: transport, CheckRedirect: noRedirect},
+		streamTransport: streamTransport,
+		streamHTTP:      &http.Client{Transport: streamTransport, CheckRedirect: noRedirect},
 	}, nil
 }
 
 func (c *Client) IsReadOnly() bool { return c.readOnly }
-func (c *Client) Close() error     { c.transport.CloseIdleConnections(); return nil }
+func (c *Client) Close() error {
+	c.transport.CloseIdleConnections()
+	c.streamTransport.CloseIdleConnections()
+	return nil
+}
 
 // Selectable matches the Mihomo adapters implementing outboundgroup.SelectAble.
 func (p Proxy) Selectable() bool {
@@ -248,7 +261,11 @@ func (c *Client) request(ctx context.Context, method string, segments []string, 
 	}
 	var sent atomic.Bool
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{WroteHeaders: func() { sent.Store(true) }}))
-	resp, err := c.http.Do(req)
+	client := c.http
+	if stream {
+		client = c.streamHTTP
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		requestErr := transportError(err, ctx.Err(), write && sent.Load(), op)
 		cancel()

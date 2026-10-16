@@ -129,6 +129,8 @@ func (m *Model) submitForm() tea.Cmd {
 	f := m.form
 	value := func(i int) string { return strings.TrimSpace(f.fields[i].value) }
 	switch f.kind {
+	case "discovery-duration":
+		return m.previewDiscovery(value(0))
 	case "work-rule-find", "work-rule-lookup":
 		kind := strings.TrimPrefix(f.kind, "work-")
 		req := m.ruleInspectionRequest(kind)
@@ -226,6 +228,22 @@ func (m *Model) submitForm() tea.Cmd {
 	return nil
 }
 func (m *Model) save(settings config.Config, selected string) tea.Cmd {
+	if m.discovery != nil {
+		retained := false
+		for _, target := range settings.Targets {
+			if target.ID == m.discovery.target.ID && sameConnection(target, m.discovery.target) && target.HostOS == m.discovery.target.HostOS {
+				retained = true
+				break
+			}
+		}
+		if !retained {
+			m.status = "Stop discovery and restore its selection before changing its saved connection."
+			if m.form != nil {
+				m.form.err = m.status
+			}
+			return nil
+		}
+	}
 	if m.options.SaveTargets == nil {
 		m.status = "Saving target settings is unavailable"
 		return nil

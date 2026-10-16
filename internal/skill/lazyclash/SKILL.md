@@ -1,6 +1,6 @@
 ---
 name: lazyclash
-description: Operate Mihomo clients through lazyclash CLI/TUI. Use for controller discovery, runtime selection, source-backed node/group editing and sharing, proxy environments, Docker consumer settings, managed native/Docker client setup, VPN/TUN diagnosis, cross-target comparison, quick persistent rules and passive rule healthchecks. Native Verge profile reactivation remains owned by Verge.
+description: Operate Mihomo clients through lazyclash CLI/TUI. Use for controller discovery, runtime selection, source-backed node/group editing and sharing, proxy environments, Docker consumer settings, managed native/Docker client setup, VPN/TUN diagnosis, cross-target comparison, batch persistent rules, observed connection review, guarded DIRECT discovery and passive rule healthchecks. Native Verge profile reactivation remains owned by Verge.
 ---
 
 # lazyclash

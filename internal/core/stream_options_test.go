@@ -43,16 +43,46 @@ func TestStreamDurationStartsAfterHeadersAndStopsQuietStream(t *testing.T) {
 	}
 }
 
-func TestStreamDurationDoesNotReplaceEstablishmentTimeout(t *testing.T) {
+func TestQuietStreamHeadersWaitForCallerDeadline(t *testing.T) {
+	client := fakeClient(t, func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}, Options{Timeout: 30 * time.Millisecond})
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Millisecond)
+	defer cancel()
+	err := client.StreamWithOptions(ctx, "logs", nil, StreamOptions{Duration: 5 * time.Millisecond}, func(Object) (bool, error) { return true, nil })
+	requireKind(t, err, KindUnreachable)
+	if !errors.Is(err, context.DeadlineExceeded) || ctx.Err() == nil {
+		t.Fatal("quiet stream did not retain the caller's outer deadline")
+	}
+}
+
+func TestQuietStreamCanProduceFirstEventAfterOrdinaryRequestTimeout(t *testing.T) {
+	client := fakeClient(t, func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(100 * time.Millisecond):
+			_, _ = io.WriteString(w, "{\"type\":\"info\",\"payload\":\"first event\"}\n")
+		case <-r.Context().Done():
+		}
+	}, Options{Timeout: 20 * time.Millisecond})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	count := 0
+	err := client.StreamWithOptions(ctx, "logs", nil, StreamOptions{Limit: 1}, func(Object) (bool, error) { count++; return true, nil })
+	if err != nil || count != 1 {
+		t.Fatalf("late first event: count=%d err=%v", count, err)
+	}
+}
+
+func TestOrdinaryRequestsRetainHeaderTimeout(t *testing.T) {
 	client := fakeClient(t, func(w http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
 	}, Options{Timeout: 30 * time.Millisecond})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	err := client.StreamWithOptions(ctx, "logs", nil, StreamOptions{Duration: 5 * time.Millisecond}, func(Object) (bool, error) { return true, nil })
+	_, err := client.Version(ctx)
 	requireKind(t, err, KindUnreachable)
 	if ctx.Err() != nil {
-		t.Fatal("header timeout was not enforced")
+		t.Fatal("ordinary request lost its own timeout")
 	}
 }
 

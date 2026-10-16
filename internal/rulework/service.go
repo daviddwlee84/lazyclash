@@ -318,18 +318,29 @@ func Verify(ctx context.Context, target config.Target, id string, opts Options) 
 		}
 		return r, e
 	}
-	verified, err := runtimeFirstExpression(ctx, target, r.Rule, opts)
+	var verified bool
+	if len(r.Rules) > 0 {
+		verified, err = runtimeBatchExpressions(ctx, target, r.Rules, r.AddedRules, opts)
+	} else {
+		verified, err = runtimeFirstExpression(ctx, target, r.Rule, opts)
+	}
 	r.RuntimeVerified = verified
 	r.UpdatedAt = time.Now().UTC()
 	if verified {
 		r.Status = "applied_verified"
 		r.Message = "Persistent source matches; the first enabled runtime entry has the requested " + strings.Split(r.Rule, ",")[0] + " selector and policy. Runtime API evidence does not expose every source option."
+		if len(r.Rules) > 0 {
+			r.Message = "Persistent source matches; all requested rules and the ordered added block are enabled in runtime. Runtime API evidence does not expose every source option."
+		}
 	} else if r.Owner == "verge" || r.Owner == "docker" {
 		r.Status = "persisted_pending_owner_reload"
 		r.Message = "Activate the persistent owner, then verify. Later owner transformations may override the saved rule."
 	} else {
 		r.Status = "persisted_not_verified"
 		r.Message = "Persistent source matches, but the first runtime rule does not match the repair."
+		if len(r.Rules) > 0 {
+			r.Message = "Persistent source matches, but runtime does not contain every requested rule and the ordered added block."
+		}
 	}
 	if saveErr := saveReceipt(opts, r); saveErr != nil {
 		return r, saveErr

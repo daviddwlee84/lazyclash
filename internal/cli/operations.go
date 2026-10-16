@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"sort"
@@ -156,7 +158,13 @@ func (o *options) logsCommand() *cobra.Command {
 		}
 		return o.withClient(cmd, func(c *core.Client, t config.Target) error {
 			filter := strings.ToLower(filter)
-			return c.StreamWithOptions(cmd.Context(), "logs", url.Values{"level": {level}}, core.StreamOptions{Duration: duration, Limit: limit}, func(entry core.Object) (bool, error) {
+			ctx := cmd.Context()
+			if duration > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, duration)
+				defer cancel()
+			}
+			err := c.StreamWithOptions(ctx, "logs", url.Values{"level": {level}}, core.StreamOptions{Limit: limit}, func(entry core.Object) (bool, error) {
 				payload := fmt.Sprint(entry["payload"])
 				if !strings.Contains(strings.ToLower(payload), filter) {
 					return false, nil
@@ -169,6 +177,10 @@ func (o *options) logsCommand() *cobra.Command {
 				}
 				return writeErr == nil, writeErr
 			})
+			if cmd.Context().Err() == nil && duration > 0 && errors.Is(err, context.DeadlineExceeded) && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return nil
+			}
+			return err
 		})
 	}}
 	cmd.Flags().StringVar(&level, "level", "info", "minimum severity: debug, info, warning, error")
@@ -207,6 +219,7 @@ func (o *options) rulesCommand() *cobra.Command {
 	group.AddCommand(o.quickRuleCommands()...)
 	group.AddCommand(o.ruleInspectCommands()...)
 	group.AddCommand(o.rulePresetCommand())
+	group.AddCommand(o.rulesDiscoverCommand())
 	return group
 }
 

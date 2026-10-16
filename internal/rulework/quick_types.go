@@ -6,26 +6,35 @@ import "github.com/daviddwlee84/lazyclash/internal/rulecheck"
 // Its digest guards both the candidate and the reviewed destination set.
 type QuickPlan struct {
 	Rule    string            `json:"rule"`
+	Rules   []string          `json:"rules,omitempty"`
 	Digest  string            `json:"digest"`
 	Status  string            `json:"status"`
 	Targets []QuickTargetPlan `json:"targets"`
 }
 
 type QuickTargetPlan struct {
-	TargetID        string               `json:"target_id"`
-	Status          string               `json:"status"`
-	Message         string               `json:"message,omitempty"`
-	ReasonCode      string               `json:"reason_code,omitempty"`
-	NextCommands    []string             `json:"next_commands,omitempty"`
-	Digest          string               `json:"digest,omitempty"`
-	Diff            string               `json:"diff,omitempty"`
-	Owner           *Source              `json:"owner,omitempty"`
-	Findings        []rulecheck.Finding  `json:"findings"`
-	ExistingHealth  *QuickExistingHealth `json:"existing_health,omitempty"`
-	Limitations     []string             `json:"limitations,omitempty"`
-	RuntimeVerified bool                 `json:"runtime_verified"`
+	TargetID        string                 `json:"target_id"`
+	Status          string                 `json:"status"`
+	Message         string                 `json:"message,omitempty"`
+	ReasonCode      string                 `json:"reason_code,omitempty"`
+	NextCommands    []string               `json:"next_commands,omitempty"`
+	Digest          string                 `json:"digest,omitempty"`
+	Diff            string                 `json:"diff,omitempty"`
+	Owner           *Source                `json:"owner,omitempty"`
+	Findings        []rulecheck.Finding    `json:"findings"`
+	ExistingHealth  *QuickExistingHealth   `json:"existing_health,omitempty"`
+	Limitations     []string               `json:"limitations,omitempty"`
+	RuntimeVerified bool                   `json:"runtime_verified"`
+	Rules           []QuickRuleDisposition `json:"rules,omitempty"`
 	plan            Plan
 	cause           error
+}
+
+// QuickRuleDisposition retains the requested order while distinguishing rules
+// that will be prepended from identical declarations already in the source.
+type QuickRuleDisposition struct {
+	Rule   string `json:"rule"`
+	Status string `json:"status"`
 }
 
 // QuickExistingHealth preserves whole-list observations separately from the
@@ -46,19 +55,21 @@ func (p QuickPlan) HasChanges() bool {
 
 type QuickResult struct {
 	Rule    string              `json:"rule"`
+	Rules   []string            `json:"rules,omitempty"`
 	Digest  string              `json:"digest"`
 	Status  string              `json:"status"`
 	Results []QuickTargetResult `json:"results"`
 }
 
 type QuickTargetResult struct {
-	TargetID        string               `json:"target_id"`
-	Status          string               `json:"status"`
-	Message         string               `json:"message,omitempty"`
-	Findings        []rulecheck.Finding  `json:"findings"`
-	ExistingHealth  *QuickExistingHealth `json:"existing_health,omitempty"`
-	Receipt         *Receipt             `json:"receipt,omitempty"`
-	RuntimeVerified bool                 `json:"runtime_verified"`
+	TargetID        string                 `json:"target_id"`
+	Status          string                 `json:"status"`
+	Message         string                 `json:"message,omitempty"`
+	Findings        []rulecheck.Finding    `json:"findings"`
+	ExistingHealth  *QuickExistingHealth   `json:"existing_health,omitempty"`
+	Receipt         *Receipt               `json:"receipt,omitempty"`
+	RuntimeVerified bool                   `json:"runtime_verified"`
+	Rules           []QuickRuleDisposition `json:"rules,omitempty"`
 }
 
 type HealthReport struct {

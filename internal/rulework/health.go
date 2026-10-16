@@ -261,7 +261,7 @@ func finalizeHealth(h TargetHealth) TargetHealth {
 
 // Summary functions are shared by CLI and embedded TUI workbench adapters.
 func FormatQuickPlan(p QuickPlan) string {
-	text := fmt.Sprintf("Rule: %s\nStatus: %s\nDigest: %s\n", p.Rule, p.Status, p.Digest)
+	text := quickRuleHeading(p.Rule, p.Rules) + fmt.Sprintf("Status: %s\nDigest: %s\n", p.Status, p.Digest)
 	for _, t := range p.Targets {
 		text += "\n" + FormatQuickTarget(t)
 	}
@@ -271,9 +271,9 @@ func FormatQuickPlan(p QuickPlan) string {
 // FormatQuickResult keeps human apply output as compact as its preview. The
 // complete independent health reports remain available in the JSON result.
 func FormatQuickResult(result QuickResult) string {
-	text := fmt.Sprintf("Rule: %s\nStatus: %s\nDigest: %s\n", result.Rule, result.Status, result.Digest)
+	text := quickRuleHeading(result.Rule, result.Rules) + fmt.Sprintf("Status: %s\nDigest: %s\n", result.Status, result.Digest)
 	for _, target := range result.Results {
-		text += "\n" + FormatQuickTarget(QuickTargetPlan{TargetID: target.TargetID, Status: target.Status, Message: target.Message, Findings: target.Findings, ExistingHealth: target.ExistingHealth})
+		text += "\n" + FormatQuickTarget(QuickTargetPlan{TargetID: target.TargetID, Status: target.Status, Message: target.Message, Findings: target.Findings, ExistingHealth: target.ExistingHealth, Rules: target.Rules})
 		text += fmt.Sprintf("Runtime verified: %t\n", target.RuntimeVerified)
 		if receipt := target.Receipt; receipt != nil {
 			text += "Receipt: " + receipt.ID + "\nFile: " + receipt.File + "\n"
@@ -281,6 +281,17 @@ func FormatQuickResult(result QuickResult) string {
 				text += receipt.Message + "\n"
 			}
 		}
+	}
+	return text
+}
+
+func quickRuleHeading(rule string, rules []string) string {
+	if len(rules) == 0 {
+		return "Rule: " + rule + "\n"
+	}
+	text := fmt.Sprintf("Rules: %d (ordered)\n", len(rules))
+	for i, expression := range rules {
+		text += fmt.Sprintf("  [%d] %s\n", i, expression)
 	}
 	return text
 }
@@ -297,6 +308,9 @@ func FormatQuickTarget(t QuickTargetPlan) string {
 	}
 	if t.Diff != "" {
 		text += t.Diff + "\n"
+	}
+	for _, rule := range t.Rules {
+		text += "  " + rule.Status + ": " + rule.Rule + "\n"
 	}
 	if t.Message != "" {
 		text += t.Message + "\n"

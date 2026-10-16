@@ -71,12 +71,13 @@ exit 0 alone as all targets equal or the rule present everywhere.
 
 ## Quick rules and healthchecks
 
-For an authorized one-rule change, use a saved target and one raw scalar:
+For authorized rule changes, use a saved target and one raw scalar per argument:
 
 ```sh
 lazyclash --target server rules apply 'DOMAIN,api.enterprise.githubcopilot.com,DIRECT' --dry-run --json
 lazyclash --target server rules apply 'DOMAIN,api.enterprise.githubcopilot.com,DIRECT' --yes --json
 lazyclash rules apply 'DOMAIN-SUFFIX,api.enterprise.githubcopilot.com,DIRECT' --all --yes --json
+lazyclash rules apply 'DOMAIN,api.example.com,PROXY' 'DOMAIN,cdn.example.com,PROXY' --dry-run --json
 lazyclash rules healthcheck --all --json
 ```
 
@@ -87,6 +88,14 @@ IP-CIDR/IP-CIDR6 require a prefix and apply across ports. Preserve optional
 automatically added. Quick apply does not accept new `src`, provider, GEO,
 regex or logical rules. One YAML list item is accepted with a `--` terminator
 before an argument beginning `- `.
+
+`rules apply RULE...` accepts up to 256 arguments / 128 KiB canonical content.
+It deduplicates identical requests, preserves the order of new additions, and
+retains existing declarations in place. Every target gets one candidate, write,
+activation and receipt. Internal policy conflicts block the complete batch;
+verification covers every requested rule and the ordered added block. The
+legacy single-rule fields remain; multi-rule JSON adds `rules` and receipt
+`added_rules`.
 
 An identical canonical rule in the bound source is skipped without moving it
 or reloading, unless another occurrence conflicts with that requested selector.
@@ -124,6 +133,47 @@ apply because a conflicting base rule can survive its companion edit.
 Existing unusual domain literals (including underscore labels or trailing dots)
 remain opaque: the core only lowercases them, so do not treat them as a missing
 or identical normalized hostname based on the stricter quick-input grammar.
+
+## Observe traffic and review rule candidates
+
+```sh
+lazyclash --target desktop rules discover start --duration 20m --json
+lazyclash --target desktop rules discover start --direct --dry-run --json
+lazyclash --target desktop rules discover start --direct --duration 30m --yes --json
+lazyclash rules discover list --json
+lazyclash rules discover review SESSION_ID --json
+lazyclash rules discover review SESSION_ID --interactive
+lazyclash rules discover recover GUARD_ID --dry-run --json
+lazyclash rules discover recover GUARD_ID --yes --json
+```
+
+Passive start and ordinary dashboard logs feed the same review; R on Logs/Rules
+opens it, and D starts/stops temporary DIRECT discovery. Only observed intervals
+are available; this does not fetch historical logs or install a collector.
+Default duration is 30m, with a positive 24h maximum. Noninteractive DIRECT
+start without `--yes` is preview-only. Read-only permits passive collection and
+inspection; it blocks selector changes, recovery writes and rule apply.
+
+DIRECT start checks the actual enabled MATCH policy, not a literal FINAL name.
+It requires rule mode and DIRECT or a manual Selector directly containing
+DIRECT. A detached helper saves the original selection before changing it and
+attempts restoration on stop, timeout, parent exit or lease expiry. It owns its
+controller/SSH connection; saved credential references are required. Do not
+rely on a private SSH authentication session owned only by the foreground CLI.
+Controller/group changes are conflicts, not permission to overwrite them.
+Power loss, helper termination and controller outages can still leave a pending
+journal; inspect `list`, then use guarded `recover`. Rule apply checks pending
+journals across aliases of the same controller. Windows auto-switch requires
+successful process-job breakaway; native behavior remains unverified.
+
+Groups use exact normalized domain or IP, with distinct policy/rule/error
+variants retained. Counts are log records and can include retries; successful
+dials do not prove application success. Unknown warnings, observation gaps and
+dropped records are explicit. No logs is not proof of complete rule coverage.
+No arbitrary raw error payloads or URLs are persisted. Review chooses policies
+explicitly, defaults to exact DOMAIN, and widens to DOMAIN-SUFFIX only on user
+selection; IP candidates use /32 or /128,no-resolve. It never auto-applies a rule.
+Preview and apply use the same batch service and persistent-owner contract above.
 
 ## Bind an owner and use the existing repair workflow
 

@@ -15,6 +15,7 @@ import (
 
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
+	"github.com/daviddwlee84/lazyclash/internal/discoveryguard"
 	"github.com/daviddwlee84/lazyclash/internal/rulecheck"
 	"go.yaml.in/yaml/v3"
 )
@@ -52,14 +53,26 @@ func finding(severity, code, message string) rulecheck.Finding {
 
 func hashQuick(v any) string { b, _ := json.Marshal(v); return sha(b) }
 
-// PreviewRules validates every reachable candidate before any source is written.
+// PreviewRules preserves the single-rule interface and JSON shape.
 func PreviewRules(ctx context.Context, targets []config.Target, raw string, all bool, opts Options) (QuickPlan, error) {
+	return PreviewRuleBatch(ctx, targets, []string{raw}, all, opts)
+}
+
+// PreviewRuleBatch validates one ordered candidate per reachable target before
+// any source is written. Identical requested rules retain their first position.
+func PreviewRuleBatch(ctx context.Context, targets []config.Target, raw []string, all bool, opts Options) (QuickPlan, error) {
 	p := QuickPlan{Status: "ready", Targets: []QuickTargetPlan{}}
-	rule, err := rulecheck.Parse(raw)
+	requested, err := parseQuickBatch(raw)
 	if err != nil {
+		p.Status = "blocked"
 		return p, err
 	}
-	p.Rule = rule.String()
+	expressions := quickExpressions(requested)
+	if len(requested) == 1 {
+		p.Rule = expressions[0]
+	} else {
+		p.Rules = expressions
+	}
 	items, err := quickTargets(targets, all)
 	if err != nil {
 		return p, err
@@ -69,7 +82,7 @@ func PreviewRules(ctx context.Context, targets []config.Target, raw string, all 
 		if err := ctx.Err(); err != nil {
 			return p, err
 		}
-		item := previewQuickTarget(ctx, t, rule, opts)
+		item := previewQuickBatchTarget(ctx, t, requested, opts, true)
 		if item.Status == "skipped_unavailable" && !all {
 			item.Status = "blocked"
 		}
@@ -84,7 +97,11 @@ func PreviewRules(ctx context.Context, targets []config.Target, raw string, all 
 	}
 	// Skip reasons can vary with transport diagnostics; bind only stable identity,
 	// disposition and each source plan, never volatile counters or messages.
-	ids := []any{p.Rule, all}
+	var requestIdentity any = p.Rule
+	if len(p.Rules) > 0 {
+		requestIdentity = p.Rules
+	}
+	ids := []any{requestIdentity, all}
 	for i, t := range items {
 		ids = append(ids, binding(t), p.Targets[i].Status, p.Targets[i].Digest)
 	}
@@ -109,7 +126,7 @@ func PreviewRules(ctx context.Context, targets []config.Target, raw string, all 
 	return p, nil
 }
 
-func previewQuickTarget(ctx context.Context, t config.Target, rule rulecheck.Rule, opts Options) QuickTargetPlan {
+func previewQuickBatchTarget(ctx context.Context, t config.Target, requested []rulecheck.Rule, opts Options, validate bool) QuickTargetPlan {
 	p := QuickTargetPlan{TargetID: t.ID, Status: "blocked", ReasonCode: "invalid_source", Findings: []rulecheck.Finding{}}
 	fail := func(err error, unavailable bool) QuickTargetPlan {
 		p.cause = err
@@ -126,6 +143,10 @@ func previewQuickTarget(ctx context.Context, t config.Target, rule rulecheck.Rul
 			p.Findings = append(p.Findings, finding("error", "preflight_failed", p.Message))
 		}
 		return p
+	}
+	if err := discoveryguard.CheckIdle(t); err != nil {
+		p.ReasonCode = "discovery_restore_pending"
+		return fail(err, false)
 	}
 	if t.RuleSource == nil {
 		p.ReasonCode = "unbound_rule_source"
@@ -188,44 +209,76 @@ func previewQuickTarget(ctx context.Context, t config.Target, rule rulecheck.Rul
 			p.Findings = append(p.Findings, f)
 		}
 	}
-	existingPosition := -1
-	for i, old := range rules {
-		if !old.Disabled && old.Equal(rule) {
-			existingPosition = i
-			break
-		}
-	}
-	duplicate := existingPosition >= 0
-	focused := rulecheck.AnalyzeFocused(rules, rule, existingPosition, policies)
-	p.Findings = append(p.Findings, focused.Findings...)
-	p.Limitations = append(p.Limitations, focused.Limitations...)
-	// Runtime is a separate list: native/Docker reload replaces it, whereas a
-	// Verge companion can retain the conflicting rule from its base profile.
-	// Project only reported options, without inventing a no-resolve difference.
-	incoming := rule
-	incoming.NoResolve, incoming.Options = false, nil
-	runtimePosition := -1
-	if duplicate {
-		for i, old := range runtimeList {
-			if !old.Disabled && old.Equal(incoming) {
-				runtimePosition = i
+	positions := make([]int, len(requested))
+	added := []string{}
+	candidate := []rulecheck.Rule{}
+	for i, rule := range requested {
+		positions[i] = -1
+		for j, old := range rules {
+			if !old.Disabled && old.Equal(rule) {
+				positions[i] = j
 				break
 			}
 		}
-	}
-	runtimeFocused := rulecheck.AnalyzeFocused(runtimeList, incoming, runtimePosition, nil)
-	for _, f := range runtimeFocused.Findings {
-		if f.Code == "duplicate" {
-			continue
+		status := "skipped_existing"
+		if positions[i] < 0 {
+			status = "ready"
+			added = append(added, rule.String())
+			candidate = append(candidate, rule)
 		}
-		if f.Code == "selector_conflict" && source.Kind != "verge" {
-			f.Severity, f.Code = "warning", "runtime_policy_drift"
-			f.Message = "The requested policy differs from the current runtime for the same selector. The persistent source will be used when its owner is activated."
+		if len(requested) > 1 {
+			p.Rules = append(p.Rules, QuickRuleDisposition{Rule: rule.String(), Status: status})
 		}
-		f.Message = "Current runtime vs requested rule: " + f.Message
-		p.Findings = append(p.Findings, f)
 	}
-	p.Limitations = append(p.Limitations, runtimeFocused.Limitations...)
+	// Analyze each requested selector against the final list, so batch order and
+	// newly shadowed retained rules are checked alongside existing conflicts.
+	candidate = append(candidate, rules...)
+	for i := range candidate {
+		candidate[i].Index = i
+	}
+	addedPosition := 0
+	for i, rule := range requested {
+		position := positions[i] + len(added)
+		if positions[i] < 0 {
+			position = addedPosition
+			addedPosition++
+		}
+		// Preserve single-rule diagnostics and their existing source positions.
+		var focused rulecheck.Report
+		if len(requested) == 1 {
+			focused = rulecheck.AnalyzeFocused(rules, rule, positions[i], policies)
+		} else {
+			focused = rulecheck.AnalyzeFocused(candidate, rule, position, policies)
+		}
+		p.Findings = append(p.Findings, focused.Findings...)
+		p.Limitations = append(p.Limitations, focused.Limitations...)
+		// Native/Docker replace the runtime list on reload; Verge may retain
+		// base-profile conflicts. Runtime omits source resolution modifiers.
+		incoming := rule
+		incoming.NoResolve, incoming.Options = false, nil
+		runtimePosition := -1
+		if positions[i] >= 0 {
+			for j, old := range runtimeList {
+				if !old.Disabled && old.Equal(incoming) {
+					runtimePosition = j
+					break
+				}
+			}
+		}
+		runtimeFocused := rulecheck.AnalyzeFocused(runtimeList, incoming, runtimePosition, nil)
+		for _, f := range runtimeFocused.Findings {
+			if f.Code == "duplicate" {
+				continue
+			}
+			if f.Code == "selector_conflict" && source.Kind != "verge" {
+				f.Severity, f.Code = "warning", "runtime_policy_drift"
+				f.Message = "The requested policy differs from the current runtime for the same selector. The persistent source will be used when its owner is activated."
+			}
+			f.Message = "Current runtime vs requested rule: " + f.Message
+			p.Findings = append(p.Findings, f)
+		}
+		p.Limitations = append(p.Limitations, runtimeFocused.Limitations...)
+	}
 	p.Limitations = append(p.Limitations, "Runtime checks confirm enabled selector/policy entries; the API does not expose every source option, including no-resolve.")
 	if source.Kind == "verge" {
 		p.Limitations = append(p.Limitations, "Persistent checks cover the Rules companion prepend/append; base profile and later Merge/Script effects are represented only by the runtime snapshot.")
@@ -256,36 +309,56 @@ func previewQuickTarget(ctx context.Context, t config.Target, rule rulecheck.Rul
 	}
 	coreVersion, _ := version["version"].(string)
 	after := source.file.Data
-	if !duplicate {
+	if len(added) > 0 {
 		p.ReasonCode = "invalid_source"
-		after, err = prependQuickRule(source, rule.String())
+		after, err = prependQuickRules(source, added)
 		if err != nil {
 			return fail(err, false)
 		}
 		p.ReasonCode = "validation_failed"
-		if err = validateOwnerCandidate(ctx, t, source, after, coreVersion, opts); err != nil {
-			return fail(err, false)
+		if validate {
+			if err = validateOwnerCandidate(ctx, t, source, after, coreVersion, opts); err != nil {
+				return fail(err, false)
+			}
 		}
 	}
-	p.plan = Plan{TargetID: t.ID, Owner: source, Rule: rule.String(), Policy: rule.Policy, CoreVersion: coreVersion, NoChange: duplicate, after: after, beforeRuntimeDigest: runtimeDigest}
+	p.plan = Plan{TargetID: t.ID, Owner: source, CoreVersion: coreVersion, NoChange: len(added) == 0, after: after, beforeRuntimeDigest: runtimeDigest}
 	p.ReasonCode = ""
-	if rule.Type == "IP-CIDR" || rule.Type == "IP-CIDR6" {
-		p.plan.Prefix = rule.Payload
+	var requestIdentity any
+	if len(requested) == 1 {
+		rule := requested[0]
+		p.plan.Rule, p.plan.Policy = rule.String(), rule.Policy
+		if rule.Type == "IP-CIDR" || rule.Type == "IP-CIDR6" {
+			p.plan.Prefix = rule.Payload
+		} else {
+			p.plan.Domain = rule.Payload
+		}
+		requestIdentity = rule.String()
 	} else {
-		p.plan.Domain = rule.Payload
+		p.plan.Rules, p.plan.AddedRules = quickExpressions(requested), added
+		requestIdentity = p.plan.Rules
 	}
-	p.Digest = hashQuick([]any{binding(t), rule.String(), coreVersion, sha(after), runtimeDigest, runtimeMode, source.guards, sourceOwnerIdentity(source), t.Service, policies})
+	p.Digest = hashQuick([]any{binding(t), requestIdentity, coreVersion, sha(after), runtimeDigest, runtimeMode, source.guards, sourceOwnerIdentity(source), t.Service, policies})
 	p.plan.Digest = p.Digest
-	p.RuntimeVerified = runtimeHasRule(runtimeList, rule)
-	if duplicate {
+	p.RuntimeVerified = true
+	for _, rule := range requested {
+		p.RuntimeVerified = p.RuntimeVerified && runtimeHasRule(runtimeList, rule)
+	}
+	if len(added) == 0 {
 		p.Status = "skipped_existing"
 		p.Message = "The same rule already exists in the persistent source; no write or reload."
+		if len(requested) > 1 {
+			p.Message = "All requested rules already exist in the persistent source; no write or reload."
+		}
 		if !p.RuntimeVerified {
 			p.Findings = append(p.Findings, finding("warning", "source_runtime_drift", "Persistent rule is not enabled in the current runtime; activate the owner and inspect routing."))
 		}
 	} else {
 		p.Status = "ready"
-		p.Diff = "+ [0] " + rule.String() + "\nAll existing rules retain their order."
+		for i, expression := range added {
+			p.Diff += fmt.Sprintf("+ [%d] %s\n", i, expression)
+		}
+		p.Diff += "All existing rules retain their order."
 		p.plan.Diff = p.Diff
 	}
 	return p
@@ -352,7 +425,7 @@ func sourceRuleList(source Source) ([]rulecheck.Rule, error) {
 	return result, nil
 }
 
-func prependQuickRule(source Source, rule string) ([]byte, error) {
+func prependQuickRules(source Source, rules []string) ([]byte, error) {
 	doc, err := decodeYAML(source.file.Data)
 	if err != nil {
 		return nil, err
@@ -370,7 +443,11 @@ func prependQuickRule(source Source, rule string) ([]byte, error) {
 	if seq.Kind != yaml.SequenceNode {
 		return nil, errors.New("rule source list must be a sequence")
 	}
-	seq.Content = append([]*yaml.Node{{Kind: yaml.ScalarNode, Tag: "!!str", Value: rule}}, seq.Content...)
+	added := make([]*yaml.Node, 0, len(rules))
+	for _, rule := range rules {
+		added = append(added, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: rule})
+	}
+	seq.Content = append(added, seq.Content...)
 	seq.Style = 0
 	var out bytes.Buffer
 	enc := yaml.NewEncoder(&out)
@@ -438,6 +515,13 @@ func runtimeHasRule(rules []rulecheck.Rule, want rulecheck.Rule) bool {
 // ApplyRules requires the internal preview fingerprint even when the CLI's
 // --yes obtains it in the same invocation. No mutation is retried.
 func ApplyRules(ctx context.Context, targets []config.Target, raw string, all bool, expected string, opts Options) (QuickResult, error) {
+	return ApplyRuleBatch(ctx, targets, []string{raw}, all, expected, opts)
+}
+
+// ApplyRuleBatch writes and activates one validated candidate per target. It
+// rechecks the complete batch before the first write and each target just before
+// its write; a later failure retains earlier receipts instead of rolling back.
+func ApplyRuleBatch(ctx context.Context, targets []config.Target, raw []string, all bool, expected string, opts Options) (QuickResult, error) {
 	r := QuickResult{Digest: expected, Status: "stopped", Results: []QuickTargetResult{}}
 	if opts.ReadOnly {
 		return r, errors.New("rule writes are disabled in read-only mode")
@@ -445,14 +529,20 @@ func ApplyRules(ctx context.Context, targets []config.Target, raw string, all bo
 	if len(expected) != 64 {
 		return r, errors.New("apply requires a fresh preview digest")
 	}
-	p, err := PreviewRules(ctx, targets, raw, all, opts)
-	r.Rule = p.Rule
+	p, err := PreviewRuleBatch(ctx, targets, raw, all, opts)
+	r.Rule, r.Rules = p.Rule, p.Rules
 	for _, t := range p.Targets {
 		status := "unattempted"
 		if strings.HasPrefix(t.Status, "skipped_") {
 			status = t.Status
 		}
-		r.Results = append(r.Results, QuickTargetResult{TargetID: t.TargetID, Status: status, Message: t.Message, Findings: t.Findings, ExistingHealth: t.ExistingHealth, RuntimeVerified: t.RuntimeVerified})
+		rules := append([]QuickRuleDisposition(nil), t.Rules...)
+		for i := range rules {
+			if rules[i].Status == "ready" {
+				rules[i].Status = "unattempted"
+			}
+		}
+		r.Results = append(r.Results, QuickTargetResult{TargetID: t.TargetID, Status: status, Message: t.Message, Findings: t.Findings, ExistingHealth: t.ExistingHealth, RuntimeVerified: t.RuntimeVerified, Rules: rules})
 	}
 	if err != nil {
 		return r, err
@@ -461,6 +551,7 @@ func ApplyRules(ctx context.Context, targets []config.Target, raw string, all bo
 		return r, errors.New("rule source or target availability changed; review a new preview")
 	}
 	items, _ := quickTargets(targets, all)
+	requested, _ := parseQuickBatch(raw)
 	for i, t := range items {
 		if strings.HasPrefix(p.Targets[i].Status, "skipped_") {
 			continue
@@ -468,7 +559,7 @@ func ApplyRules(ctx context.Context, targets []config.Target, raw string, all bo
 		if err := ctx.Err(); err != nil {
 			return r, err
 		}
-		fresh := previewQuickTarget(ctx, t, mustQuickRule(p.Rule), opts)
+		fresh := previewQuickBatchTarget(ctx, t, requested, opts, false)
 		if fresh.Status != "ready" || fresh.Digest != p.Targets[i].Digest {
 			r.Results[i].Status = "failed"
 			r.Results[i].Message = "Source or runtime changed before this write."
@@ -481,6 +572,11 @@ func ApplyRules(ctx context.Context, targets []config.Target, raw string, all bo
 			r.Results[i].Status = receipt.Status
 			r.Results[i].Message = receipt.Message
 			r.Results[i].RuntimeVerified = receipt.RuntimeVerified
+		}
+		for j := range r.Results[i].Rules {
+			if r.Results[i].Rules[j].Status == "unattempted" {
+				r.Results[i].Rules[j].Status = r.Results[i].Status
+			}
 		}
 		if e != nil {
 			return r, fmt.Errorf("target %s: %w", t.ID, e)
@@ -498,10 +594,11 @@ func ApplyRules(ctx context.Context, targets []config.Target, raw string, all bo
 	return r, nil
 }
 
-func mustQuickRule(raw string) rulecheck.Rule { r, _ := rulecheck.Parse(raw); return r }
-
 func applyQuickPlan(ctx context.Context, t config.Target, p Plan, opts Options) (Receipt, error) {
 	if _, err := sourceHostCall(ctx, t, hostRequest{Op: "check", Guards: p.Owner.guards}, opts); err != nil {
+		return Receipt{}, err
+	}
+	if err := discoveryguard.CheckIdle(t); err != nil {
 		return Receipt{}, err
 	}
 	id := make([]byte, 16)
@@ -509,7 +606,7 @@ func applyQuickPlan(ctx context.Context, t config.Target, p Plan, opts Options) 
 		return Receipt{}, err
 	}
 	now := time.Now().UTC()
-	r := Receipt{ID: hex.EncodeToString(id), TargetID: t.ID, Owner: p.Owner.Kind, File: p.Owner.File, Rule: p.Rule, Domain: p.Domain, Prefix: p.Prefix, Policy: p.Policy, Status: "prepared", CreatedAt: now, UpdatedAt: now, Digest: p.Digest, BeforeSHA256: p.Owner.file.SHA256, AfterSHA256: sha(p.after), Binding: binding(t), ProfileUID: p.Owner.ProfileUID, BeforeRuntimeDigest: p.beforeRuntimeDigest}
+	r := Receipt{ID: hex.EncodeToString(id), TargetID: t.ID, Owner: p.Owner.Kind, File: p.Owner.File, Rule: p.Rule, Rules: p.Rules, AddedRules: p.AddedRules, Domain: p.Domain, Prefix: p.Prefix, Policy: p.Policy, Status: "prepared", CreatedAt: now, UpdatedAt: now, Digest: p.Digest, BeforeSHA256: p.Owner.file.SHA256, AfterSHA256: sha(p.after), Binding: binding(t), ProfileUID: p.Owner.ProfileUID, BeforeRuntimeDigest: p.beforeRuntimeDigest}
 	r.OwnerIdentity = sourceOwnerIdentity(p.Owner)
 	if err := prepareReceipt(opts, r, p.Owner.file.Data); err != nil {
 		return Receipt{}, err
@@ -524,11 +621,17 @@ func applyQuickPlan(ctx context.Context, t config.Target, p Plan, opts Options) 
 	r.AfterFingerprint = written.Fingerprint
 	r.Status = "persisted_pending_owner_reload"
 	r.Message = "Rule saved. Activate its owner and verify this receipt."
+	if len(p.Rules) > 0 {
+		r.Message = "Rules saved together. Activate their owner and verify this receipt."
+	}
 	if err = saveReceipt(opts, r); err != nil {
 		return r, err
 	}
 	if t.RuleSource.Kind == "verge" {
 		r.Message = "Rule saved. Reactivate Profiles in Clash Verge, then verify this receipt."
+		if len(p.Rules) > 0 {
+			r.Message = "Rules saved together. Reactivate Profiles in Clash Verge, then verify this receipt."
+		}
 		if err = saveReceipt(opts, r); err != nil {
 			return r, err
 		}

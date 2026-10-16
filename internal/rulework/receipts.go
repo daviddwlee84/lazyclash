@@ -124,7 +124,7 @@ func loadReceipt(opts Options, id string) (Receipt, error) {
 	}
 	path := filepath.Join(dir, "receipt.json")
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || !privatefs.Private(path) || info.Size() > 64<<10 {
+	if err != nil || !info.Mode().IsRegular() || !privatefs.Private(path) || info.Size() > 2<<20 {
 		return r, errors.New("receipt metadata is absent or unsafe")
 	}
 	data, err := os.ReadFile(path)

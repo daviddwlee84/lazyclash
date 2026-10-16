@@ -62,6 +62,10 @@ func (m *Model) startCompare() tea.Cmd {
 	return nil
 }
 func (m *Model) launchWork(req WorkRequest) tea.Cmd {
+	if m.discovery != nil && (strings.HasSuffix(req.Kind, "apply") || req.Kind == "rule-restore") {
+		m.status = "Stop DIRECT discovery and restore its selection before changing rules."
+		return nil
+	}
 	if m.options.Workbench == nil {
 		return nil
 	}

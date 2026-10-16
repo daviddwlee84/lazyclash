@@ -294,3 +294,65 @@ func TestQuickRuleCLIConfirmationIsDefaultNegative(t *testing.T) {
 		t.Fatal("Enter applied source")
 	}
 }
+
+func TestRuleBatchCLIPreviewApplyAndConflict(t *testing.T) {
+	_, source := quickCLIFixture(t, "prepend: []\nappend: []\ndelete: []\n")
+	first, second := "DOMAIN,first.example,DIRECT", "DOMAIN,second.example,DIRECT"
+	out, _, err := run(t, Dependencies{}, "rules", "apply", first, second, first, "--json")
+	var plan rulework.QuickPlan
+	if err != nil || json.Unmarshal([]byte(out), &plan) != nil || len(plan.Rules) != 2 || plan.Rules[0] != first || plan.Rules[1] != second || plan.Rule != "" {
+		t.Fatal(out, err)
+	}
+	before, _ := os.ReadFile(source)
+	if strings.Contains(string(before), "first.example") {
+		t.Fatal("batch preview wrote source")
+	}
+	out, _, err = run(t, Dependencies{}, "rules", "apply", first, second, "--yes", "--expect", plan.Digest, "--json")
+	var result rulework.QuickResult
+	if err != nil || json.Unmarshal([]byte(out), &result) != nil || len(result.Results) != 1 || result.Results[0].Receipt == nil || len(result.Results[0].Receipt.AddedRules) != 2 || result.Results[0].Status != "persisted_pending_owner_reload" {
+		t.Fatal(out, err)
+	}
+	after, _ := os.ReadFile(source)
+	if strings.Index(string(after), first) >= strings.Index(string(after), second) || strings.Count(string(after), first) != 1 {
+		t.Fatal("batch additions reordered or duplicated", string(after))
+	}
+	out, _, err = run(t, Dependencies{}, "rules", "apply", first, "DOMAIN,first.example,"+testcore.Selector, "--yes", "--json")
+	if err == nil || !strings.Contains(err.Error(), "selector_conflict") {
+		t.Fatal("internal conflict accepted", out, err)
+	}
+	if got, _ := os.ReadFile(source); !bytes.Equal(got, after) {
+		t.Fatal("blocked batch altered source")
+	}
+}
+
+func TestRuleBatchCLIConfirmationDefaultNegativeAndCompletion(t *testing.T) {
+	_, source := quickCLIFixture(t, "prepend: []\n")
+	before, _ := os.ReadFile(source)
+	cmd := New(Dependencies{Terminal: func(io.Reader, io.Writer) bool { return true }})
+	cmd.SetArgs([]string{"rules", "apply", quickCLIRule, "DOMAIN,second.example,DIRECT"})
+	cmd.SetIn(strings.NewReader("\n"))
+	var out, diagnostic bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&diagnostic)
+	if err := cmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Rules: 2 (ordered)") || !strings.Contains(out.String(), "second.example") || strings.Count(diagnostic.String(), "[y/N]") != 1 {
+		t.Fatal("batch was not reviewed and confirmed together", out.String(), diagnostic.String())
+	}
+	if got, _ := os.ReadFile(source); !bytes.Equal(got, before) {
+		t.Fatal("Enter applied batch")
+	}
+	completion, _, err := run(t, Dependencies{}, "__complete", "rules", "apply", quickCLIRule, "DOMAIN-S")
+	if err != nil || !strings.Contains(completion, "DOMAIN-SUFFIX,") {
+		t.Fatal("second rule completion missing", completion, err)
+	}
+}
+
+func TestRuleBatchCLIValidatesEveryInputBeforeLoadingTarget(t *testing.T) {
+	isolated(t)
+	_, _, err := run(t, Dependencies{}, "rules", "apply", quickCLIRule, "DOMAIN,bad..example,DIRECT", "--yes")
+	if err == nil || ExitCode(err) != 2 || !strings.Contains(err.Error(), "DNS") {
+		t.Fatal("invalid later input did not fail before target lookup", err)
+	}
+}

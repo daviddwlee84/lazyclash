@@ -18,28 +18,31 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/config"
 	"github.com/daviddwlee84/lazyclash/internal/core"
 	"github.com/daviddwlee84/lazyclash/internal/dashboard"
+	"github.com/daviddwlee84/lazyclash/internal/ruleobserve"
 )
 
 type Options struct {
-	RunCommand     func(context.Context, []string, io.Reader, io.Writer, io.Writer) error
-	ReloadTargets  func() (config.Config, error)
-	Workbench      func(context.Context, WorkRequest) (WorkResult, error)
-	Config         config.Config
-	InitialTarget  string
-	ReadOnly       bool
-	StartPage      string
-	Mouse          *bool
-	GraphStyle     string
-	HistoryWindow  time.Duration
-	TestTarget     func(context.Context, config.Target) (string, error)
-	NodeProvenance map[string]map[string]string
-	ProbeIP        func(context.Context, config.Target) (string, error)
-	ProbeLatency   func(context.Context, config.Target) (string, error)
-	Open           func(context.Context, config.Target) (*core.Client, io.Closer, error)
-	Discover       func(context.Context) ([]config.Target, error)
-	DiscoverHost   func(context.Context, string) ([]config.Target, error)
-	SaveTargets    func(config.Config) error
-	Authenticate   func(context.Context, string) (*exec.Cmd, error)
+	RuleReview        func(context.Context, config.Target, ruleobserve.Snapshot) RuleReviewOptions
+	DiscoverySettings string
+	RunCommand        func(context.Context, []string, io.Reader, io.Writer, io.Writer) error
+	ReloadTargets     func() (config.Config, error)
+	Workbench         func(context.Context, WorkRequest) (WorkResult, error)
+	Config            config.Config
+	InitialTarget     string
+	ReadOnly          bool
+	StartPage         string
+	Mouse             *bool
+	GraphStyle        string
+	HistoryWindow     time.Duration
+	TestTarget        func(context.Context, config.Target) (string, error)
+	NodeProvenance    map[string]map[string]string
+	ProbeIP           func(context.Context, config.Target) (string, error)
+	ProbeLatency      func(context.Context, config.Target) (string, error)
+	Open              func(context.Context, config.Target) (*core.Client, io.Closer, error)
+	Discover          func(context.Context) ([]config.Target, error)
+	DiscoverHost      func(context.Context, string) ([]config.Target, error)
+	SaveTargets       func(config.Config) error
+	Authenticate      func(context.Context, string) (*exec.Cmd, error)
 }
 
 type page int
@@ -83,6 +86,8 @@ type logEntry struct {
 	level, message string
 }
 type targetState struct {
+	observed              *ruleobserve.Accumulator
+	observedIdentity      string
 	views                 map[page]*viewState
 	data                  map[string]*snapshot
 	logs                  []logEntry
@@ -122,51 +127,54 @@ func (s *targetState) snap(key string) *snapshot {
 }
 
 type Model struct {
-	toolPending       bool
-	toolReturnServers bool
-	toolSerial        uint64
-	auth              *authState
-	authSerial        uint64
-	authOffered       map[string]bool
-	work              *workState
-	workSerial        uint64
-	quickRuleDraft    string
-	quickRuleScope    string
-	ruleInspectDrafts map[string]WorkRequest
-	options           Options
-	settings          config.Config
-	target            config.Target
-	states            map[string]*targetState
-	page              page
-	width, height     int
-	generation        uint64
-	ctx               context.Context
-	cancel            context.CancelFunc
-	client            *core.Client
-	closer            io.Closer
-	events            chan streamMsg
-	opening           bool
-	status            string
-	pending           string
-	overlay           string
-	input             textinput.Model
-	paletteIndex      int
-	targetIndex       int
-	form              *formState
-	confirm           *confirmation
-	helpOffset        int
-	gPrefix           bool
-	discovered        bool
-	closed            bool
-	mouseEnabled      bool
-	graphStyle        string
-	historyWindow     time.Duration
-	pressed           *mousePress
-	testSerial        uint64
-	testResult        string
-	testPending       bool
-	testCancel        context.CancelFunc
-	overviewSelection string
+	review                  *ruleReview
+	discovery               *discoveryUI
+	discoveryRecoveryNotice string
+	toolPending             bool
+	toolReturnServers       bool
+	toolSerial              uint64
+	auth                    *authState
+	authSerial              uint64
+	authOffered             map[string]bool
+	work                    *workState
+	workSerial              uint64
+	quickRuleDraft          string
+	quickRuleScope          string
+	ruleInspectDrafts       map[string]WorkRequest
+	options                 Options
+	settings                config.Config
+	target                  config.Target
+	states                  map[string]*targetState
+	page                    page
+	width, height           int
+	generation              uint64
+	ctx                     context.Context
+	cancel                  context.CancelFunc
+	client                  *core.Client
+	closer                  io.Closer
+	events                  chan streamMsg
+	opening                 bool
+	status                  string
+	pending                 string
+	overlay                 string
+	input                   textinput.Model
+	paletteIndex            int
+	targetIndex             int
+	form                    *formState
+	confirm                 *confirmation
+	helpOffset              int
+	gPrefix                 bool
+	discovered              bool
+	closed                  bool
+	mouseEnabled            bool
+	graphStyle              string
+	historyWindow           time.Duration
+	pressed                 *mousePress
+	testSerial              uint64
+	testResult              string
+	testPending             bool
+	testCancel              context.CancelFunc
+	overviewSelection       string
 }
 
 type tickMsg time.Time
@@ -286,7 +294,7 @@ func (m *Model) state() *targetState {
 }
 func (m *Model) Init() tea.Cmd {
 	if m.target.ID != "" {
-		return tea.Batch(m.connect(m.target), tick())
+		return tea.Batch(m.connect(m.target), tick(), m.checkPendingDiscovery())
 	}
 	if m.options.InitialTarget != "" {
 		return tick()
@@ -304,11 +312,15 @@ func (m *Model) Close() error {
 		return nil
 	}
 	m.closed = true
+	if m.review != nil {
+		m.review.close()
+	}
+	discoveryErr := m.closeDiscovery()
 	m.invalidateTargetTest()
 	if m.cancel != nil {
 		m.cancel()
 	}
-	var errs []error
+	errs := []error{discoveryErr}
 	if m.client != nil {
 		errs = append(errs, m.client.Close())
 	}
@@ -329,6 +341,15 @@ func cleanup(c *core.Client, closer io.Closer) tea.Cmd {
 	}
 }
 func (m *Model) connect(target config.Target) tea.Cmd {
+	if m.discovery != nil {
+		m.discovery.afterTarget = &target
+		return m.stopDiscovery()
+	}
+	if m.review != nil {
+		m.review.close()
+		m.review = nil
+	}
+	m.observationGap("target connection changed")
 	m.authSerial++
 	m.auth = nil
 	if m.work != nil {
@@ -355,6 +376,7 @@ func (m *Model) connect(target config.Target) tea.Cmd {
 	oldClient, oldCloser := m.client, m.closer
 	m.client, m.closer = nil, nil
 	m.target = target
+	m.observed().Gap(time.Now(), "waiting for controller log stream")
 	m.generation++
 	m.pending = ""
 	m.opening = true
@@ -411,7 +433,43 @@ func (m *Model) discover(host string) tea.Cmd {
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.review != nil {
+		switch msg.(type) {
+		case tea.WindowSizeMsg, tea.KeyPressMsg, tea.PasteMsg, ruleReviewMsg:
+			_, cmd := m.review.Update(msg)
+			if m.review.closed {
+				m.review = nil
+				return m, tea.Batch(cmd, m.refresh(true))
+			}
+			if size, ok := msg.(tea.WindowSizeMsg); ok {
+				m.width, m.height = max(1, size.Width), max(1, size.Height)
+			}
+			return m, cmd
+		case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg:
+			return m, nil
+		}
+	}
 	switch msg := msg.(type) {
+	case discoveryPreviewMsg:
+		return m, m.receiveDiscoveryPreview(msg)
+	case discoveryStartedMsg:
+		return m, m.receiveDiscoveryStarted(msg)
+	case discoveryFinishedMsg:
+		return m, m.receiveDiscoveryFinished(msg)
+	case discoveryPendingMsg:
+		m.discoveryRecoveryNotice = ""
+		if msg.err != nil {
+			m.status = "Cannot inspect restoration records: " + safeError(msg.err)
+			m.discoveryRecoveryNotice = m.status
+		}
+		for _, s := range msg.statuses {
+			if s.Pending() {
+				m.status = "Pending discovery restoration: " + s.ID + " · use : Saved rule observations / restorations"
+				m.discoveryRecoveryNotice = m.status
+				break
+			}
+		}
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.pressed = nil
 		m.width, m.height = max(1, msg.Width), max(1, msg.Height)
@@ -435,6 +493,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.receiveProbe(msg)
 	case tea.KeyPressMsg:
 		m.pressed = nil
+		if m.discovery != nil && (msg.String() == "ctrl+c" || msg.String() == "q" && m.overlay == "") {
+			m.discovery.quitAfter = true
+			return m, m.stopDiscovery()
+		}
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
@@ -566,6 +628,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.err != nil {
+			if msg.resource == "logs" {
+				m.observationGap("log stream disconnected")
+				if m.discovery != nil {
+					m.stopDiscovery()
+				}
+			}
 			m.state().streamErrors[msg.resource] = safeError(msg.err)
 			m.state().metrics.SourceGap(time.Now(), msg.resource)
 		} else {
@@ -578,6 +646,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state().memory = msg.data
 				m.state().metrics.AddMemory(time.Now(), msg.data)
 			case "logs":
+				m.observeLog(msg.data)
 				s := m.state()
 				s.logSeq++
 				s.logs = append(s.logs, logEntry{id: s.logSeq, at: time.Now(), level: str(msg.data, "type"), message: boundedLog(str(msg.data, "payload"))})
