@@ -83,6 +83,15 @@ requires root SSH or noninteractive sudo for the fixed Python helper.
 Hysteria2 needs UDP and a trusted certificate; TLS recipes require DNS plus
 TCP 80 for ACME renewal. Do not turn off certificate verification to hide errors.
 
+New server deployments default to pinned Xray v26.10.29 / Hysteria app/v2.13.0;
+`--version latest` explicitly opts into an untested upstream release, still
+resolved to an immutable artifact in the preview. New standalone Mihomo installs
+and downloaded temporary verifiers use v1.19.33. Existing services are not upgraded.
+HY2 accepts `--obfs none|salamander` (default none); the independent obfuscation
+password is generated on apply, retained on resume and included in client shares.
+Salamander removes standard HTTP/3 compatibility and cannot bypass a general UDP
+block. Do not invent bandwidth hints or enable advanced transport options.
+
 Complete noninteractive commands produce a preview. Apply with `--yes --expect`
 and the exact reviewed digest. Bare `servers deploy` / `vps create` guide humans
 in a terminal; JSON never prompts. Keep the same `--servers-config` across stages.
@@ -124,6 +133,11 @@ is an explicit credential export. QR/admin exports require a new private output
 file. Ordinary sharing contains client credentials; the explicit admin backup
 also includes server keys/issued TLS files and restore metadata, never cloud
 tokens or SSH private keys. Do not put these bundles in public repositories.
+New REALITY nodes include `support-x25519mlkem768: true`; standard VLESS URI/QR
+cannot preserve this option, so use Mihomo YAML or starter instead. Client bundles
+always preserve the full configuration; `uri` is optional and `warnings` explains
+its absence. Admin backups work independently of URI support. Legacy journals
+retain their original compatibility profile and share encoding.
 
 `--target CLIENT servers connect ID --group GROUP` previews insertion through the
 existing node-source owner. It does not replace the user's routing profile.

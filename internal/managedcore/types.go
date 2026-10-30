@@ -15,7 +15,7 @@ import (
 )
 
 const ProtocolVersion = 1
-const DefaultVersion = "v1.19.31"
+const DefaultVersion = "v1.19.33"
 
 type NetworkOptions struct {
 	TUN             bool                `json:"tun"`

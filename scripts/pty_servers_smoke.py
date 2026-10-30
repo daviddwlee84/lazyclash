@@ -69,6 +69,15 @@ status = "registered"
             terminal.wait(lambda: "Deployment host" in terminal.text(), "deployment host picker")
             terminal.send("\r")
             terminal.wait(lambda: "Deploy proxy server" in terminal.text() and "Server ID" in terminal.text(), "prefilled deployment form")
+            terminal.send("hy2-draft")
+            terminal.send("\t")
+            terminal.send("j")
+            terminal.wait(lambda: "Hysteria 2" in terminal.text(), "HY2 recipe selection")
+            terminal.send("\t" * 5)
+            terminal.wait(lambda: "HY2 obfuscation" in terminal.text(), "obfuscation field")
+            terminal.send("j")
+            terminal.wait(lambda: "Salamander (requires UDP)" in terminal.text(), "Salamander selection")
+            terminal.send("\x1b[Z" * 6)
             terminal.send("jkhql/?")
             terminal.wait(lambda: "jkhql/?" in terminal.text(), "typing owns action and quit keys")
             terminal.send(b"\x1b[200~q\nm\nu\x1b[201~")
@@ -93,7 +102,7 @@ status = "registered"
             terminal.send("server-echo-restored\n")
             terminal.process.wait(timeout=5)
             assert terminal.process.returncode == 0, terminal.text()
-            print("PTY PASS: independent server config, local inventory, j/gg navigation, identity-preserving refresh, mouse action/deploy buttons, shared CLI handoff/cancel/return, text/paste ownership, narrow resize, no canceled writes, help, shell echo/canonical/flow-control restoration")
+            print("PTY PASS: independent server config, local inventory, j/gg navigation, identity-preserving refresh, mouse action/deploy buttons, HY2/Salamander selection, shared CLI handoff/cancel/return, text/paste ownership, narrow resize, no canceled writes, help, shell echo/canonical/flow-control restoration")
     finally:
         try:
             if terminal:

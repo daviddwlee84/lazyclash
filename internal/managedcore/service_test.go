@@ -25,7 +25,7 @@ func setupFixture(t *testing.T) (Request, Options, *[]string) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/version":
-			io.WriteString(w, `{"version":"v1.19.31","meta":true}`)
+			io.WriteString(w, `{"version":"`+DefaultVersion+`","meta":true}`)
 		case "/configs":
 			io.WriteString(w, `{"mode":"rule"}`)
 		default:

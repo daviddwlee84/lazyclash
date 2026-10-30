@@ -168,7 +168,7 @@ func TestIntegrationRealityTunnel(t *testing.T) {
 	if os.Getenv("LAZYCLASH_SERVER_E2E") != "1" {
 		t.Skip("set LAZYCLASH_SERVER_E2E=1 for an authenticated REALITY tunnel in disposable containers")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
 	run := func(args ...string) []byte {
 		t.Helper()
@@ -193,7 +193,7 @@ func TestIntegrationRealityTunnel(t *testing.T) {
 	client := "lazyclash-client-" + suffix
 	run("network", "create", network)
 	defer exec.Command("docker", "network", "rm", network).Run()
-	r := Request{ID: "reality-test", Recipe: "vless-reality", Backend: "native", PublicHost: "127.0.0.1", ListenPort: 443, PublicPort: 443, RealityTarget: "www.cloudflare.com:443", ServerName: "www.cloudflare.com"}
+	r := Request{ID: "reality-test", Recipe: "vless-reality", Backend: "native", PublicHost: "127.0.0.1", ListenPort: 443, PublicPort: 443, RealityTarget: "www.cloudflare.com:443", ServerName: "www.cloudflare.com", RealityMLKEM: true}
 	files, err := render(r, c, a)
 	if err != nil {
 		t.Fatal(err)
@@ -255,11 +255,17 @@ func TestIntegrationRealityTunnel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ip, err := serverprobe.Probe(ctx, node)
-	if err != nil {
-		t.Fatalf("exported Mihomo node failed actual isolated client verification: %v", err)
+	for _, version := range []string{"v1.19.31", "v1.19.33"} {
+		t.Run(version, func(t *testing.T) {
+			binary := integrationMihomo(t, ctx, version)
+			ip, err := serverprobe.ProbeWithOptions(ctx, node, serverprobe.Options{Binary: binary})
+			if err != nil {
+				t.Fatalf("exported Mihomo node failed actual isolated client verification: %v", err)
+			}
+			t.Logf("Xray %s; Mihomo %s: observed exit %s", a.Version, version, ip)
+		})
 	}
-	t.Logf("exported Mihomo node verified by serverprobe; observed exit %s", ip)
+
 }
 
 func TestIntegrationNginxRestrictedStartup(t *testing.T) {
@@ -334,7 +340,7 @@ func integrationCertificate(t *testing.T) ([]byte, []byte) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "proxy.example.com"}, DNSNames: []string{"proxy.example.com"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	tpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "proxy.example.com"}, DNSNames: []string{"proxy.example.com", "host.docker.internal"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
 	der, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &key.PublicKey, key)
 	if err != nil {
 		t.Fatal(err)

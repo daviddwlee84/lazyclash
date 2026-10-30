@@ -103,7 +103,7 @@ Hysteria2 與 legacy 配方使用 ACME HTTP challenge，TCP 80 須可達，續�
 Trojan／XHTTP 可作後續配方；目前未宣稱支援其部署／匯出組合。
 
 所有 binary 以官方 release SHA-256 驗證；image 解析成不可變 digest。
-版本在預覽時具體化，不在重啟時浮動升級。移除服務不會解除安裝共用 OS 套件。
+預設使用本版固定版本，`--version latest` 才追蹤上游；版本在預覽時具體化，不在重啟時浮動升級。移除服務不會解除安裝共用 OS 套件。
 
 來源：[Xray REALITY](https://xtls.github.io/en/config/transports/reality.html)、
 [VLESS flow](https://xtls.github.io/en/config/inbounds/vless.html)、
@@ -306,3 +306,57 @@ lazyclash servers resume SERVER_ID --verify-interface en1 --json
 `LAZYCLASH_SERVERS_CONFIG` 指定。私密日誌在 `$XDG_STATE_HOME/lazyclash/servers/`
 下按 inventory 路徑隔離。唯讀列表、補全與預覽不建立記錄，TOML 更新保留註解與
 未知欄位並偵測外部修改。備份時同時保存 inventory 和私人 state。
+
+## HY2 混淆與可重現版本
+
+新部署預設固定 Xray `v26.10.29`／Hysteria `app/v2.13.0`，新安裝與下載的
+臨時驗證 client 使用 Mihomo `v1.19.33`。不會升級已部署的 server 或 client。
+`--version latest` 明確選擇上游最新版，預覽仍顯示確切版本與不可變 artifact；
+超出本版測試組合時不可假定相容，只有真實代理驗證成功才標記 `ready`。
+
+```sh
+lazyclash servers deploy hy2-jp --host jp --recipe hysteria2 \
+  --domain hy2.example.com --obfs salamander --json
+# 審查輸出的完整計畫，再以相同參數加 --yes --expect REVIEWED_DIGEST 套用。
+```
+
+`--obfs none` 是預設，保持正常 HTTP/3 masquerade；只有 HY2 可選 `salamander`。
+套用時自動產生獨立混淆密碼，resume 保留原密碼；預覽不含密碼。分享 URI／QR、
+Mihomo YAML 和 client bundle 均包含必要的客戶端混淆密碼，應視為私人憑證。
+Salamander 不再接受標準 HTTP/3 連線，也無法解決整體 UDP 封鎖。
+不指定 `up/down` 作為 BBR 基準；本輪未提供 Brutal 調校、Gecko 或 port hopping。
+
+新 REALITY 部署匯出 `chrome` 與 `support-x25519mlkem768: true`，用於固定版本的
+互通測試。標準 VLESS URI 無法完整表達該 Mihomo 選項，因此這類部署的 URI／QR
+匯出會拒絕並提示改用 `--format yaml` 或 `starter`。client bundle 的 `uri` 是
+可選欄位；省略時 `warnings` 解釋原因，`mihomo` 和 `starter` 仍完整可用。
+管理備份不依賴 URI 編碼。舊 journal 未記錄新選項時維持原匯出與 digest，
+不會因升級 lazyclash 自動改寫既有節點。
+
+### 手動線路比較
+
+先在自己的網路完成真實 HTTPS 驗證，再比較效能。使用相同機房／主機、測試
+endpoint 和相近時段，每次只變動協議；本機以隔離 client 或已明確選定的測試
+profile 操作，不允許失敗時改走 DIRECT。HY2 和 TCP 同數字埠共存仍待
+[issue #4](https://github.com/daviddwlee84/lazyclash/issues/4)，目前請用不同埠。
+
+1. 每組記錄協議／傳輸、client/server 精確版本、時間、ISP、VPS ASN、端點與
+   是否啟用混淆，包含 IPv4／IPv6 和使用的網卡。
+2. 相同固定 HTTPS workload 各做 30 次，記錄成功／失敗數、p50／p95 延遲，
+   保留 timeout 與握手錯誤，不能只統計成功樣本。
+3. 吞吐使用相同固定大小檔案（例如 10 MiB），每組三次；先計算流量上限並確認
+   費用，記錄有效 bytes／耗時。不要以 URL 延遲測試代替吞吐。
+4. 對實際需要的 SSH／WebSocket／串流 workload 觀察至少 30 分鐘；晚高峰與
+   非高峰分開記錄。不以單次成功宣稱全天可用或抗封鎖效果。
+
+容器驗證涵蓋 HY2 native binary／Compose 的 HTTPS、UDP echo、無混淆／Salamander
+及負向認證／憑證／UDP 路徑；REALITY 驗證固定 Xray 與 Mihomo 1.19.31／1.19.33。
+HY2 fixture 僅覆寫容器網路與掛載以連接本機測試 endpoint，保留正式 image、
+唯讀 filesystem 與 capability 限制；測試專用憑證透過固定指紋驗證代理握手，HTTPS endpoint 使用專屬 trust pool；
+不跳過憑證驗證，也不變更系統信任。
+這些測試證明互通性，不代表已做跨境線路 benchmark 或完整 systemd/ACME 實機驗證。
+
+後續工作：[AnyTLS #2](https://github.com/daviddwlee84/lazyclash/issues/2)、
+[Trojan #3](https://github.com/daviddwlee84/lazyclash/issues/3)、
+[benchmark #5](https://github.com/daviddwlee84/lazyclash/issues/5)、
+[HY2 進階調校 #6](https://github.com/daviddwlee84/lazyclash/issues/6)。

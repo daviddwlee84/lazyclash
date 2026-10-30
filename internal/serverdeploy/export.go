@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/daviddwlee84/lazyclash/internal/configwork"
 	"github.com/skip2/go-qrcode"
@@ -36,13 +37,17 @@ func Export(ctx context.Context, id, format string, o Options) ([]byte, error) {
 	if format == "yaml" || format == "mihomo" {
 		return node, nil
 	}
-	definitions, _, err := configwork.ParseImport(node)
-	if err != nil || len(definitions) != 1 {
-		return nil, errors.New("generated client node cannot be encoded")
-	}
-	uri, err := configwork.EncodeURI(definitions[0])
-	if err != nil {
-		return nil, err
+	var uri string
+	var uriErr error
+	if format == "uri" || format == "url" || format == "qr" || format == "client-bundle" {
+		definitions, diagnostics, err := configwork.ParseImport(node)
+		if err != nil || len(definitions) != 1 || len(diagnostics) != 0 {
+			return nil, errors.New("generated client node cannot be encoded")
+		}
+		uri, uriErr = configwork.EncodeURI(definitions[0])
+		if uriErr != nil && format != "client-bundle" {
+			return nil, fmt.Errorf("share URI/QR cannot preserve this configuration; use --format yaml or starter: %w", uriErr)
+		}
 	}
 	starter, err := yaml.Marshal(map[string]any{"mixed-port": 7890, "allow-lan": false, "bind-address": "127.0.0.1", "mode": "rule", "log-level": "warning", "proxies": []any{clientMap(j)}, "proxy-groups": []any{map[string]any{"name": "PROXY", "type": "select", "proxies": []string{id}}}, "rules": []string{"MATCH,PROXY"}})
 	if err != nil {
@@ -56,7 +61,13 @@ func Export(ctx context.Context, id, format string, o Options) ([]byte, error) {
 	case "starter":
 		return starter, nil
 	case "client-bundle":
-		return json.MarshalIndent(map[string]any{"kind": "lazyclash-client-bundle", "version": 1, "id": id, "recipe": j.Plan.Recipe, "core_version": j.Plan.Artifact.Version, "deployment_status": j.Phase, "last_verified_at": j.VerifiedAt, "observed_exit_ip": j.ObservedExitIP, "public_host": j.Plan.PublicHost, "public_port": j.Plan.PublicPort, "uri": uri, "mihomo": string(node), "starter": string(starter)}, "", "  ")
+		bundle := map[string]any{"kind": "lazyclash-client-bundle", "version": 1, "id": id, "recipe": j.Plan.Recipe, "core_version": j.Plan.Artifact.Version, "deployment_status": j.Phase, "last_verified_at": j.VerifiedAt, "observed_exit_ip": j.ObservedExitIP, "public_host": j.Plan.PublicHost, "public_port": j.Plan.PublicPort, "mihomo": string(node), "starter": string(starter)}
+		if uriErr == nil {
+			bundle["uri"] = uri
+		} else {
+			bundle["warnings"] = []string{"URI unavailable: " + uriErr.Error() + "; use the included Mihomo YAML or starter"}
+		}
+		return json.MarshalIndent(bundle, "", "  ")
 	case "admin", "admin-bundle":
 		if err = checkHost(j, o); err != nil {
 			return nil, err

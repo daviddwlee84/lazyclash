@@ -17,6 +17,9 @@ import (
 var shaPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var versionPattern = regexp.MustCompile(`^[v]?[0-9]+\.[0-9]+\.[0-9]+(?:[-.][A-Za-z0-9]+)*$`)
 
+const DefaultXrayVersion = "v26.10.29"
+const DefaultHysteriaVersion = "app/v2.13.0"
+
 // resolveArtifact resolves immutable upstream artifacts at review time. GitHub
 // asset digests and OCI manifests are pinned before any remote mutation.
 func resolveArtifact(ctx context.Context, r Request, arch string) (Artifact, error) {
@@ -24,6 +27,12 @@ func resolveArtifact(ctx context.Context, r Request, arch string) (Artifact, err
 		return Artifact{}, errors.New("server architecture must be amd64 or arm64")
 	}
 	repo, tag, asset := "XTLS/Xray-core", r.Version, "Xray-linux-64.zip"
+	if tag == "" {
+		tag = DefaultXrayVersion
+		if r.Recipe == "hysteria2" {
+			tag = DefaultHysteriaVersion
+		}
+	}
 	if arch == "arm64" {
 		asset = "Xray-linux-arm64-v8a.zip"
 	}
@@ -51,7 +60,7 @@ func resolveArtifact(ctx context.Context, r Request, arch string) (Artifact, err
 	if err != nil {
 		return Artifact{}, errors.New("cannot resolve the official release; retry or specify a published version")
 	}
-	if json.Unmarshal(body, &release) != nil || release.Tag == "" {
+	if json.Unmarshal(body, &release) != nil || release.Tag == "" || (tag != "latest" && release.Tag != tag) {
 		return Artifact{}, errors.New("official release response is invalid")
 	}
 	a := Artifact{Version: release.Tag, Arch: arch, Source: endpoint}

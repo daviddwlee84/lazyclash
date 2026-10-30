@@ -190,7 +190,7 @@ func TestRecipesRenderAndExportWithoutPrivateServerSecrets(t *testing.T) {
 				if backend == "compose" && !strings.Contains(j.Files["compose.yaml"], "io.lazyclash.owner") {
 					t.Fatal("missing compose ownership label")
 				}
-				for _, format := range []string{"uri", "yaml", "starter", "client-bundle"} {
+				for _, format := range []string{"yaml", "starter", "client-bundle"} {
 					raw, err := Export(ctx, p.ID, format, o)
 					if err != nil {
 						t.Fatalf("%s export: %v", format, err)
@@ -201,14 +201,22 @@ func TestRecipesRenderAndExportWithoutPrivateServerSecrets(t *testing.T) {
 						}
 					}
 				}
-				png, err := Export(ctx, p.ID, "qr", o)
-				if err != nil || len(png) < 8 || string(png[:8]) != "\x89PNG\r\n\x1a\n" {
-					t.Fatalf("invalid QR PNG: %v", err)
-				}
-				uri, _ := Export(ctx, p.ID, "uri", o)
-				defs, diag, err := configwork.ParseImport(uri)
-				if err != nil || len(defs) != 1 || len(diag) != 0 {
-					t.Fatalf("URI cannot reimport: %v %v", err, diag)
+				if recipe.ID == "vless-reality" {
+					for _, format := range []string{"uri", "qr"} {
+						if _, err := Export(ctx, p.ID, format, o); err == nil || !strings.Contains(err.Error(), "use --format yaml") {
+							t.Fatal("lossy REALITY export accepted", err)
+						}
+					}
+				} else {
+					png, err := Export(ctx, p.ID, "qr", o)
+					if err != nil || len(png) < 8 || string(png[:8]) != "\x89PNG\r\n\x1a\n" {
+						t.Fatalf("invalid QR PNG: %v", err)
+					}
+					uri, _ := Export(ctx, p.ID, "uri", o)
+					defs, diag, err := configwork.ParseImport(uri)
+					if err != nil || len(defs) != 1 || len(diag) != 0 {
+						t.Fatalf("URI cannot reimport: %v %v", err, diag)
+					}
 				}
 				for _, action := range []string{"stop", "start", "restart", "remove"} {
 					plan, err := PreviewAction(ctx, p.ID, action, o)

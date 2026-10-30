@@ -24,6 +24,12 @@ var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,47}$`)
 var dnsPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$`)
 
 func normalize(r Request, h serverstate.Host) (Request, error) {
+	if r.Obfs == "none" {
+		r.Obfs = ""
+	}
+	if err := validateObfs(r); err != nil {
+		return r, err
+	}
 	if !idPattern.MatchString(r.ID) {
 		return r, errors.New("deployment ID must use 1–48 lowercase letters, digits or hyphens")
 	}
@@ -106,6 +112,9 @@ func validHost(v string) bool { return net.ParseIP(v) != nil || validDomain(v) }
 // ValidateDraft checks supplied wizard flags without SSH, network or writes.
 // Missing required inputs are deliberately left for the wizard to collect.
 func ValidateDraft(r Request) error {
+	if err := validateObfs(r); err != nil {
+		return err
+	}
 	if r.ID != "" && !idPattern.MatchString(r.ID) {
 		return errors.New("deployment ID must use 1–48 lowercase letters, digits or hyphens")
 	}
@@ -149,6 +158,15 @@ func ValidateDraft(r Request) error {
 	v := strings.TrimPrefix(strings.TrimPrefix(r.Version, "app/"), "v")
 	if v != "" && v != "latest" && !versionPattern.MatchString(v) {
 		return errors.New("version must identify a published release")
+	}
+	return nil
+}
+func validateObfs(r Request) error {
+	if r.Obfs != "" && r.Obfs != "none" && r.Obfs != "salamander" {
+		return errors.New("obfs must be none or salamander")
+	}
+	if r.Obfs == "salamander" && r.Recipe != "hysteria2" {
+		return errors.New("Salamander requires the hysteria2 recipe")
 	}
 	return nil
 }
@@ -200,7 +218,14 @@ func render(r Request, c credentials, a Artifact) (map[string]string, error) {
 		configPath = root + "/config.yaml"
 		args = "server --config " + configPath
 		tlsRoot := "/etc/letsencrypt/live/" + certName(r)
-		body, e := yaml.Marshal(map[string]any{"listen": ":" + strconv.Itoa(r.ListenPort), "tls": map[string]any{"cert": tlsRoot + "/fullchain.pem", "key": tlsRoot + "/privkey.pem"}, "auth": map[string]any{"type": "password", "password": c.Password}, "masquerade": map[string]any{"type": "string", "string": map[string]any{"content": "Service ready", "statusCode": 200}}})
+		config := map[string]any{"listen": ":" + strconv.Itoa(r.ListenPort), "tls": map[string]any{"cert": tlsRoot + "/fullchain.pem", "key": tlsRoot + "/privkey.pem"}, "auth": map[string]any{"type": "password", "password": c.Password}, "masquerade": map[string]any{"type": "string", "string": map[string]any{"content": "Service ready", "statusCode": 200}}}
+		if r.Obfs == "salamander" {
+			if c.ObfsPassword == "" {
+				return nil, errors.New("missing saved Salamander password")
+			}
+			config["obfs"] = map[string]any{"type": "salamander", "salamander": map[string]any{"password": c.ObfsPassword}}
+		}
+		body, e := yaml.Marshal(config)
 		if e != nil {
 			return nil, e
 		}
@@ -307,10 +332,16 @@ func clientMap(j journal) map[string]any {
 		m["servername"] = r.ServerName
 		m["client-fingerprint"] = "chrome"
 		m["reality-opts"] = map[string]any{"public-key": c.PublicKey, "short-id": c.ShortID}
+		if r.RealityMLKEM {
+			m["reality-opts"].(map[string]any)["support-x25519mlkem768"] = true
+		}
 	case "hysteria2":
 		m["type"] = "hysteria2"
 		m["password"] = c.Password
 		m["sni"] = r.Domain
+		if r.Obfs == "salamander" {
+			m["obfs"], m["obfs-password"] = r.Obfs, c.ObfsPassword
+		}
 	case "legacy-vmess-ws-tls":
 		m["type"] = "vmess"
 		m["uuid"] = c.UUID

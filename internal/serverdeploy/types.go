@@ -39,6 +39,9 @@ type Request struct {
 	ServerName    string `json:"server_name,omitempty"`
 	Version       string `json:"version,omitempty"`
 	Email         string `json:"email,omitempty"`
+	Obfs          string `json:"obfs,omitempty"`
+	// Recorded by new previews; absent in legacy journals to preserve exports.
+	RealityMLKEM bool `json:"reality_mlkem,omitempty"`
 }
 
 type Options struct {
@@ -130,12 +133,13 @@ type RemoteResponse struct {
 }
 
 type credentials struct {
-	UUID       string `json:"uuid"`
-	Password   string `json:"password"`
-	PrivateKey string `json:"private_key"`
-	PublicKey  string `json:"public_key"`
-	ShortID    string `json:"short_id"`
-	WSPath     string `json:"ws_path"`
+	UUID         string `json:"uuid"`
+	Password     string `json:"password"`
+	PrivateKey   string `json:"private_key"`
+	PublicKey    string `json:"public_key"`
+	ShortID      string `json:"short_id"`
+	WSPath       string `json:"ws_path"`
+	ObfsPassword string `json:"obfs_password,omitempty"`
 }
 type journal struct {
 	Plan                  Plan              `json:"plan"`

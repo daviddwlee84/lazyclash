@@ -65,7 +65,7 @@ func TestServerCompletionNeverContactsHostsOrProviders(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"servers", "status", ""}, "exit"}, {[]string{"servers", "deploy", "--host", ""}, "home"}, {[]string{"servers", "deploy", "--backend", ""}, "compose"}, {[]string{"servers", "deploy", "--recipe", ""}, "hysteria2"}, {[]string{"servers", "export", "--format", ""}, "admin-bundle"}, {[]string{"vps", "stop", ""}, "home"}, {[]string{"vps", "create", "--provider", ""}, "oracle"},
+		{[]string{"servers", "status", ""}, "exit"}, {[]string{"servers", "deploy", "--host", ""}, "home"}, {[]string{"servers", "deploy", "--backend", ""}, "compose"}, {[]string{"servers", "deploy", "--recipe", ""}, "hysteria2"}, {[]string{"servers", "deploy", "--obfs", ""}, "salamander"}, {[]string{"servers", "export", "--format", ""}, "admin-bundle"}, {[]string{"vps", "stop", ""}, "home"}, {[]string{"vps", "create", "--provider", ""}, "oracle"},
 	} {
 		out, _, err := run(t, deps, append([]string{"__complete"}, tt.args...)...)
 		if err != nil || !strings.Contains(out, tt.want) || !strings.Contains(out, ":4") {

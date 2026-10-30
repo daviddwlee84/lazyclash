@@ -6,7 +6,7 @@ import (
 )
 
 var windowsPinnedAssets = map[string]Artifact{
-	"mihomo": {Kind: "zip", Version: DefaultVersion, Name: "mihomo-windows-amd64-compatible-v1.19.31.zip", URL: "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.31/mihomo-windows-amd64-compatible-v1.19.31.zip", SHA256: "93d14e9a13b49b2f2d256202d02cc8d14a7c4695edf084cae0f941986bc9c218", Size: 22460803, Platform: "windows/amd64"},
+	"mihomo": {Kind: "zip", Version: DefaultVersion, Name: "mihomo-windows-amd64-compatible-v1.19.33.zip", URL: "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-windows-amd64-compatible-v1.19.33.zip", SHA256: "7aaf636a4f2172dcd8ec34ac4f52797b059195e5afd6409508c963e545f8864d", Size: 22543546, Platform: "windows/amd64"},
 	"verge":  {Kind: "nsis", Version: WindowsVergeVersion, Name: "Clash.Verge_2.5.2_x64-setup.exe", URL: "https://github.com/clash-verge-rev/clash-verge-rev/releases/download/v2.5.2/Clash.Verge_2.5.2_x64-setup.exe", SHA256: "ba42f00b1082e352352080170fe86ae411bcc854cb13f1b8bebc9025e8a7cbf4", Size: 46964366, Platform: "windows/amd64"},
 }
 

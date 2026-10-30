@@ -1,0 +1,55 @@
+{
+  "plan": {
+    "id": "test-server",
+    "host_id": "test-host",
+    "action": "deploy",
+    "recipe": "vless-reality",
+    "backend": "native",
+    "public_host": "203.0.113.10",
+    "public_port": 443,
+    "listen_port": 443,
+    "digest": "78f6793f5149271152392c58dcbb8d62b1bfc6e608a62e4b010d46267d94b21e",
+    "request": {
+      "id": "test-server",
+      "host_id": "test-host",
+      "recipe": "vless-reality",
+      "backend": "native",
+      "public_host": "203.0.113.10",
+      "public_port": 443,
+      "listen_port": 443,
+      "reality_target": "www.cloudflare.com:443",
+      "server_name": "www.cloudflare.com"
+    },
+    "artifact": {
+      "version": "v26.3.27",
+      "arch": "arm64",
+      "url": "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm64-v8a.zip",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "source": "legacy-fixture"
+    }
+  },
+  "host": {
+    "id": "test-host",
+    "name": "Fixture",
+    "provider": "ssh",
+    "ssh_host": "fixture-alias",
+    "public_host": "203.0.113.10"
+  },
+  "token": "legacy-token",
+  "credentials": {
+    "uuid": "123e4567-e89b-42d3-a456-426614174000",
+    "password": "legacy-password",
+    "private_key": "legacy-private",
+    "public_key": "legacy-public",
+    "short_id": "0123456789abcdef",
+    "ws_path": "/legacy"
+  },
+  "files": {
+    "config.json": "{}\n"
+  },
+  "integrity": "b09ee930ba2ef0ec663ee185fef4c527969e439329b10b8c97f04b551474a9f1",
+  "approved": true,
+  "phase": "ready",
+  "created_at": "2026-09-01T00:00:00Z",
+  "updated_at": "2026-09-01T00:00:00Z"
+}

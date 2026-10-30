@@ -141,7 +141,7 @@ func TestServerCLIJSONAndInvalidInteractiveFlagsNeverPrompt(t *testing.T) {
 	deps, calls := serverCLIFixture(t)
 	deps.Terminal = func(io.Reader, io.Writer) bool { return true }
 	for _, args := range [][]string{
-		{"servers", "deploy", "--json"}, {"servers", "deploy", "demo", "--json"}, {"servers", "deploy", "--interactive", "--json"}, {"servers", "deploy", "--recipe", "invalid", "--interactive"}, {"servers", "deploy", "--backend", "docker", "--interactive"}, {"servers", "deploy", "--public-port", "0", "--interactive"}, {"servers", "deploy", "INVALID_ID", "--interactive"}, {"servers", "deploy", "--public-host", "https://invalid.test", "--interactive"}, {"servers", "deploy", "--version", "bogus", "--interactive"},
+		{"servers", "deploy", "--json"}, {"servers", "deploy", "demo", "--json"}, {"servers", "deploy", "--interactive", "--json"}, {"servers", "deploy", "--obfs", "unknown", "--interactive"}, {"servers", "deploy", "--obfs", "salamander", "--interactive"}, {"servers", "deploy", "--recipe", "invalid", "--interactive"}, {"servers", "deploy", "--backend", "docker", "--interactive"}, {"servers", "deploy", "--public-port", "0", "--interactive"}, {"servers", "deploy", "INVALID_ID", "--interactive"}, {"servers", "deploy", "--public-host", "https://invalid.test", "--interactive"}, {"servers", "deploy", "--version", "bogus", "--interactive"},
 		{"servers", "deploy", "demo", "--host", "vm", "--yes", "--json"}, {"servers", "deploy", "demo", "--host", "vm", "--expect", strings.Repeat("a", 64), "--json"}, {"servers", "deploy", "demo", "--host", "vm", "--yes", "--expect", "short", "--json"},
 		{"--read-only", "servers", "deploy", "demo", "--host", "vm", "--yes", "--expect", strings.Repeat("a", 64), "--json"}, {"servers", "status", "demo", "--interactive", "--json"}, {"servers", "export", "demo", "--format", "invalid", "--interactive"}, {"servers", "connect", "demo", "--interactive", "--json"},
 		{"--ssh", "wrong-owner", "servers", "deploy", "demo", "--host", "vm", "--json"}, {"--controller", "http://127.0.0.1:9090", "servers", "status", "demo", "--json"},
@@ -158,7 +158,7 @@ func TestServerCLIJSONAndInvalidInteractiveFlagsNeverPrompt(t *testing.T) {
 
 func TestServerCLIExportsPrivateFilesAndStructuredText(t *testing.T) {
 	deps, _ := serverCLIFixture(t)
-	deployedCLIServer(t, deps)
+	deployCLIHysteria(t, deps)
 	for _, format := range []string{"uri", "mihomo", "starter", "client-bundle"} {
 		out, _, err := run(t, deps, "servers", "export", "demo", "--format", format, "--json")
 		var result struct {
@@ -367,5 +367,18 @@ func TestServerConnectPreservesUnknownImportAndRepeatOnlyVerifies(t *testing.T) 
 	}
 	if writes.Load() != 1 {
 		t.Fatal("repeat performed another client write", writes.Load())
+	}
+}
+
+func deployCLIHysteria(t *testing.T, deps Dependencies) {
+	t.Helper()
+	args := []string{"servers", "deploy", "demo", "--host", "vm", "--recipe", "hysteria2", "--domain", "proxy.example.com", "--obfs", "salamander", "--json"}
+	out, _, err := run(t, deps, args...)
+	var p serverdeploy.Plan
+	if err != nil || json.Unmarshal([]byte(out), &p) != nil {
+		t.Fatal(err, out)
+	}
+	if _, _, err := run(t, deps, append(args, "--yes", "--expect", p.Digest)...); err != nil {
+		t.Fatal(err)
 	}
 }

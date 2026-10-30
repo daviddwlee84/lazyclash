@@ -212,6 +212,7 @@ func (o *options) serverDeployCommand() *cobra.Command {
 	f.IntVar(&req.PublicPort, "public-port", 443, "client-visible port, including any router translation")
 	f.IntVar(&req.ListenPort, "listen-port", 443, "port bound on the server")
 	f.StringVar(&req.Domain, "domain", "", "DNS name for ACME certificates (Hysteria2 or legacy WS/TLS)")
+	f.StringVar(&req.Obfs, "obfs", "none", "Hysteria2 obfuscation: none or salamander (independent password generated on apply)")
 	f.StringVar(&req.Email, "email", "", "ACME account email")
 	f.StringVar(&req.RealityTarget, "reality-target", "www.cloudflare.com:443", "REALITY handshake destination host:port")
 	f.StringVar(&req.ServerName, "server-name", "www.cloudflare.com", "REALITY TLS server name")
@@ -792,6 +793,7 @@ func (o *options) runServerDeployWizard(cmd *cobra.Command, req serverdeploy.Req
 		}
 		draft = values
 		req.ID, req.Recipe, req.Backend = values["id"], values["recipe"], values["backend"]
+		req.Obfs = values["obfs"]
 		req.PublicHost, req.Domain, req.Email = values["public"], values["domain"], values["email"]
 		req.RealityTarget, req.ServerName, req.Version = values["reality"], values["sni"], values["version"]
 		req.PublicPort, e = strconv.Atoi(values["public_port"])
@@ -858,6 +860,9 @@ func serverDeploySpec(req serverdeploy.Request, message string) wizard.Spec {
 	if req.ServerName == "" {
 		req.ServerName = "www.cloudflare.com"
 	}
+	if req.Obfs == "" {
+		req.Obfs = "none"
+	}
 	choices := []wizard.Choice{}
 	for _, r := range serverdeploy.Recipes() {
 		choices = append(choices, wizard.Choice{Value: r.ID, Label: r.Name + " · " + r.Description})
@@ -865,6 +870,7 @@ func serverDeploySpec(req serverdeploy.Request, message string) wizard.Spec {
 	return wizard.Spec{Title: "Deploy proxy server", Description: message, SubmitLabel: "Inspect and preview", Fields: []wizard.Field{
 		{Key: "id", Label: "Server ID", Value: req.ID, Required: true}, {Key: "recipe", Label: "Protocol recipe", Kind: wizard.Select, Value: req.Recipe, Options: choices}, {Key: "backend", Label: "Service backend", Kind: wizard.Select, Value: req.Backend, Options: []wizard.Choice{{Value: "native", Label: "Native systemd (default)"}, {Value: "compose", Label: "Docker Compose"}}},
 		{Key: "public", Label: "Client public IP / DNS", Value: req.PublicHost, Required: true}, {Key: "public_port", Label: "Client public port", Value: strconv.Itoa(req.PublicPort), Required: true}, {Key: "listen_port", Label: "Server listen port", Value: strconv.Itoa(req.ListenPort), Required: true},
+		{Key: "obfs", Label: "HY2 obfuscation (other recipes: none)", Kind: wizard.Select, Value: req.Obfs, Options: []wizard.Choice{{Value: "none", Label: "None (default HTTP/3)"}, {Value: "salamander", Label: "Salamander (requires UDP)"}}},
 		{Key: "domain", Label: "Certificate DNS name (Hysteria2 / legacy)", Value: req.Domain}, {Key: "email", Label: "ACME account email (Hysteria2 / legacy)", Value: req.Email}, {Key: "reality", Label: "REALITY handshake destination", Value: req.RealityTarget}, {Key: "sni", Label: "REALITY TLS server name", Value: req.ServerName}, {Key: "version", Label: "Core version (empty = pinned recipe release)", Value: req.Version},
 	}}
 }

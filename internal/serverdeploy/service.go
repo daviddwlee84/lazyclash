@@ -73,6 +73,8 @@ func Preview(ctx context.Context, request Request, o Options) (Plan, error) {
 		return Plan{}, err
 	}
 	if previous, e := readJournal(path); e == nil {
+		// The compatibility profile is selected only for a new operation.
+		r.RealityMLKEM = previous.Plan.Request.RealityMLKEM
 		if reflect.DeepEqual(previous.Plan.Request, r) && sameHost(previous.Host, host) && previous.Phase != "removed" {
 			if _, err = execute(ctx, host.SSHHost, remote(previous, "inspect"), o); err != nil {
 				return Plan{}, err
@@ -100,6 +102,7 @@ func Preview(ctx context.Context, request Request, o Options) (Plan, error) {
 	if _, err = rand.Read(token); err != nil {
 		return Plan{}, err
 	}
+	r.RealityMLKEM = r.Recipe == "vless-reality"
 	j := journal{Host: host, Token: hex.EncodeToString(token)}
 	observation, err := execute(ctx, host.SSHHost, RemoteRequest{Op: "inspect", ID: r.ID, Token: j.Token, Request: r, AllowInstall: host.Owned}, o)
 	if err != nil {
@@ -126,6 +129,12 @@ func Preview(ctx context.Context, request Request, o Options) (Plan, error) {
 	j.Plan.Warnings = append(j.Plan.Warnings, "Cloud firewall, host firewall and router port forwarding must allow the public endpoint; this deployment does not rewrite their existing rules.")
 	if r.Recipe == "hysteria2" {
 		j.Plan.Warnings = append(j.Plan.Warnings, "UDP must be reachable; this protocol has no TCP fallback.")
+		if r.Obfs == "salamander" {
+			j.Plan.Warnings = append(j.Plan.Warnings, "Salamander disables standard HTTP/3 masquerading; it cannot bypass a general UDP block.")
+		}
+	}
+	if r.Version == "latest" {
+		j.Plan.Warnings = append(j.Plan.Warnings, "Explicit latest release: outside the pinned compatibility baseline; authenticated verification is still required.")
 	}
 	j.Plan.Digest = deploymentDigest(j)
 	return j.Plan, nil
@@ -181,6 +190,13 @@ func Apply(ctx context.Context, p Plan, expected string, o Options) (Result, err
 		c, e := generateCredentials()
 		if e != nil {
 			return Result{}, e
+		}
+		if p.Request.Obfs == "salamander" {
+			secret := make([]byte, 24)
+			if _, e = rand.Read(secret); e != nil {
+				return Result{}, e
+			}
+			c.ObfsPassword = base64.RawURLEncoding.EncodeToString(secret)
 		}
 		token := make([]byte, 32)
 		if _, e = rand.Read(token); e != nil {

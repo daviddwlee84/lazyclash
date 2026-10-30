@@ -21,10 +21,10 @@ var digestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 // Official release asset metadata pinned when this release was prepared. These
 // are compressed download hashes, not hashes of an arbitrary local executable.
 var defaultAssets = map[string]Artifact{
-	"darwin/arm64": {Name: "mihomo-darwin-arm64-v1.19.31.gz", SHA256: "d131f44b3deb2a8356f7ac75048ad67a10d53243323951c4f3cda7b672922963", Size: 20701178},
-	"darwin/amd64": {Name: "mihomo-darwin-amd64-compatible-v1.19.31.gz", SHA256: "fb6fca0e105b4310a21eaacd3a8d3853d3d8b87fa4c69737bea52a30a435aac7", Size: 22244332},
-	"linux/arm64":  {Name: "mihomo-linux-arm64-v1.19.31.gz", SHA256: "9e0f11afbf38426b8bd88fdc594678f8161c57eccb4e1b77acb12b493904f1d4", Size: 20757911},
-	"linux/amd64":  {Name: "mihomo-linux-amd64-compatible-v1.19.31.gz", SHA256: "04cf9f09671704f839ddbee2e93069dc831a4123a75281e725d1d96ab9ac1afc", Size: 22821836},
+	"darwin/arm64": {Name: "mihomo-darwin-arm64-v1.19.33.gz", SHA256: "060b64b0f2c9a310831db0fe4adb2878de67bfa606c311813c1f13966aa504b6", Size: 20784157},
+	"darwin/amd64": {Name: "mihomo-darwin-amd64-compatible-v1.19.33.gz", SHA256: "eefe967b74312f70b64efa0dfa54929d00c7af8e94416e1b12df09863a40f35b", Size: 22333953},
+	"linux/arm64":  {Name: "mihomo-linux-arm64-v1.19.33.gz", SHA256: "ba408b317080ee265c46cb923a50018c1b82cbd708551cdd46a1e3e307396187", Size: 20824326},
+	"linux/amd64":  {Name: "mihomo-linux-amd64-compatible-v1.19.33.gz", SHA256: "386508bfb1c72c43b6a0eda73708ecdce82546581b0ebcb16366c53757c622b6", Size: 22893972},
 }
 
 func resolveOfficialArtifact(ctx context.Context, request Request, host HostFacts) (Artifact, error) {
@@ -105,8 +105,8 @@ func resolveDockerImage(ctx context.Context, version, arch string) (Artifact, er
 		return Artifact{}, errors.New("managed Docker cores require Linux amd64 or arm64 images")
 	}
 	if version == DefaultVersion {
-		configHash := map[string]string{"amd64": "ab5d4cf7e192b941f7a238bdb2450d7437d3499b51da1c13669945ba1a138529", "arm64": "339420029f245efd9e92e5df60c4a87922c9b09dbb5ba24b7f22f25af85056ad"}[arch]
-		digest := "739edd73a352d6beb82fad6790ef9d417a4d6f061584cc3cab1bd4536d1c60e5"
+		configHash := map[string]string{"amd64": "6c0efd78a1eac65959c9b3a053b4d10c251fadf1ab988c5a56c033568ebbec94", "arm64": "b3edb59335f6d2c56b353d739a4fa4ccfad7f83e788dcd4ab6bec25892deb7ab"}[arch]
+		digest := "9211361a3ed85305383288d38c05e85862d6d5a590c10007c37fc059cca82e9c"
 		return Artifact{Kind: "image", Version: version, Name: "metacubex/mihomo:" + version, Image: "metacubex/mihomo@sha256:" + digest, SHA256: digest, ConfigSHA256: configHash, Platform: "linux/" + arch}, nil
 	}
 	q := url.Values{"service": {"registry.docker.io"}, "scope": {"repository:metacubex/mihomo:pull"}}

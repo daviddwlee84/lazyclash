@@ -394,6 +394,7 @@ func (o *options) registerCompletions(root *cobra.Command) {
 		if path == "servers deploy" {
 			_ = cmd.RegisterFlagCompletionFunc("host", serverIDs(true))
 			_ = cmd.RegisterFlagCompletionFunc("recipe", values("vless-reality", "hysteria2", "legacy-vmess-ws-tls"))
+			_ = cmd.RegisterFlagCompletionFunc("obfs", values("none", "salamander"))
 		}
 		if strings.HasPrefix(path, "tailnet proxy ") {
 			if cmd.Flags().Lookup("node") != nil {
