@@ -106,6 +106,17 @@ func Discover(ctx context.Context, sshHost string) ([]config.Target, error) {
 	if sshHost != "" {
 		return discoverRemote(ctx, sshHost)
 	}
+	return discoverLocal(ctx, false)
+}
+
+// DiscoverLocal reads local metadata and probes only loopback/Unix controllers.
+// Filtering happens before any probe, including candidates from runtime YAML
+// and process listeners. Unlike Discover, it cannot open an SSH connection.
+func DiscoverLocal(ctx context.Context) ([]config.Target, error) {
+	return discoverLocal(ctx, true)
+}
+
+func discoverLocal(ctx context.Context, localOnly bool) ([]config.Target, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, errors.New("cannot locate home directory for local discovery")
@@ -140,7 +151,25 @@ func Discover(ctx context.Context, sshHost string) ([]config.Target, error) {
 	for _, endpoint := range processListeners(ctx, "", string(ps)) {
 		candidates = append(candidates, candidate(endpoint, "", "", runtimeConfig{}))
 	}
+	if localOnly {
+		candidates = localCandidates(candidates)
+	}
 	return probeCandidates(ctx, candidates, ""), ctx.Err()
+}
+
+func localCandidates(candidates []config.Target) []config.Target {
+	var local []config.Target
+	for _, candidate := range candidates {
+		u, err := url.Parse(candidate.Controller)
+		if err != nil || candidate.SSHHost != "" || config.ValidateController(candidate.Controller) != nil {
+			continue
+		}
+		ip := net.ParseIP(u.Hostname())
+		if u.Scheme == "unix" || strings.EqualFold(u.Hostname(), "localhost") || (ip != nil && ip.IsLoopback()) {
+			local = append(local, candidate)
+		}
+	}
+	return local
 }
 
 func candidate(endpoint, path, sshHost string, runtime runtimeConfig) config.Target {

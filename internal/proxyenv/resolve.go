@@ -44,6 +44,18 @@ func Resolve(ctx context.Context, cfg config.Config, request Request, opts Optio
 	if value := getenv("LOCAL_PROXY_URL"); value != "" {
 		return explicitPlan(value, getenv("LOCAL_PROXY_SOCKS_URL"), "LOCAL_PROXY_URL")
 	}
+	target, err := SelectLocalTarget(ctx, cfg, opts)
+	if err != nil {
+		return Plan{}, err
+	}
+	return resolveTarget(ctx, target, opts)
+}
+
+// SelectLocalTarget prefers a registered local default, then a sole local
+// target, then discovery. It does not resolve data endpoints or reopen the
+// selected target. Discovery may probe candidates; callers restricting network
+// scope must supply a pre-probe restricted Discover.
+func SelectLocalTarget(ctx context.Context, cfg config.Config, opts Options) (config.Target, error) {
 	var local []config.Target
 	for _, target := range cfg.Targets {
 		if IsLocalTarget(target) {
@@ -52,7 +64,7 @@ func Resolve(ctx context.Context, cfg config.Config, request Request, opts Optio
 	}
 	for _, target := range local {
 		if target.ID == cfg.DefaultTarget {
-			return resolveTarget(ctx, target, opts)
+			return target, nil
 		}
 	}
 	if len(local) == 0 {
@@ -63,16 +75,16 @@ func Resolve(ctx context.Context, cfg config.Config, request Request, opts Optio
 		var err error
 		local, err = discover(ctx, "")
 		if err != nil {
-			return Plan{}, err
+			return config.Target{}, err
 		}
 	}
 	if len(local) == 0 {
-		return Plan{}, ErrNoProxyConfigured
+		return config.Target{}, ErrNoProxyConfigured
 	}
 	if len(local) > 1 {
-		return Plan{}, &AmbiguousError{Targets: local}
+		return config.Target{}, &AmbiguousError{Targets: local}
 	}
-	return resolveTarget(ctx, local[0], opts)
+	return local[0], nil
 }
 
 func IsLocalTarget(target config.Target) bool {

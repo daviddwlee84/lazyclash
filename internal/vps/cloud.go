@@ -43,6 +43,9 @@ func (s *Service) hasCloudHost(id string) bool {
 }
 
 func validateCloudDraft(r CreateRequest) error {
+	if err := validateAzureSecurityType(r); err != nil {
+		return err
+	}
 	if !isCloudProvider(r.Provider) {
 		return errors.New("unsupported cloud provider")
 	}

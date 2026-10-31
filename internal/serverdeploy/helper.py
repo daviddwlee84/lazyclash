@@ -130,7 +130,10 @@ def acquire():
     address=a.get('url','');digest=a.get('sha256','')
     official=re.fullmatch(r'https://github\.com/XTLS/Xray-core/releases/download/[^\s]+',address) or re.fullmatch(r'https://download\.hysteria\.network/app/v[0-9][A-Za-z0-9./-]+',address)
     if not official or not re.fullmatch('[a-f0-9]{64}',digest):fail('binary is not an approved pinned source')
-    with urllib.request.urlopen(address,timeout=120) as response:
+    # Public release CDNs may reject urllib's generic default identity. Use our
+    # real application identity; the pinned digest below remains mandatory.
+    download_request=urllib.request.Request(address,headers={'User-Agent':'lazyclash-server-deploy'})
+    with urllib.request.urlopen(download_request,timeout=120) as response:
         data=response.read(150*1024*1024+1)
     if len(data)>150*1024*1024 or hashlib.sha256(data).hexdigest()!=digest:fail('binary download SHA256 verification failed')
     binary='hysteria' if r['recipe']=='hysteria2' else 'xray'

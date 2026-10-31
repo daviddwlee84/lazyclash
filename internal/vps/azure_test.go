@@ -134,7 +134,7 @@ func (f *azureFixture) run(_ context.Context, exe string, raw []string) ([]byte,
 		if strings.Contains(azureFlag(args, "--urn"), "server-arm64") {
 			arch = "Arm64"
 		}
-		return azureTestJSON(map[string]any{"name": "24.04.202609010", "architecture": arch, "hyperVGeneration": "V2", "osDiskImage": map[string]any{"operatingSystem": "Linux"}})
+		return azureTestJSON(map[string]any{"name": "24.04.202609010", "architecture": arch, "hyperVGeneration": "V2", "osDiskImage": map[string]any{"operatingSystem": "Linux"}, "features": []any{map[string]any{"name": "SecurityType", "value": "TrustedLaunchSupported"}}})
 	}
 	if strings.HasPrefix(joined, "vm get-instance-view") {
 		return []byte(`{"instanceView":{"statuses":[{"code":"PowerState/running"}]}}`), nil

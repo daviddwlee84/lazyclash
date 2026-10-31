@@ -2,7 +2,7 @@
 
 A keyboard-first terminal console for **Mihomo clients and proxy servers**, including existing cores managed by Clash Verge Rev and explicitly lazyclash-owned installations. Works locally, over HTTPS, through SSH, or over a local Unix socket. macOS, Linux and Windows releases are available; host-specific operations retain their platform requirements.
 
-Manage runtime state, edit and share source-backed nodes/groups, use a selected proxy from your shell or Docker, compare targets, and diagnose routing. `setup` installs native or Docker clients with an offline regional starter and optional reviewed TUN/system-proxy configuration. Clash Verge companion edits require native profile reactivation. See the [knowledge and operating guide](docs/README.md), [reference index](docs/references.md), and [future milestones](TODO.md).
+Manage runtime state, edit and share source-backed nodes/groups, use a selected proxy from your shell or Docker, compare targets, and diagnose routing. `setup` installs native or Docker clients with an offline regional starter and optional reviewed TUN/system-proxy configuration. Clash Verge companion edits require native profile reactivation. See the [knowledge and operating guide](docs/README.md), [reference index](docs/references.md), [future milestones](TODO.md), and [past pitfalls](pitfalls/README.md).
 
 Apply one routing rule to a saved target or all targets with `rules apply`;
 existing rules are skipped and conflicts involving the requested selector block
@@ -454,6 +454,23 @@ Optional target fields: `ca_file` for a local PEM CA bundle and `source_config` 
 SSH targets use system `ssh`, including configured aliases, keys, agent, ProxyJump and known_hosts. Password-only login is supported through native OpenSSH. The TUI offers Authenticate/Cancel when needed; A opens the authentication action. Configured ControlMaster/ControlPersist sessions are reused across commands, while private fallback sessions belong to the current process. Background/JSON commands never prompt. Each tunnel listens only on loopback; cleanup cancels its own forwards and leaves configured masters running. See [SSH session behavior](docs/targets-and-config.md#password-only-ssh-and-session-reuse). HTTPS still verifies the original controller hostname. Remote Unix-socket forwarding is not implemented; local Unix sockets are supported.
 
 ## Connectivity and egress diagnostics
+
+```sh
+lazyclash doctor                       # local, passive proxy overview
+lazyclash doctor --json                # one typed report, including failures
+lazyclash --target LOCAL doctor        # explicit local controller
+lazyclash --controller 127.0.0.1:9090 doctor --timeout 5s
+```
+
+`doctor` reads process proxy variables, OS proxy/network metadata, and local
+controller identity/runtime settings. It does **not** test internet access,
+open SSH, save discovered targets, start services, or change proxy/TUN/selector
+state. Its overall timeout defaults to 10 seconds. A remote default target is
+ignored; an explicitly selected remote target is reported as unsupported and
+never replaced with a local target. Missing optional host tools remain unknown,
+not disabled. Exit codes are 0 (no failures; warnings/optional unknown allowed),
+1 (failure or incomplete required checks), 2 (usage), and 130 (canceled).
+See [doctor scope and report semantics](docs/diagnostics-and-routing.md#local-passive-doctor).
 
 `targets test [ID]` checks controller access (including SSH and authentication),
 core version and readable runtime settings. It is safe with `--read-only` and

@@ -285,6 +285,13 @@ func (a azureAdapter) record(ctx context.Context, op *operation, sp azureSpec, m
 // the VM relationship is still visible before closing provisioning for cleanup.
 func (a azureAdapter) finishResource(ctx context.Context, op *operation, sp azureSpec, m map[string]any) error {
 	failure := azureProvisioningFailure(m, sp.kind)
+	if failure == nil && sp.kind == "azure-vm" && op.Request.AzureSecurityType == "TrustedLaunch" && strings.EqualFold(str(m["provisioningState"]), "Succeeded") {
+		security := obj(m["securityProfile"])
+		uefi := obj(security["uefiSettings"])
+		if str(security["securityType"]) != "TrustedLaunch" || uefi["secureBootEnabled"] != true || uefi["vTpmEnabled"] != true {
+			failure = fmt.Errorf("Azure VM does not match reviewed Trusted Launch, Secure Boot and vTPM settings")
+		}
+	}
 	if failure == nil {
 		return nil
 	}
@@ -327,7 +334,8 @@ func (a azureAdapter) Provision(ctx context.Context, op *operation, allow bool) 
 	if !allow && cloudResourceOf(op, sp.kind) == nil && op.PendingResourceKind == "" {
 		return a.s.cloudPersist(op)
 	}
-	args := []string{"vm", "create", "--resource-group", azureGroup(*op), "--name", sp.name, "--location", r.Region, "--size", r.Plan, "--image", r.Image, "--admin-username", r.SSHUser, "--authentication-type", "ssh", "--nics", azureID(*op, "azure-nic"), "--os-disk-name", azureBase(*op) + "-os", "--os-disk-size-gb", strconv.Itoa(r.DiskGB), "--storage-sku", "StandardSSD_LRS", "--os-disk-delete-option", "Detach", "--nic-delete-option", "Detach", "--security-type", "Standard", "--tags", "lazyclash-operation=" + op.ID}
+	args := []string{"vm", "create", "--resource-group", azureGroup(*op), "--name", sp.name, "--location", r.Region, "--size", r.Plan, "--image", r.Image, "--admin-username", r.SSHUser, "--authentication-type", "ssh", "--nics", azureID(*op, "azure-nic"), "--os-disk-name", azureBase(*op) + "-os", "--os-disk-size-gb", strconv.Itoa(r.DiskGB), "--storage-sku", "StandardSSD_LRS", "--os-disk-delete-option", "Detach", "--nic-delete-option", "Detach", "--tags", "lazyclash-operation=" + op.ID}
+	args = append(args, azureSecurityArgs(r)...)
 	if r.AvailabilityZone != "" {
 		args = append(args, "--zone", r.AvailabilityZone)
 	}

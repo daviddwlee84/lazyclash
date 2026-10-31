@@ -14,6 +14,26 @@ type azureAdapter struct{ s *Service }
 
 const azurePriceSource = "https://prices.azure.com/api/retail/prices"
 
+func validateAzureSecurityType(r CreateRequest) error {
+	if r.AzureSecurityType == "" {
+		return nil // Preserve saved operation digests and legacy Standard behavior.
+	}
+	if r.AzureSecurityType != "Standard" && r.AzureSecurityType != "TrustedLaunch" {
+		return fmt.Errorf("--azure-security-type must be Standard or TrustedLaunch")
+	}
+	if r.Provider != "" && r.Provider != "azure" {
+		return fmt.Errorf("--azure-security-type applies only to Azure")
+	}
+	return nil
+}
+
+func azureSecurityArgs(r CreateRequest) []string {
+	if r.AzureSecurityType == "TrustedLaunch" {
+		return []string{"--security-type", "TrustedLaunch", "--enable-secure-boot", "true", "--enable-vtpm", "true"}
+	}
+	return []string{"--security-type", "Standard"}
+}
+
 func (a azureAdapter) call(ctx context.Context, r CreateRequest, args ...string) (any, error) {
 	return a.s.call(ctx, r, args...)
 }
@@ -46,7 +66,14 @@ func (a azureAdapter) sizes(ctx context.Context, r CreateRequest) ([]azureSize, 
 	if r.Region == "" {
 		return nil, fmt.Errorf("Azure size discovery requires --region")
 	}
-	v, err := a.call(ctx, r, "vm", "list-skus", "--location", r.Region, "--resource-type", "virtualMachines", "--all")
+	args := []string{"vm", "list-skus", "--location", r.Region, "--resource-type", "virtualMachines", "--all"}
+	if r.Plan != "" {
+		// Azure CLI applies this substring filter before serializing its output.
+		// Keep exact-name and capability validation below/in Resolve: --size is
+		// only a bound on provider output, not proof of the requested SKU.
+		args = append(args, "--size", r.Plan)
+	}
+	v, err := a.call(ctx, r, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +107,9 @@ func (a azureAdapter) sizes(ctx context.Context, r CreateRequest) ([]azureSize, 
 			continue
 		}
 		if x.memory < 1024 || x.cpus < 1 || !strings.Contains(caps["HyperVGenerations"], "V2") {
+			continue
+		}
+		if r.AzureSecurityType == "TrustedLaunch" && strings.EqualFold(caps["TrustedLaunchDisabled"], "True") {
 			continue
 		}
 		for _, li := range arr(m["locationInfo"]) {
@@ -124,6 +154,9 @@ func azureRecommended(s string) bool {
 }
 
 func (a azureAdapter) Resolve(ctx context.Context, r CreateRequest) (CreateRequest, Quote, error) {
+	if err := validateAzureSecurityType(r); err != nil {
+		return r, Quote{}, err
+	}
 	if r.SubscriptionID == "" {
 		return r, Quote{}, fmt.Errorf("Azure requires --subscription")
 	}
@@ -166,7 +199,7 @@ func (a azureAdapter) Resolve(ctx context.Context, r CreateRequest) (CreateReque
 		}
 	}
 	if selected == nil {
-		return r, Quote{}, fmt.Errorf("no fully priced compatible Azure size is available in %s; inspect subscription quota, SKU restrictions, architecture and zone", r.Region)
+		return r, Quote{}, fmt.Errorf("no fully priced compatible Azure size is available in %s; inspect subscription quota, SKU restrictions, architecture, security type and zone", r.Region)
 	}
 	r.Plan = selected.name
 	r.Architecture = selected.arch
@@ -196,6 +229,17 @@ func (a azureAdapter) Resolve(ctx context.Context, r CreateRequest) (CreateReque
 	}
 	if version := str(m["name"]); version != "" && version != fields[3] {
 		return r, quote, fmt.Errorf("Azure image version changed")
+	}
+	if r.AzureSecurityType == "TrustedLaunch" {
+		supported := false
+		for _, feature := range arr(m["features"]) {
+			f := obj(feature)
+			supported = supported || (str(f["name"]) == "SecurityType" && (str(f["value"]) == "TrustedLaunchSupported" || str(f["value"]) == "TrustedLaunch"))
+		}
+		if !supported {
+			return r, quote, fmt.Errorf("Azure image does not advertise Trusted Launch support")
+		}
+		quote.Notes = append(quote.Notes, "Trusted Launch with Secure Boot and vTPM enabled; no subscription security-feature registration or paid Defender plan is performed.")
 	}
 	r.ImageVersion = fields[3]
 	return r, quote, nil

@@ -17,6 +17,7 @@ import (
 	"github.com/daviddwlee84/lazyclash/internal/connection"
 	"github.com/daviddwlee84/lazyclash/internal/core"
 	"github.com/daviddwlee84/lazyclash/internal/diagnostics"
+	"github.com/daviddwlee84/lazyclash/internal/doctor"
 	"github.com/daviddwlee84/lazyclash/internal/managedcore"
 	"github.com/daviddwlee84/lazyclash/internal/proxyenv"
 	"github.com/daviddwlee84/lazyclash/internal/ruleobserve"
@@ -40,6 +41,10 @@ func (e *UsageError) Error() string          { return e.Message }
 func usage(format string, args ...any) error { return &UsageError{fmt.Sprintf(format, args...)} }
 
 func ExitCode(err error) int {
+	var reported *reportedOutcome
+	if errors.As(err, &reported) {
+		return reported.code
+	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, wizard.ErrCanceled) {
 		return 130
 	}
@@ -75,6 +80,7 @@ type Dependencies struct {
 	Authenticate   func(context.Context, string) (*exec.Cmd, error)
 	RunEditor      func(*exec.Cmd) error
 	Diagnostics    diagnostics.Options
+	Doctor         doctor.Options
 	Upgrade        func(context.Context, selfupdate.Request, io.Writer) (selfupdate.Result, error)
 }
 
@@ -281,7 +287,7 @@ func New(deps Dependencies) *cobra.Command {
 	o.registerColorFlag(root)
 	f.BoolVar(&o.readOnly, "read-only", false, "disable control actions and active probes; passive rule inspection remains available")
 	root.AddCommand(o.targetCommands(), o.configCommands(), o.statusCommand(), o.proxyCommands(), o.proxyCommand(), o.connectionCommands(), o.logsCommand(), o.rulesCommand(), o.providerCommands(), o.modeCommand(), o.tunCommand(), o.allowLANCommand(), o.settingsCommand())
-	root.AddCommand(o.skillCommand(), o.diagnosticsCommand(), o.upgradeCommand(), o.groupsCommand(), o.setupCommand(), o.coresCommand())
+	root.AddCommand(o.skillCommand(), o.diagnosticsCommand(), o.doctorCommand(), o.upgradeCommand(), o.groupsCommand(), o.setupCommand(), o.coresCommand())
 	root.AddCommand(o.vpsCommand(), o.serversCommand(), o.tailnetCommand())
 	root.AddCommand(o.topologyCommand(), o.completionCommand(root))
 	root.AddCommand(o.analyticsCommand())

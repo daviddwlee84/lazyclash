@@ -186,7 +186,8 @@ lazyclash vps discover --provider aws-ec2 --profile personal --kind regions --js
 lazyclash vps discover --provider aws-lightsail --profile personal --region ap-northeast-1 --kind plans --json
 
 lazyclash vps create azure-jp --provider azure --subscription SUBSCRIPTION_ID \
-  --region japaneast --architecture auto --ssh-key ~/.ssh/id_ed25519.pub --json
+  --region japaneast --architecture auto --azure-security-type TrustedLaunch \
+  --ssh-key ~/.ssh/id_ed25519.pub --json
 lazyclash vps create lightsail-jp --provider aws-lightsail --profile personal \
   --region ap-northeast-1 --ssh-key ~/.ssh/id_ed25519.pub --json
 lazyclash vps create ec2-jp --provider aws-ec2 --profile personal \
@@ -205,6 +206,16 @@ RAM 的低成本相容方案；`--architecture auto` 同時允許 ARM 與 x86，
 任何型號有容量。ARM／x86 映像必須配對，preview 固定 Ubuntu 24.04 的版本／ID。
 Lightsail 首版只使用已核實的 Ubuntu 24.04 x86 blueprint；Azure／EC2 可選 ARM。
 可用 `--availability-zone` 固定 AZ；`--disk-gb` 僅供 Azure／EC2 調整根磁碟。
+
+Azure 新機建議明確加入 `--azure-security-type TrustedLaunch`：preview 會排除
+`TrustedLaunchDisabled=True` 的 SKU，檢查映像支援，並將安全模式綁定 digest；
+建立時同時開啟 Secure Boot／vTPM，驗證不符會保留資源 receipt 供清理。
+Trusted Launch 本身不增加 VM 單價，但相容的 SKU 可能較貴；不會自動開通付費
+Defender 方案或修改訂閱 feature。此選項也可用於 quote／discover 查相容規格。
+省略此旗標仍保留舊版 Standard 行為及舊 operation 的可恢復性。某些訂閱要求先
+登記 `Microsoft.Compute/UseStandardSecurityType` 才允許 Standard；lazyclash
+不代為登記，須由管理者決定。被拒絕後以 `vps resume` 檢查部分資源，勿重複 create。
+機型／安全模式改變須使用新的審核操作，不手改 journal 或套用舊 digest。
 
 `vps catalog` 也提供美東區域的固定費用快照供比較：Lightsail 1GiB IPv4 bundle
 約 $7／月、EC2 T4g micro 加 20GiB gp3 與 IPv4 約 $11.38／月、Azure B2pts v2

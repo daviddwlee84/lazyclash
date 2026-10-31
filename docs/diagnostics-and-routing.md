@@ -1,5 +1,68 @@
 # Diagnostics and routing evidence
 
+## Local passive doctor
+
+```sh
+lazyclash doctor
+lazyclash doctor --json
+lazyclash --target LOCAL doctor
+lazyclash --controller http://127.0.0.1:9090 doctor --timeout 5s
+```
+
+`doctor` is a noninteractive, local-only overview, passive even without
+`--read-only`. Its controller traffic is restricted to GET `/version` and
+`/configs`; it reads local settings, process proxy variables, OS proxy settings,
+and interface/default-route/DNS metadata. It never opens SSH, runs DNS/HTTP
+outbound probes or URLTests/healthchecks, saves discovery, starts/repairs
+services, or changes TUN, system proxy, selectors, or settings. **Egress
+connectivity is not tested.** Controller failure does not establish data-path
+failure, and controller success does not establish internet access.
+
+Selection uses an explicit global `--target`/`--controller` first, then the
+existing `LAZYCLASH_TARGET`/`LAZYCLASH_CONTROLLER`/`CLASH_CONTROLLER` environment
+selection. Explicit remote/SSH selections are reported as unsupported without
+local fallback. Otherwise it prefers a registered **local** default, then a sole
+local registration, then local discovery. Multiple candidates require an
+explicit choice. A remote `default_target` is not used. Discovery filters out
+non-loopback/non-Unix candidates **before probing**, never persists candidates,
+and does not interpret zero candidates as proof that no proxy exists.
+
+Controller selection and data endpoint intent are separate. Without an explicit
+target/controller, `LOCAL_PROXY_URL` (and `LOCAL_PROXY_SOCKS_URL`) takes precedence
+for the reported data endpoint; otherwise a registered `probe_proxy` precedes
+runtime listener ports. These endpoints are not contacted. The controller can
+be unavailable while an explicit data endpoint remains useful. Endpoint
+comparisons use only the same local scope and yield warnings, not ownership or
+connectivity claims. Direct mode, TUN-only operation, and absent proxy variables
+are not failures. Configured macOS Network services do not prove every service
+is active; unsupported OS proxy backends or missing Python/host tools are
+unknown, not disabled. PAC URLs, credentials and raw errors are withheld.
+
+The overall timeout is **10 seconds**, adjustable with `--timeout`. Independent
+collectors retain partial evidence on settings/auth/offline/timeout failures.
+A missing default settings file is normal (no file is created); an explicitly
+missing or malformed settings file is a report failure. Human and JSON output
+represent the same checks. JSON is one report with `schema_version`, `scope`,
+`selection`, typed evidence, `checks`, `summary`, and `suggestions`; no second
+error envelope accompanies a successfully emitted diagnostic report.
+
+| Exit | Meaning |
+|---|---|
+| 0 | Required checks completed with no failures; warnings and optional unknowns allowed |
+| 1 | A failure or incomplete required check |
+| 2 | CLI usage/flag error (ordinary CLI error, not a diagnostic report) |
+| 130 | Canceled; partial report retained |
+
+Checks use `pass`, `warn`, `fail`, `unknown`, and `skip`. A timeout confined to an
+optional collector can still exit 0; `summary.timed_out` and the unknown check
+retain that limitation. Output-write failures use the ordinary CLI error path.
+
+Use `targets test` for a selected controller (including supported remote
+transports), `diagnostics network` for detailed passive routing evidence, and
+`proxy test` / `diagnostics url` for an explicitly requested active test.
+Existing `proxy docker doctor` and `analytics doctor` remain scoped diagnostics,
+not replacements for the local overview.
+
 ## Dashboard metrics
 
 Overview keeps up to 15 minutes of per-target history in memory, displayed in

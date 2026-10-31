@@ -42,6 +42,7 @@ func runCLI(ctx context.Context, executable string, args []string) ([]byte, erro
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, executable, args...)
+	configureCLICommand(cmd)
 	if executable == "aws" {
 		cmd.Env = append(os.Environ(), "AWS_MAX_ATTEMPTS=1", "AWS_RETRY_MODE=standard", "AWS_CLI_AUTO_PROMPT=off", "AWS_PAGER=")
 	}

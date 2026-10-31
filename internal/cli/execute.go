@@ -20,6 +20,13 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// reportedOutcome is returned only after a command has successfully written its
+// diagnostic report. It carries process status without a second error envelope.
+// Keep it private so ordinary command errors retain their existing contract.
+type reportedOutcome struct{ code int }
+
+func (*reportedOutcome) Error() string { return "diagnostic outcome already reported" }
+
 // Execute is the process boundary: stdout belongs to command data; errors are
 // rendered exactly once on stderr after command resources have been released.
 func Execute(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer) int {
@@ -34,6 +41,10 @@ func execute(ctx context.Context, args []string, in io.Reader, out, errOut io.Wr
 	cmd.SetErr(errOut)
 	jsonMode := jsonRequested(cmd, args)
 	if err := cmd.ExecuteContext(ctx); err != nil {
+		var reported *reportedOutcome
+		if errors.As(err, &reported) {
+			return reported.code
+		}
 		if jsonMode {
 			encoder := json.NewEncoder(errOut)
 			encoder.SetEscapeHTML(false)

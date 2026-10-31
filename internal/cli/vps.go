@@ -526,6 +526,7 @@ func vpsCreateFlags(flags *pflag.FlagSet, req *vps.CreateRequest, defaultSSHCIDR
 
 func vpsCloudFlags(flags *pflag.FlagSet, req *vps.CreateRequest) {
 	flags.StringVar(&req.SubscriptionID, "subscription", "", "Azure subscription ID (does not change the CLI default)")
+	flags.StringVar(&req.AzureSecurityType, "azure-security-type", "", "Azure VM security: TrustedLaunch (Secure Boot/vTPM) or Standard; omitted preserves legacy Standard behavior")
 	flags.StringVar(&req.Architecture, "architecture", "auto", "auto, amd64 or arm64; auto allows compatible ARM plans")
 	flags.StringVar(&req.AvailabilityZone, "availability-zone", "", "Azure/AWS availability zone (blank: resolve a compatible zone during preview)")
 	flags.IntVar(&req.DiskGB, "disk-gb", 0, "Azure/EC2 root disk GiB (0: Azure 32 GiB Standard SSD or EC2 20 GiB encrypted gp3)")

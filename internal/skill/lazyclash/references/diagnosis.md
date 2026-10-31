@@ -1,5 +1,18 @@
 # URL diagnosis and route evidence
 
+Start a local overview with `doctor --json` (or `--target LOCAL doctor`). It is
+passive, local-only, and bounded by an overall `--timeout` of 10 seconds. It
+reads local controller GET `/version`/`configs` and host metadata; it never opens
+SSH, probes egress, saves discovery, repairs services, or changes proxy state.
+A remote default is ignored, but an explicit remote selection is reported as
+unsupported, never silently replaced. Partial reports survive settings/auth/
+offline failures. Exit 0 permits warnings/optional unknowns; 1 means failure or
+incomplete required checks, 2 usage, 130 cancellation. A completed JSON report
+is the only output, including diagnostic failures. Treat unsupported host
+collectors as unknown, not disabled; TUN-only/no env/direct mode are not faults.
+Controller availability and data connectivity are separate; egress is untested.
+For narrower checks use `proxy docker doctor` or `analytics doctor`.
+
 Use `diagnostics url URL --via POLICY --json` for an explicit active test.
 Choose POLICY from real target data; omitting it performs no guessed alternative
 comparison. With `--read-only`, use `--observe-only` to avoid DNS/HTTP/URLTests.

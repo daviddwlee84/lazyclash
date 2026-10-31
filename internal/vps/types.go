@@ -23,6 +23,7 @@ type CreateRequest struct {
 	Provider           string `json:"provider"`
 	Profile            string `json:"profile,omitempty"`
 	SubscriptionID     string `json:"subscription_id,omitempty"`
+	AzureSecurityType  string `json:"azure_security_type,omitempty"`
 	Architecture       string `json:"architecture,omitempty"`
 	AvailabilityZone   string `json:"availability_zone,omitempty"`
 	DiskGB             int    `json:"disk_gb,omitempty"`

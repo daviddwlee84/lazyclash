@@ -173,6 +173,9 @@ func (s *Service) Discover(ctx context.Context, req CreateRequest, kind string) 
 }
 
 func ValidateDraft(req CreateRequest) error {
+	if err := validateAzureSecurityType(req); err != nil {
+		return err
+	}
 	if isCloudProvider(req.Provider) {
 		return validateCloudDraft(req)
 	}
